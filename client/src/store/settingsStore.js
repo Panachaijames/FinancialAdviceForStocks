@@ -1,0 +1,41 @@
+// Zustand settings store with localStorage persistence.
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+
+export const useSettingsStore = create(
+  persist(
+    (set, get) => ({
+      displayCurrency: 'USD',
+      refreshMs: 5000,
+
+      /**
+       * Set the display currency ('USD' | 'THB').
+       */
+      setDisplayCurrency(c) {
+        const cur = c === 'THB' ? 'THB' : 'USD';
+        set({ displayCurrency: cur });
+      },
+
+      /**
+       * Toggle between USD and THB.
+       */
+      toggleCurrency() {
+        set({ displayCurrency: get().displayCurrency === 'USD' ? 'THB' : 'USD' });
+      },
+
+      /**
+       * Set the refresh interval in milliseconds (clamped to a sane range).
+       */
+      setRefreshMs(n) {
+        const v = Number(n);
+        if (!Number.isFinite(v)) return;
+        const clamped = Math.max(1000, Math.min(60000, v));
+        set({ refreshMs: clamped });
+      },
+    }),
+    {
+      name: 'pt-settings',
+      version: 1,
+    }
+  )
+);

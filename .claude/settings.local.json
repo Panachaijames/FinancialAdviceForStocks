@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm -v)",
+      "Bash(git --version)",
+      "Bash([ -e \"$p\" ])",
+      "Bash([ -f \"$f\" ])",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(node server/index.js)",
+      "Bash(curl -s --retry 20 --retry-connrefused --retry-delay 1 --max-time 10 http://localhost:8787/api/health)",
+      "Bash(curl -s --max-time 20 \"http://localhost:8787/api/fx?base=USD&quote=THB\")",
+      "Bash(curl -s --max-time 20 \"http://localhost:8787/api/search?q=PTT\")",
+      "Bash(node diag.mjs)",
+      "Bash(npm view *)",
+      "Bash(node -e \"import\\('yahoo-finance2/package.json',{with:{type:'json'}}\\).then\\(m=>console.log\\(m.default.version\\)\\).catch\\(\\(\\)=>{const fs=require\\('fs'\\);console.log\\(JSON.parse\\(fs.readFileSync\\('node_modules/yahoo-finance2/package.json'\\)\\).version\\)}\\)\")",
+      "Bash(node \"C:/Users/James/Desktop/PTFinancialAdvisorApp/server/index.js\")",
+      "Bash(curl -s --max-time 30 \"http://localhost:8787/api/quote?symbols=BTC-USD,ETH-USD\")",
+      "Bash(curl -s --max-time 30 \"http://localhost:8787/api/candles?symbol=BTC-USD&range=1mo\")",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{try{console.log\\(JSON.parse\\(d\\).length\\)}catch{console.log\\('parse-fail',d.slice\\(0,100\\)\\)}}\\)\")",
+      "Bash(curl -s --max-time 30 \"http://localhost:8787/api/quote?symbols=AAPL,PTT.BK,GC=F\")",
+      "Bash(curl -s --max-time 20 \"https://stooq.com/q/l/?s=aapl.us&f=sd2t2ohlcvn&h&e=csv\")",
+      "Bash(curl -s --max-time 20 \"https://stooq.com/q/l/?s=xauusd&f=sd2t2ohlcvn&h&e=csv\")",
+      "Bash(curl -s --max-time 20 \"https://stooq.com/q/l/?s=^spx&f=sd2t2ohlcvn&h&e=csv\")",
+      "Bash(curl -s --max-time 20 \"https://stooq.com/q/l/?s=ptt.th&f=sd2t2ohlcvn&h&e=csv\")",
+      "Bash(curl -s --max-time 20 \"https://stooq.com/q/d/l/?s=aapl.us&i=d\")",
+      "Bash(curl -s --max-time 30 \"http://localhost:8787/api/quote?symbols=AAPL\")",
+      "Bash(curl -s --retry 30 --retry-connrefused --retry-delay 1 --max-time 8 http://localhost:8787/api/health)",
+      "Bash(curl -s --retry 30 --retry-connrefused --retry-delay 1 --max-time 8 -o /dev/null -w \"client HTTP %{http_code}\\\\n\" http://localhost:5173/)",
+      "Bash(curl -s --max-time 8 http://localhost:5173/)",
+      "Bash(curl -s --max-time 8 http://localhost:8787/api/health)",
+      "Bash(curl -s --max-time 25 \"http://localhost:8787/api/quote?symbols=BTC-USD\")",
+      "Bash(curl -s --max-time 15 \"http://localhost:8787/api/fx\")",
+      "Bash(curl -s --max-time 25 \"http://localhost:8787/api/quote?symbols=AAPL\")"
+    ]
+  }
+}
