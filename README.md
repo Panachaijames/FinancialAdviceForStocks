@@ -30,9 +30,25 @@ The app works out of the box with **no API keys**. Each asset class is routed to
 | ---- | ------- | -------- |
 | Crypto quotes & candles | **[CoinGecko](https://www.coingecko.com/en/api)** (no key) | yahoo-finance2 |
 | Crypto realtime ticks | **Binance WebSocket** (`wss://stream.binance.com:9443`) | — |
-| US/Thai stocks, ETFs, gold — quotes & candles | **[yahoo-finance2](https://www.npmjs.com/package/yahoo-finance2)** | — |
-| Dividends & portfolio news | **yahoo-finance2** | — |
+| US stocks/ETFs & gold — quotes & candles | **[yahoo-finance2](https://www.npmjs.com/package/yahoo-finance2)** | **[Twelve Data](https://twelvedata.com)** (key) |
+| Thai (SET) stocks — quotes & candles | **yahoo-finance2** | — (Twelve Data SET is a paid plan) |
+| Dividends | **yahoo-finance2** | — |
+| Portfolio news | **[Finnhub](https://finnhub.io)** (key) | yahoo-finance2 |
 | USD/THB FX rate | **yahoo-finance2** (`USDTHB=X`) | **[open.er-api.com](https://open.er-api.com)** |
+
+### Optional keys (recommended — already configured here)
+
+The app runs with **zero keys**, but two free keys make it far more resilient and are wired up when present. Put them in **`.env.local`** at the repo root (already gitignored):
+
+```ini
+TWELVEDATA_KEY=your_twelvedata_key
+FINNHUB_KEY=your_finnhub_key
+```
+
+- **Twelve Data** (`TWELVEDATA_KEY`) — fallback for US stock & gold **quotes and candles** when Yahoo throttles. Free plan is 8 req/min · 800/day, so it's used as a *fallback* (not the 5-second realtime poll) to stay within quota. SET (Thai) symbols need a paid plan, so Thai stays on Yahoo. Used by `server/providers/twelvedata.js`.
+- **Finnhub** (`FINNHUB_KEY`) — *primary* news source: per-symbol company news for equities/ETFs, plus general market news to fill crypto/gold-only portfolios. Falls back to Yahoo news if unavailable. Used by `server/providers/finnhub.js`.
+
+Keys are loaded by `server/config.js` from `.env.local` → `.env` (repo root), accepting either `TWELVEDATA_KEY`/`FINNHUB_KEY` or the longer `*_API_KEY` names. FX intentionally does **not** use Twelve Data (the free open.er-api.com fallback is unlimited; TD quota is reserved for stock/gold data).
 
 > **Note on `yahoo-finance2`:** this project pins **`2.13.4`**. The `2.14.x`/`3.x` releases changed the package export shape and slimmed the bundled modules, so `search`/`chart`/`quoteSummary` are not available from the default import there — don't bump it without adjusting `server/providers/yahoo.js`.
 >
@@ -62,17 +78,19 @@ npm run build      # builds the client into client/dist
 npm start          # runs the server (serves client/dist if present)
 ```
 
-## Optional API Keys
+## Configuration
 
-None are required. If you want to wire up alternative providers later, copy `.env.example` to `.env` in the project root (or `server/`) and set:
+All settings are optional and read from `.env.local` (preferred, gitignored) or `.env` at the repo root:
 
 ```ini
-PORT=8787
-POLL_MS=5000
-FX_POLL_MS=15000
-# TWELVEDATA_KEY=
-# FINNHUB_KEY=
+PORT=8787          # HTTP/WS server port
+POLL_MS=5000       # realtime quote poll interval (non-crypto)
+FX_POLL_MS=15000   # USD/THB FX poll interval
+TWELVEDATA_KEY=    # optional — see "Optional keys" above
+FINNHUB_KEY=       # optional — see "Optional keys" above
 ```
+
+See [**Optional keys**](#optional-keys--recommended--already-configured-here) above for what the two keys enable.
 
 ## Symbol Conventions
 

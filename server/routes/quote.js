@@ -2,6 +2,7 @@ import express from 'express';
 import { wrap } from '../cache.js';
 import { getQuotes } from '../providers/yahoo.js';
 import { getCryptoQuotes } from '../providers/coingecko.js';
+import * as twelvedata from '../providers/twelvedata.js';
 import { isCrypto } from '../util/assetType.js';
 
 const router = express.Router();
@@ -37,7 +38,16 @@ router.get('/', async (req, res) => {
       const have = new Set(cryptoQuotes.map((q) => q.symbol));
       const missingCrypto = crypto.filter((s) => !have.has(s));
       const cryptoFallback = missingCrypto.length ? await getQuotes(missingCrypto) : [];
-      return [...cryptoQuotes, ...cryptoFallback, ...restQuotes];
+
+      // Fall back to Twelve Data for any stock/gold symbol Yahoo couldn't return
+      // (e.g. Yahoo rate-limiting). Thai SET isn't on the TD free plan and will
+      // simply come back empty there.
+      const haveRest = new Set(restQuotes.map((q) => q.symbol));
+      const missingRest = rest.filter((s) => !haveRest.has(s));
+      const restFallback =
+        missingRest.length && twelvedata.hasKey() ? await twelvedata.getQuotes(missingRest) : [];
+
+      return [...cryptoQuotes, ...cryptoFallback, ...restQuotes, ...restFallback];
     });
     return res.json(Array.isArray(quotes) ? quotes : []);
   } catch (err) {

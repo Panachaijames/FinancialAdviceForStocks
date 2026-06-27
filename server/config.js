@@ -1,5 +1,15 @@
 import dotenv from 'dotenv';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 
+// Load env from the project root regardless of the process cwd (the server may
+// be launched from the repo root or from the server/ workspace dir).
+// Precedence: .env.local (highest) > .env > process cwd default. dotenv does not
+// override already-set vars, so load the highest-priority file first.
+const serverDir = dirname(fileURLToPath(import.meta.url));
+const root = resolve(serverDir, '..');
+dotenv.config({ path: resolve(root, '.env.local') });
+dotenv.config({ path: resolve(root, '.env') });
 dotenv.config();
 
 const toInt = (val, fallback) => {
@@ -7,17 +17,26 @@ const toInt = (val, fallback) => {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 };
 
+const firstNonEmpty = (...vals) => {
+  for (const v of vals) {
+    if (typeof v === 'string' && v.trim()) return v.trim();
+  }
+  return '';
+};
+
 /**
  * Central server configuration. All values can be overridden via environment
- * variables (loaded from a .env file when present).
+ * variables (loaded from .env.local / .env at the repo root when present).
  */
 export const config = {
   PORT: toInt(process.env.PORT, 8787),
   POLL_MS: toInt(process.env.POLL_MS, 5000),
   FX_POLL_MS: toInt(process.env.FX_POLL_MS, 15000),
   keys: {
-    twelveData: process.env.TWELVE_DATA_API_KEY || '',
-    finnhub: process.env.FINNHUB_API_KEY || '',
+    // Accept both the documented names (TWELVEDATA_KEY / FINNHUB_KEY) and the
+    // longer *_API_KEY variants for convenience.
+    twelveData: firstNonEmpty(process.env.TWELVEDATA_KEY, process.env.TWELVE_DATA_API_KEY),
+    finnhub: firstNonEmpty(process.env.FINNHUB_KEY, process.env.FINNHUB_API_KEY),
   },
 };
 

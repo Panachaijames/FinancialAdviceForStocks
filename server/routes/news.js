@@ -1,6 +1,7 @@
 import express from 'express';
 import { wrap } from '../cache.js';
 import { getNews } from '../providers/yahoo.js';
+import * as finnhub from '../providers/finnhub.js';
 
 const router = express.Router();
 
@@ -20,7 +21,14 @@ router.get('/', async (req, res) => {
   try {
     const uniqueSorted = Array.from(new Set(symbols)).sort();
     const key = `news:${uniqueSorted.join(',')}`;
-    const news = await wrap(key, NEWS_TTL_MS, () => getNews(uniqueSorted));
+    const news = await wrap(key, NEWS_TTL_MS, async () => {
+      // Finnhub primary (per-symbol company news + general); Yahoo fallback.
+      if (finnhub.hasKey()) {
+        const fh = await finnhub.getNews(uniqueSorted);
+        if (fh && fh.length) return fh;
+      }
+      return getNews(uniqueSorted);
+    });
     return res.json(Array.isArray(news) ? news : []);
   } catch (err) {
     return res.status(500).json({ error: err?.message || 'News fetch failed' });

@@ -2,6 +2,7 @@ import express from 'express';
 import { wrap } from '../cache.js';
 import { getCandles } from '../providers/yahoo.js';
 import { getCryptoCandles } from '../providers/coingecko.js';
+import * as twelvedata from '../providers/twelvedata.js';
 import { isCrypto } from '../util/assetType.js';
 
 const router = express.Router();
@@ -34,8 +35,16 @@ router.get('/', async (req, res) => {
       if (isCrypto(symbol)) {
         const cg = await getCryptoCandles(symbol, range);
         if (cg && cg.length) return cg;
+        return getCandles(symbol, range, interval);
       }
-      return getCandles(symbol, range, interval);
+      // Stocks/gold: Yahoo primary, Twelve Data fallback (e.g. on Yahoo throttle).
+      const y = await getCandles(symbol, range, interval);
+      if (y && y.length) return y;
+      if (twelvedata.hasKey()) {
+        const td = await twelvedata.getCandles(symbol, range);
+        if (td && td.length) return td;
+      }
+      return [];
     });
     return res.json(Array.isArray(candles) ? candles : []);
   } catch (err) {
