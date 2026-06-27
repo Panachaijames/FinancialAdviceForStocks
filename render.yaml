@@ -1,0 +1,25 @@
+# Render Blueprint — deploys the WHOLE app as one web service.
+# The Node server builds the client and serves client/dist + REST /api + WebSocket /ws
+# on a single origin (no CORS, realtime works). See README "Deployment".
+#
+# 1) Push this repo to GitHub.
+# 2) Render Dashboard -> New -> Blueprint -> pick the repo.
+# 3) Set TWELVEDATA_KEY and FINNHUB_KEY in the service's Environment tab.
+services:
+  - type: web
+    name: pt-financial-advisor
+    runtime: node
+    plan: free
+    # --include=dev so Vite (a devDependency) is available for the client build,
+    # even though Render builds with NODE_ENV=production.
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 20.11.1
+      - key: TWELVEDATA_KEY
+        sync: false # set in the Render dashboard (do not commit secrets)
+      - key: FINNHUB_KEY
+        sync: false

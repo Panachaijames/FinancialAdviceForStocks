@@ -19,6 +19,21 @@ class MarketSocket {
   }
 
   _url() {
+    // Explicit WS URL wins (e.g. VITE_WS_URL=wss://your-backend/ws).
+    const envWs = import.meta.env.VITE_WS_URL;
+    if (envWs) return envWs;
+    // Otherwise derive from the REST base if the backend is hosted elsewhere.
+    const apiBase = import.meta.env.VITE_API_BASE;
+    if (apiBase) {
+      try {
+        const u = new URL(apiBase);
+        const proto = u.protocol === 'https:' ? 'wss' : 'ws';
+        return `${proto}://${u.host}/ws`;
+      } catch {
+        /* fall through to same-origin */
+      }
+    }
+    // Same-origin default (single-host deploy + local dev via Vite proxy).
     if (typeof window === 'undefined') return '';
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
     return `${proto}://${window.location.host}/ws`;

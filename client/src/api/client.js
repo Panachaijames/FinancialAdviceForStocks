@@ -1,7 +1,13 @@
 // REST API client. All calls hit the server under /api and throw on !res.ok.
+//
+// API_BASE is empty by default, so requests are relative (`/api/...`). This is
+// correct when the Node server serves the client (single-origin deploy) and for
+// local dev via the Vite proxy. To point a separately-hosted frontend (e.g.
+// Vercel) at a remote backend, set VITE_API_BASE=https://your-backend at build.
+const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/+$/, '');
 
 async function request(path) {
-  const res = await fetch(path, {
+  const res = await fetch(`${API_BASE}${path}`, {
     headers: { Accept: 'application/json' },
   });
   if (!res.ok) {
