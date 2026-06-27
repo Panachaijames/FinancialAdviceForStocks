@@ -45,8 +45,11 @@ app.use('/api/dividends', dividendsRouter);
 app.use('/api/news', newsRouter);
 app.use('/api/fx', fxRouter);
 
-// Optionally serve the built client if it exists.
-const clientDist = path.resolve(__dirname, '../client/dist');
+// Optionally serve the built client if it exists. CLIENT_DIST lets the packaged
+// desktop (Electron) app point at the bundled client build wherever it lands.
+const clientDist = process.env.CLIENT_DIST
+  ? path.resolve(process.env.CLIENT_DIST)
+  : path.resolve(__dirname, '../client/dist');
 if (fs.existsSync(clientDist)) {
   app.use(express.static(clientDist));
   // SPA fallback for non-API GET routes.

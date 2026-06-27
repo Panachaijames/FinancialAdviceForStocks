@@ -105,6 +105,47 @@ If you want to keep your Vercel frontend:
 
 These envs default to empty → relative URLs, which is exactly what Option A and local dev (Vite proxy) need, so nothing else changes.
 
+## Desktop App (Windows) — full features, no API keys
+
+Yahoo Finance works on home/residential networks (it only blocks cloud datacenter IPs), so running the app **locally** gives every user the *complete* feature set — **Thai SET stocks, dividends, real-time, and news** — with **no API keys at all**. The project packages into a standalone Windows desktop app (Electron bundles its own Node runtime + browser, so users install nothing).
+
+### Build the app
+
+```bash
+npm install
+npm run pack:win
+```
+
+Output: `release/pt-financial-advisor-win32-x64/` containing **`PT Financial Advisor.exe`**. Double-click it — it starts the bundled server on a free local port and opens the dashboard in a desktop window. (How it works: [`electron/main.cjs`](electron/main.cjs) launches [`server/index.js`](server/index.js) in-process and points a window at it.)
+
+### Share it with other people
+
+Send them the zip produced alongside the build, `release/PT-Financial-Advisor-Windows-x64.zip` (or zip the `pt-financial-advisor-win32-x64` folder yourself). They **extract it and run `PT Financial Advisor.exe`** — no Node, no install, no keys, full features on their own network.
+
+> **SmartScreen warning:** the build is unsigned, so Windows may show *"Windows protected your PC."* Click **More info → Run anyway**. To remove it permanently, sign the app with a code-signing certificate.
+
+### Optional: single-file installer / portable `.exe`
+
+For a one-file NSIS installer or portable exe, use electron-builder. It downloads a signing toolkit whose archive contains symlinks, so on Windows you must first enable **Developer Mode** (Settings → Privacy & security → For developers) **or** run the terminal **as Administrator**, then:
+
+```bash
+npm run dist
+```
+
+Artifacts land in `release/` (installer + portable `.exe`).
+
+### Automated releases (GitHub Actions)
+
+[`.github/workflows/release-windows.yml`](.github/workflows/release-windows.yml) builds the Windows app on GitHub's runners (which are elevated, so electron-builder's signing toolkit extracts cleanly — no Developer Mode needed) and attaches the installer + portable `.exe` to a GitHub Release on every version tag:
+
+```bash
+# bump "version" in package.json to match, then:
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+The workflow then builds and publishes a Release `v1.0.0` with the `.exe` files attached — no secrets to configure (it uses the built-in `GITHUB_TOKEN`). You can also trigger it manually from the **Actions** tab (manual runs upload the `.exe` as a downloadable artifact instead of creating a Release).
+
 ## Configuration
 
 All settings are optional and read from `.env.local` (preferred, gitignored) or `.env` at the repo root:

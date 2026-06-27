@@ -145,36 +145,95 @@ function guessCurrency(symbol) {
 }
 
 /**
- * Get quotes for a list of symbols.
+ * Build a Quote from the chart() endpoint's `meta`. Yahoo's quote (v7) endpoint
+ * is crumb-protected and aggressively rate-limited, but chart (v8) is lenient and
+ * its meta carries the current price — so this works (no key, no quota) when
+ * quote() is throttled. Pure mapper, exported for testing.
+ * @param {string} symbol
+ * @param {any} res chart() response
+ * @returns {import('../../types.js').Quote|null}
+ */
+export function chartToQuote(symbol, res) {
+  const m = (res && res.meta) || {};
+  const price = num(m.regularMarketPrice);
+  if (price == null) return null;
+  const prevClose = num(m.chartPreviousClose) ?? num(m.previousClose) ?? price;
+  const quotes = (res && res.quotes) || [];
+  const last = quotes.length ? quotes[quotes.length - 1] : null;
+  const change = price - prevClose;
+  const changePct = prevClose ? (change / prevClose) * 100 : 0;
+  return {
+    symbol,
+    type: refineType(symbol, m.instrumentType),
+    name: m.shortName || m.longName || m.symbol || symbol,
+    currency: m.currency || guessCurrency(symbol),
+    price,
+    prevClose,
+    change,
+    changePct,
+    dayHigh: num(m.regularMarketDayHigh) ?? (last ? num(last.high) : null) ?? 0,
+    dayLow: num(m.regularMarketDayLow) ?? (last ? num(last.low) : null) ?? 0,
+    open: last ? num(last.open) ?? 0 : 0,
+    volume: num(m.regularMarketVolume) ?? (last ? num(last.volume) : null) ?? 0,
+    marketState: 'REGULAR',
+    ts: m.regularMarketTime ? toMs(m.regularMarketTime) : Date.now(),
+  };
+}
+
+/** Fetch a single quote via the chart() endpoint (works when quote() is throttled). */
+async function getQuoteViaChart(symbol) {
+  try {
+    const res = await withRetry(() =>
+      yahooFinance.chart(symbol, { period1: new Date(Date.now() - 5 * DAY_MS), interval: '1d' })
+    );
+    return chartToQuote(symbol, res);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Get quotes for a list of symbols. Strategy: one batched quote() call (best when
+ * the IP isn't throttled), then derive any still-missing symbols from the lenient
+ * chart() endpoint — so prices keep working even when quote() is rate-limited.
  * @param {string[]} symbols
  * @returns {Promise<import('../../types.js').Quote[]>}
  */
 export async function getQuotes(symbols) {
   const list = (symbols || []).filter(Boolean);
   if (list.length === 0) return [];
+
+  const out = [];
+  const have = new Set();
+
+  // 1) Single batched quote() — cheap and rich when it works.
   try {
     const res = await withRetry(() => yahooFinance.quote(list));
     const rows = Array.isArray(res) ? res : [res];
-    const out = [];
     for (const row of rows) {
       const mapped = mapQuote(row);
-      if (mapped) out.push(mapped);
-    }
-    return out;
-  } catch {
-    // Fall back to per-symbol fetches so one bad symbol doesn't sink the batch.
-    const out = [];
-    for (const sym of list) {
-      try {
-        const row = await withRetry(() => yahooFinance.quote(sym));
-        const mapped = mapQuote(Array.isArray(row) ? row[0] : row);
-        if (mapped) out.push(mapped);
-      } catch {
-        /* skip */
+      if (mapped) {
+        out.push(mapped);
+        have.add(mapped.symbol);
       }
     }
-    return out;
+  } catch {
+    /* quote() throttled — fall through to chart-derived quotes */
   }
+
+  // 2) Derive any missing symbols from chart() meta (no key, not crumb-limited).
+  const missing = list.filter((s) => !have.has(s));
+  if (missing.length) {
+    const charted = await Promise.all(missing.map((s) => getQuoteViaChart(s)));
+    for (const q of charted) {
+      if (q) {
+        out.push(q);
+        have.add(q.symbol);
+      }
+    }
+  }
+
+  return out;
 }
 
 /**

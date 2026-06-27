@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "description": "PT Financial Advisor — a full-stack multi-asset portfolio dashboard tracking Thai stocks, US stocks/ETFs, crypto, and gold with live prices, real-time charts, dividends, FX switching, and news.",
+  "author": "Panachai Thongvinit",
   "type": "module",
+  "main": "electron/main.cjs",
   "workspaces": [
     "client",
     "server"
@@ -13,10 +15,55 @@
     "dev:server": "npm run dev --workspace server",
     "dev:client": "npm run dev --workspace client",
     "build": "npm run build --workspace client",
-    "start": "npm run start --workspace server"
+    "start": "npm run start --workspace server",
+    "electron:start": "npm run build && electron .",
+    "pack:win": "npm run build && electron-packager . --platform=win32 --arch=x64 --out=release --overwrite --no-asar --prune=true --name=\"PT Financial Advisor\" --executable-name=\"PT Financial Advisor\" --ignore=\"/release\" --ignore=\"/\\.git\" --ignore=\"/\\.claude\" --ignore=\"/\\.env\" --ignore=\"/client/src\" --ignore=\"/client/node_modules\" --ignore=\"/client/index.html\" --ignore=\"/client/vite.config.js\"",
+    "dist": "npm run build && electron-builder --win",
+    "dist:dir": "npm run build && electron-builder --win --dir"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "ws": "^8.18.0",
+    "yahoo-finance2": "2.13.4"
   },
   "devDependencies": {
-    "concurrently": "^9.1.0"
+    "@electron/packager": "^20.0.1",
+    "concurrently": "^9.1.0",
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.ptfinancial.advisor",
+    "productName": "PT Financial Advisor",
+    "asar": false,
+    "extraMetadata": {
+      "main": "electron/main.cjs"
+    },
+    "files": [
+      "electron/**/*",
+      "server/**/*",
+      "client/dist/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": [
+        "portable",
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "portable": {
+      "artifactName": "PT-Financial-Advisor-Portable.exe"
+    }
   },
   "engines": {
     "node": ">=18"
