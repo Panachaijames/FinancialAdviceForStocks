@@ -78,6 +78,33 @@ npm run build      # builds the client into client/dist
 npm start          # runs the server (serves client/dist if present)
 ```
 
+## Deployment
+
+> **Why a plain Vercel/Netlify static deploy shows "Search unavailable":** this is a **full-stack** app. The React client calls a Node backend (`/api/*`) and a WebSocket (`/ws`). A static-only host serves the frontend but has **no backend**, so every data call fails and FX falls back to a placeholder rate. The realtime hub + Binance stream also need a **long-running process**, which serverless platforms (Vercel/Netlify functions) can't keep alive. So the backend must run on a host that allows persistent Node processes (Render, Railway, Fly.io, a VPS, …).
+
+### Option A — one service on Render (recommended, simplest)
+
+The Node server already serves the built client **and** the API **and** the WebSocket on one origin, so you deploy a single service:
+
+1. Push this repo to GitHub.
+2. [Render](https://render.com) → **New → Blueprint** → pick the repo (it reads [`render.yaml`](render.yaml)). Or **New → Web Service** with: Build `npm install --include=dev && npm run build`, Start `npm start`.
+3. In the service's **Environment** tab, set `TWELVEDATA_KEY` and `FINNHUB_KEY` (your `.env.local` is gitignored and **not** deployed).
+4. Open the Render URL — everything (search, quotes, charts, news, realtime) works on that one URL.
+
+`PORT` is provided by Render automatically; `server/config.js` reads it. Note: Render's free tier sleeps after ~15 min idle (first request then takes ~30s to wake).
+
+### Option B — keep the frontend on Vercel, backend on Render
+
+If you want to keep your Vercel frontend:
+
+1. Deploy the **backend** on Render (Option A steps 1–3; it'll still serve its own copy of the client, that's fine).
+2. In your **Vercel** project → Settings → Environment Variables, add `VITE_API_BASE = https://YOUR-APP.onrender.com` (optionally `VITE_WS_URL = wss://YOUR-APP.onrender.com/ws`), then **redeploy**.
+3. The client now calls the Render backend for REST + WebSocket. CORS is already enabled server-side.
+
+> Set Vercel's **Root Directory** to `client` (Build `npm run build`, Output `dist`) so it builds only the frontend.
+
+These envs default to empty → relative URLs, which is exactly what Option A and local dev (Vite proxy) need, so nothing else changes.
+
 ## Configuration
 
 All settings are optional and read from `.env.local` (preferred, gitignored) or `.env` at the repo root:
