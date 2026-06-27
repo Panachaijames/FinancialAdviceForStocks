@@ -30,7 +30,7 @@ const firstNonEmpty = (...vals) => {
  */
 export const config = {
   PORT: toInt(process.env.PORT, 8787),
-  POLL_MS: toInt(process.env.POLL_MS, 5000),
+  POLL_MS: toInt(process.env.POLL_MS, 15000),
   FX_POLL_MS: toInt(process.env.FX_POLL_MS, 15000),
   keys: {
     // Accept both the documented names (TWELVEDATA_KEY / FINNHUB_KEY) and the

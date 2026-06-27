@@ -4,6 +4,7 @@ node_modules/
 # Build output
 dist/
 .vite/
+release/
 
 # Environment (keep .env.example tracked)
 .env

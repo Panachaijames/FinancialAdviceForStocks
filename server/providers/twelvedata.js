@@ -168,6 +168,117 @@ export async function getCandles(symbol, range = '6mo') {
   }
 }
 
+/** Convert a Twelve Data symbol back to our canonical (Yahoo-style) symbol. */
+function fromTd(tdSymbol) {
+  const s = String(tdSymbol || '').trim().toUpperCase();
+  if (!s) return '';
+  if (s.includes('/')) {
+    const [base, quote] = s.split('/');
+    if (quote === 'USD') {
+      if (base === 'XAU') return 'GC=F';
+      return `${base}-USD`; // crypto pair
+    }
+    return s;
+  }
+  return s; // plain US ticker
+}
+
+function refineSearchType(symbol, instrumentType) {
+  const base = classify(symbol);
+  if (base !== 'us_stock') return base; // crypto/gold/etc already resolved by symbol
+  const t = String(instrumentType || '').toLowerCase();
+  if (t.includes('etf') || t.includes('fund')) return 'etf';
+  if (t.includes('index')) return 'index';
+  return 'us_stock';
+}
+
+const US_EXCH = new Set(['XNAS', 'XNYS', 'XNGS', 'ARCA', 'BATS', 'AMEX', 'NASDAQ', 'NYSE', 'OTC']);
+
+// Allowed instrument types — keep real equities/ETFs/indices, drop the noise
+// (warrants, bonds, rights, structured notes, CEDEARs, etc.).
+function typeAllowed(instrumentType) {
+  const s = String(instrumentType || '').toLowerCase();
+  if (!s) return true; // crypto/forex rows often have no type
+  return (
+    s.includes('common stock') ||
+    s === 'stock' ||
+    s.includes('etf') ||
+    s.includes('fund') ||
+    s.includes('index') ||
+    s.includes('depositary') ||
+    s.includes('reit') ||
+    s.includes('digital currency')
+  );
+}
+
+/**
+ * Symbol search fallback (Twelve Data /symbol_search). Yahoo blocks cloud IPs,
+ * so this keeps search working on hosts like Render. TD returns the same ticker
+ * across dozens of exchanges plus warrants/CEDEARs/etc., so we filter to
+ * US-listed equities/ETFs (+ crypto/gold pairs) and rank by relevance.
+ * @param {string} q
+ * @returns {Promise<import('../../types.js').SearchResult[]>}
+ */
+export async function searchSymbols(q) {
+  if (!KEY) return [];
+  const query = String(q || '').trim();
+  if (!query) return [];
+  const Q = query.toUpperCase();
+  try {
+    const params = new URLSearchParams({ symbol: query, outputsize: '50', apikey: KEY });
+    const data = await fetchJson(`${BASE}/symbol_search?${params.toString()}`);
+    const rows = data && Array.isArray(data.data) ? data.data : [];
+    const byCanonical = new Map();
+    for (const d of rows) {
+      const canonical = fromTd(d.symbol);
+      if (!canonical) continue;
+      const cls = classify(canonical);
+      const type = refineSearchType(canonical, d.instrument_type);
+      const isUS =
+        d.currency === 'USD' ||
+        /united states/i.test(d.country || '') ||
+        US_EXCH.has(String(d.mic_code || d.exchange || '').toUpperCase());
+      // Keep crypto/gold pairs, or US-listed equities/ETFs/indices of a sane type.
+      const keep =
+        cls === 'crypto' ||
+        cls === 'gold' ||
+        ((cls === 'us_stock' || type === 'etf' || type === 'index') &&
+          isUS &&
+          typeAllowed(d.instrument_type));
+      if (!keep) continue;
+
+      const name = d.instrument_name || canonical;
+      const nameU = name.toUpperCase();
+      let score = 0;
+      if (canonical === Q) score += 100;
+      else if (canonical.startsWith(Q)) score += 50;
+      if (nameU === Q) score += 40;
+      else if (nameU.startsWith(Q)) score += 30;
+      else if (nameU.includes(Q)) score += 12;
+      if (/^[A-Z]{1,5}$/.test(canonical)) score += 10; // clean US ticker beats odd codes
+      if (type === 'etf') score += 3;
+
+      const entry = {
+        symbol: canonical,
+        name,
+        type,
+        exchange: d.exchange || '',
+        currency: d.currency || (cls === 'th_stock' ? 'THB' : 'USD'),
+        _score: score,
+      };
+      const ex = byCanonical.get(canonical);
+      if (!ex || score > ex._score) byCanonical.set(canonical, entry);
+    }
+    return Array.from(byCanonical.values())
+      .sort((a, b) => b._score - a._score)
+      .slice(0, 12)
+      // eslint-disable-next-line no-unused-vars
+      .map(({ _score, ...r }) => r);
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Get an FX rate (1 base = rate quote).
  * @param {string} base
@@ -187,4 +298,4 @@ export async function getFx(base = 'USD', quote = 'THB') {
   }
 }
 
-export default { hasKey, getQuotes, getCandles, getFx };
+export default { hasKey, getQuotes, getCandles, getFx, searchSymbols };
