@@ -5,8 +5,10 @@ node_modules/
 dist/
 .vite/
 
-# Environment
+# Environment (keep .env.example tracked)
 .env
+.env.local
+.env.*.local
 
 # Logs
 *.log
