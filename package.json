@@ -1,0 +1,24 @@
+{
+  "name": "pt-financial-advisor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PT Financial Advisor — a full-stack multi-asset portfolio dashboard tracking Thai stocks, US stocks/ETFs, crypto, and gold with live prices, real-time charts, dividends, FX switching, and news.",
+  "type": "module",
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,green \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "npm run dev --workspace server",
+    "dev:client": "npm run dev --workspace client",
+    "build": "npm run build --workspace client",
+    "start": "npm run start --workspace server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
