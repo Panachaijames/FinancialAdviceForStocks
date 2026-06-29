@@ -27,3 +27,7 @@ services:
         sync: false # for the AI Insights panel
       - key: GEMINI_MODEL
         value: gemini-3.5-flash
+      - key: SEC_FUND_DAILY_KEY
+        sync: false # Thai SEC fund NAV (read-only)
+      - key: SEC_FACTSHEET_KEY
+        sync: false

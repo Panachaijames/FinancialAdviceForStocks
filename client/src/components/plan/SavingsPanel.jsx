@@ -1,41 +1,30 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { Wallet, Plus, Trash2 } from 'lucide-react';
 import { theme } from '../../lib/theme.js';
 import { fmtMoney } from '../../lib/format.js';
-import { usePortfolioStore } from '../../store/portfolioStore.js';
 import { useSavingsStore } from '../../store/savingsStore.js';
 import { useSettingsStore } from '../../store/settingsStore.js';
-import useQuotes from '../../hooks/useQuotes.js';
-import useFx from '../../hooks/useFx.js';
+import useNetWorth from '../../hooks/useNetWorth.js';
 
 /**
- * Net Worth = investments (live market value) + cash/savings. Lets the user add
- * cash balances so their full picture and allocation are visible.
+ * Net Worth = investments (live market value) + Thai funds (NAV) + cash/savings.
+ * Lets the user add cash balances so their full picture and allocation are visible.
  */
 export default function SavingsPanel() {
-  const holdings = usePortfolioStore((s) => s.holdings);
   const savings = useSavingsStore((s) => s.savings);
   const addSaving = useSavingsStore((s) => s.addSaving);
   const removeSaving = useSavingsStore((s) => s.removeSaving);
   const displayCurrency = useSettingsStore((s) => s.displayCurrency);
-  const symbols = useMemo(() => holdings.map((h) => h.symbol), [holdings]);
-  const { quotes } = useQuotes(symbols);
-  const { convert } = useFx();
+  const { investments, cash, funds, net } = useNetWorth();
 
   const [label, setLabel] = useState('');
   const [amount, setAmount] = useState('');
   const [curr, setCurr] = useState(displayCurrency);
 
-  const investments = holdings.reduce((sum, h) => {
-    const q = quotes[h.symbol];
-    const native = h.currency || (h.type === 'th_stock' ? 'THB' : 'USD');
-    const price = q && Number.isFinite(Number(q.price)) ? Number(q.price) : Number(h.avgCost) || 0;
-    return sum + convert((Number(h.shares) || 0) * price, native);
-  }, 0);
-  const cash = savings.reduce((sum, s) => sum + convert(Number(s.amount) || 0, s.currency), 0);
-  const net = investments + cash;
-  const invPct = net > 0 ? (investments / net) * 100 : 0;
-  const cashPct = net > 0 ? (cash / net) * 100 : 0;
+  const pct = (v) => (net > 0 ? (v / net) * 100 : 0);
+  const invPct = pct(investments);
+  const fundsPct = pct(funds);
+  const cashPct = pct(cash);
 
   function handleAdd(e) {
     e.preventDefault();
@@ -69,14 +58,20 @@ export default function SavingsPanel() {
       <div>
         <div style={{ display: 'flex', height: 10, borderRadius: 999, overflow: 'hidden', background: theme.colors.bgElev }}>
           <div style={{ width: `${invPct}%`, background: theme.colors.accent }} title="Investments" />
+          <div style={{ width: `${fundsPct}%`, background: theme.colors.crypto }} title="Thai funds" />
           <div style={{ width: `${cashPct}%`, background: theme.colors.up }} title="Cash / savings" />
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: theme.space(1), fontSize: 12 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: theme.space(2), marginTop: theme.space(1), fontSize: 12 }}>
           <span style={{ color: theme.colors.accent, fontWeight: 600 }}>
             ● Investments {fmtMoney(investments, displayCurrency)} ({invPct.toFixed(0)}%)
           </span>
+          {funds > 0 && (
+            <span style={{ color: theme.colors.crypto, fontWeight: 600 }}>
+              ● Funds {fmtMoney(funds, displayCurrency)} ({fundsPct.toFixed(0)}%)
+            </span>
+          )}
           <span style={{ color: theme.colors.up, fontWeight: 600 }}>
-            Cash {fmtMoney(cash, displayCurrency)} ({cashPct.toFixed(0)}%) ●
+            ● Cash {fmtMoney(cash, displayCurrency)} ({cashPct.toFixed(0)}%)
           </span>
         </div>
       </div>
