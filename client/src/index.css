@@ -105,8 +105,169 @@ ul {
 
 .cards-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
   gap: 16px;
+}
+
+/* ---------- App header (responsive; layout was inline before, which couldn't
+   adapt to phone widths — the currency toggle overflowed off-screen) ---------- */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px max(16px, env(safe-area-inset-right)) 12px max(16px, env(safe-area-inset-left));
+  padding-top: max(12px, env(safe-area-inset-top));
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+.app-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.app-brand-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--accent), var(--up));
+  color: #fff;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+}
+
+.app-brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+  min-width: 0;
+}
+
+.app-brand-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+
+.app-brand-sub {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.app-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.app-conn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.conn-dot-off {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+
+.app-conn-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-faint);
+}
+
+.app-conn-label[data-on='1'] {
+  color: var(--up);
+}
+
+/* ---------- Page container (centered, safe-area aware) ---------- */
+.app-container {
+  max-width: 1280px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px max(20px, env(safe-area-inset-right)) max(48px, env(safe-area-inset-bottom))
+    max(20px, env(safe-area-inset-left));
+}
+
+/* ---------- Mobile (phones) ---------- */
+@media (max-width: 560px) {
+  body {
+    font-size: 15px;
+  }
+  .app-root {
+    overflow-x: hidden;
+  }
+  .app-header {
+    gap: 8px 10px;
+    padding: 10px 12px;
+    padding-top: max(10px, env(safe-area-inset-top));
+  }
+  .app-brand-logo {
+    width: 32px;
+    height: 32px;
+  }
+  .app-brand-title {
+    font-size: 16px;
+  }
+  .app-brand-sub {
+    display: none;
+  }
+  /* Controls drop to their own full-width row so nothing is cut off */
+  .app-controls {
+    flex-basis: 100%;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .app-container {
+    gap: 16px;
+    padding: 14px 12px max(40px, env(safe-area-inset-bottom));
+  }
+  .cards-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  /* Touch-friendly sizing */
+  .btn-ghost {
+    min-width: 40px;
+    min-height: 40px;
+  }
+  .segmented-item {
+    padding: 8px 14px;
+    font-size: 14px;
+  }
+  .input,
+  .select-input {
+    padding: 11px 12px;
+  }
+  .modal-backdrop {
+    padding: 12px;
+  }
 }
 
 /* ---------- Panels ---------- */
