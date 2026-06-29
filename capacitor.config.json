@@ -1,0 +1,9 @@
+{
+  "appId": "com.ptfinancial.advisor",
+  "appName": "PT Financial Advisor",
+  "webDir": "client/dist",
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true
+  }
+}

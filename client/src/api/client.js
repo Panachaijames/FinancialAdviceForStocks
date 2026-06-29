@@ -6,9 +6,10 @@
 // Vercel) at a remote backend, set VITE_API_BASE=https://your-backend at build.
 const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/+$/, '');
 
-async function request(path) {
+async function request(path, options) {
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { Accept: 'application/json' },
+    headers: { Accept: 'application/json', ...(options && options.headers) },
+    ...options,
   });
   if (!res.ok) {
     let detail = '';
@@ -21,6 +22,19 @@ async function request(path) {
     throw new Error(`Request failed (${res.status})${detail}`);
   }
   return res.json();
+}
+
+/**
+ * Request an AI insight for the current portfolio (Gemini-backed, analysis only).
+ * @param {{ holdings: Array, displayCurrency?: string }} payload
+ * @returns {Promise<{ text: string }>}
+ */
+export async function getAnalysis(payload) {
+  return request('/api/analysis', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload || {}),
+  });
 }
 
 /**

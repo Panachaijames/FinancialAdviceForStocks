@@ -12,6 +12,7 @@ import AssetCard from './components/AssetCard.jsx';
 import DividendPanel from './components/DividendPanel.jsx';
 import NewsPanel from './components/NewsPanel.jsx';
 import ChartModal from './components/ChartModal.jsx';
+import InsightsPanel from './components/InsightsPanel.jsx';
 
 const QUICK_ADD = [
   { symbol: 'AAPL', name: 'Apple Inc.', type: 'us_stock', currency: 'USD', exchange: 'NASDAQ' },
@@ -62,6 +63,8 @@ export default function App() {
         ) : (
           <div style={sectionGap}>
             <PortfolioSummary />
+
+            <InsightsPanel />
 
             <div className="cards-grid">
               {holdings.map((h) => (

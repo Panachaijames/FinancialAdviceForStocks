@@ -23,3 +23,7 @@ services:
         sync: false # set in the Render dashboard (do not commit secrets)
       - key: FINNHUB_KEY
         sync: false
+      - key: GEMINI_API_KEY
+        sync: false # for the AI Insights panel
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash

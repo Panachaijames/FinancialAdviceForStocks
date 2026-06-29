@@ -3,6 +3,7 @@ import { config } from '../config.js';
 import { isCrypto } from '../util/assetType.js';
 import { getQuotes } from '../providers/yahoo.js';
 import { getFx } from '../providers/fx.js';
+import { attachOvernight } from '../providers/pyth.js';
 import createBinanceFeed from '../providers/binanceWs.js';
 
 /**
@@ -218,6 +219,8 @@ export function attach(httpServer) {
     try {
       const quotes = await getQuotes(symbols);
       if (Array.isArray(quotes)) {
+        // Enrich US equities with Pyth overnight prices during overnight hours.
+        await attachOvernight(quotes);
         for (const q of quotes) {
           if (q && q.symbol) broadcastQuote(q);
         }

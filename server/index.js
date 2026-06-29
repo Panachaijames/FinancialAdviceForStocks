@@ -16,6 +16,7 @@ import candlesRouter from './routes/candles.js';
 import dividendsRouter from './routes/dividends.js';
 import newsRouter from './routes/news.js';
 import fxRouter from './routes/fx.js';
+import analysisRouter from './routes/analysis.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,9 +33,19 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Health check.
+// Health check. `providers` reports which keyed fallbacks loaded — handy for
+// verifying the packaged desktop app actually picked up its bundled .env.
 app.get('/api/health', (req, res) => {
-  res.json({ ok: true, ts: Date.now() });
+  res.json({
+    ok: true,
+    ts: Date.now(),
+    providers: {
+      yahoo: true,
+      twelveData: !!config.keys.twelveData,
+      finnhub: !!config.keys.finnhub,
+      gemini: !!config.keys.gemini,
+    },
+  });
 });
 
 // API routers.
@@ -44,6 +55,7 @@ app.use('/api/candles', candlesRouter);
 app.use('/api/dividends', dividendsRouter);
 app.use('/api/news', newsRouter);
 app.use('/api/fx', fxRouter);
+app.use('/api/analysis', analysisRouter);
 
 // Optionally serve the built client if it exists. CLIENT_DIST lets the packaged
 // desktop (Electron) app point at the bundled client build wherever it lands.

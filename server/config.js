@@ -37,7 +37,12 @@ export const config = {
     // longer *_API_KEY variants for convenience.
     twelveData: firstNonEmpty(process.env.TWELVEDATA_KEY, process.env.TWELVE_DATA_API_KEY),
     finnhub: firstNonEmpty(process.env.FINNHUB_KEY, process.env.FINNHUB_API_KEY),
+    // Google Gemini — powers the optional AI Insights panel (analysis only, no
+    // market data). Accepts GEMINI_API_KEY or GOOGLE_API_KEY.
+    gemini: firstNonEmpty(process.env.GEMINI_API_KEY, process.env.GOOGLE_API_KEY),
   },
+  // Gemini model id (override with GEMINI_MODEL). Flash = fast + free-tier friendly.
+  geminiModel: firstNonEmpty(process.env.GEMINI_MODEL) || 'gemini-3.5-flash',
 };
 
 export default config;
