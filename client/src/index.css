@@ -215,6 +215,15 @@ ul {
     max(20px, env(safe-area-inset-left));
 }
 
+/* Portfolio | Plan tab bar — natural width, left-aligned (not stretched). */
+.view-tabs {
+  align-self: flex-start;
+}
+.view-tabs .segmented-item {
+  padding: 7px 18px;
+  font-size: 14px;
+}
+
 /* ---------- Mobile (phones) ---------- */
 @media (max-width: 560px) {
   body {

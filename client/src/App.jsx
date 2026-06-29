@@ -12,6 +12,7 @@ import DividendPanel from './components/DividendPanel.jsx';
 import NewsPanel from './components/NewsPanel.jsx';
 import ChartModal from './components/ChartModal.jsx';
 import InsightsPanel from './components/InsightsPanel.jsx';
+import PlanView from './components/plan/PlanView.jsx';
 
 const QUICK_ADD = [
   { symbol: 'AAPL', name: 'Apple Inc.', type: 'us_stock', currency: 'USD', exchange: 'NASDAQ' },
@@ -28,6 +29,7 @@ export default function App() {
   const holdings = usePortfolioStore((s) => s.holdings);
   const addHolding = usePortfolioStore((s) => s.addHolding);
   const [selected, setSelected] = useState(null);
+  const [view, setView] = useState('portfolio'); // 'portfolio' | 'plan'
 
   // Open the live socket as soon as the app mounts.
   useEffect(() => {
@@ -44,37 +46,66 @@ export default function App() {
       <Header />
 
       <div className="app-container">
-        <AddAssetBar />
+        {/* View switch */}
+        <div className="segmented view-tabs" role="tablist" aria-label="View">
+          {[
+            ['portfolio', 'Portfolio'],
+            ['plan', 'Plan'],
+          ].map(([key, label]) => {
+            const active = view === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                className="segmented-item"
+                onClick={() => setView(key)}
+                style={{
+                  background: active ? theme.colors.accent : 'transparent',
+                  color: active ? '#fff' : theme.colors.textDim,
+                  fontWeight: active ? 700 : 600,
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
 
-        {holdings.length === 0 ? (
-          <EmptyState onQuickAdd={(sr) => addHolding(sr, { shares: 0, avgCost: 0 })} />
+        {view === 'plan' ? (
+          <PlanView />
         ) : (
-          <div style={sectionGap}>
-            <PortfolioSummary />
+          <>
+            <AddAssetBar />
 
-            <InsightsPanel />
+            {holdings.length === 0 ? (
+              <EmptyState onQuickAdd={(sr) => addHolding(sr, { shares: 0, avgCost: 0 })} />
+            ) : (
+              <div style={sectionGap}>
+                <PortfolioSummary />
 
-            <div className="cards-grid">
-              {holdings.map((h) => (
-                <AssetCard
-                  key={h.id}
-                  holding={h}
-                  onOpen={() => openChart(h.symbol)}
-                />
-              ))}
-            </div>
+                <InsightsPanel />
 
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'minmax(0, 1fr)',
-                gap: theme.space(5),
-              }}
-            >
-              <DividendPanel />
-              <NewsPanel />
-            </div>
-          </div>
+                <div className="cards-grid">
+                  {holdings.map((h) => (
+                    <AssetCard key={h.id} holding={h} onOpen={() => openChart(h.symbol)} />
+                  ))}
+                </div>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(0, 1fr)',
+                    gap: theme.space(5),
+                  }}
+                >
+                  <DividendPanel />
+                  <NewsPanel />
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
