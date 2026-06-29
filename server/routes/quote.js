@@ -3,6 +3,7 @@ import { wrap } from '../cache.js';
 import { getQuotes } from '../providers/yahoo.js';
 import { getCryptoQuotes } from '../providers/coingecko.js';
 import * as twelvedata from '../providers/twelvedata.js';
+import { attachOvernight } from '../providers/pyth.js';
 import { isCrypto } from '../util/assetType.js';
 
 const router = express.Router();
@@ -47,7 +48,10 @@ router.get('/', async (req, res) => {
       const restFallback =
         missingRest.length && twelvedata.hasKey() ? await twelvedata.getQuotes(missingRest) : [];
 
-      return [...cryptoQuotes, ...cryptoFallback, ...restQuotes, ...restFallback];
+      const all = [...cryptoQuotes, ...cryptoFallback, ...restQuotes, ...restFallback];
+      // Overnight (≈8pm–4am ET) US-equity prices from Pyth — no-op otherwise.
+      await attachOvernight(all);
+      return all;
     });
     return res.json(Array.isArray(quotes) ? quotes : []);
   } catch (err) {

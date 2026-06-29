@@ -22,6 +22,28 @@ function colorForChange(v) {
 }
 
 /**
+ * Extract a pre-market / after-hours line from a quote, or null if the asset
+ * isn't currently in an extended session (or has no extended price — e.g. crypto,
+ * which trades 24/7 and never carries pre/post fields).
+ */
+function extendedQuote(q) {
+  if (!q) return null;
+  const ms = String(q.marketState || '').toUpperCase();
+  const f = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+  if ((ms === 'PRE' || ms === 'PREPRE') && f(q.preMarketPrice) != null) {
+    return { label: 'Pre-mkt', price: f(q.preMarketPrice), pct: f(q.preMarketChangePct) };
+  }
+  if ((ms === 'POST' || ms === 'POSTPOST') && f(q.postMarketPrice) != null) {
+    return { label: 'After hrs', price: f(q.postMarketPrice), pct: f(q.postMarketChangePct) };
+  }
+  // Overnight (Blue Ocean ATS via Pyth) — only set when a fresh tick is available.
+  if (ms === 'OVERNIGHT' && f(q.overnightPrice) != null) {
+    return { label: 'Overnight', price: f(q.overnightPrice), pct: f(q.overnightChangePct) };
+  }
+  return null;
+}
+
+/**
  * A single holding card.
  * Props: { holding, onOpen }
  *   holding: { id, symbol, type, name, currency, shares, avgCost, addedAt }
@@ -44,6 +66,7 @@ export default function AssetCard({ holding, onOpen }) {
   const q = quotes[symbol];
   const price = q && Number.isFinite(Number(q.price)) ? Number(q.price) : null;
   const changePct = q && Number.isFinite(Number(q.changePct)) ? Number(q.changePct) : null;
+  const ext = extendedQuote(q);
 
   const effectivePrice = price != null ? price : Number(avgCost) || 0;
   const mvNative = (Number(shares) || 0) * effectivePrice;
@@ -208,6 +231,32 @@ export default function AssetCard({ holding, onOpen }) {
             {changePct != null ? fmtSignedPct(changePct) : '—'}
           </span>
         </div>
+
+        {/* Pre-market / after-hours (when the asset is in an extended session) */}
+        {ext && (
+          <div
+            style={{ display: 'flex', alignItems: 'baseline', gap: theme.space(1), marginTop: -theme.space(1) }}
+            title={`${ext.label === 'Pre-mkt' ? 'Pre-market' : 'After hours'} price`}
+          >
+            <span
+              style={{
+                fontSize: 9,
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: 0.5,
+                color: theme.colors.textFaint,
+              }}
+            >
+              {ext.label}
+            </span>
+            <span style={{ fontSize: 13, fontWeight: 700, fontFamily: theme.mono, color: theme.colors.text }}>
+              {fmtMoney(convert(ext.price, native), displayCurrency)}
+            </span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: colorForChange(ext.pct) }}>
+              {ext.pct != null ? fmtSignedPct(ext.pct) : ''}
+            </span>
+          </div>
+        )}
 
         {/* Mini chart */}
         <div

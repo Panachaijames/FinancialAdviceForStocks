@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:;" />
+    <style>
+      :root {
+        --bg: #0b0e14;
+        --text: #e6eaf2;
+        --dim: #9aa4b8;
+        --faint: #5d6679;
+        --accent: #3b82f6;
+        --up: #22c55e;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 100%; height: 100%; overflow: hidden; }
+      body {
+        background: var(--bg);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        color: var(--text);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-user-select: none;
+        user-select: none;
+        position: relative;
+      }
+      /* Soft brand glow behind the logo */
+      body::before {
+        content: '';
+        position: absolute;
+        top: 38%;
+        left: 50%;
+        width: 360px;
+        height: 360px;
+        transform: translate(-50%, -50%);
+        background: radial-gradient(circle, rgba(59,130,246,0.20), rgba(34,197,94,0.10) 45%, transparent 70%);
+        filter: blur(8px);
+        animation: glow 3.2s ease-in-out infinite;
+        pointer-events: none;
+      }
+      .wrap {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 18px;
+        opacity: 0;
+        transform: translateY(10px);
+        animation: rise 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+      }
+      .logo {
+        width: 76px;
+        height: 76px;
+        border-radius: 18px;
+        background: linear-gradient(135deg, var(--accent), var(--up));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 12px 40px rgba(34, 197, 94, 0.28), 0 4px 14px rgba(0, 0, 0, 0.5);
+        transform: scale(0.7);
+        opacity: 0;
+        animation: pop 0.6s cubic-bezier(0.2, 1.3, 0.4, 1) 0.1s forwards;
+      }
+      .logo svg { width: 42px; height: 42px; }
+      .logo svg polyline {
+        fill: none;
+        stroke: #ffffff;
+        stroke-width: 2.5;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-dasharray: 60;
+        stroke-dashoffset: 60;
+        animation: draw 0.8s ease-out 0.45s forwards;
+      }
+      .titles { text-align: center; line-height: 1.25; }
+      .title {
+        font-size: 21px;
+        font-weight: 800;
+        letter-spacing: 0.2px;
+        background: linear-gradient(90deg, var(--text), #ffffff, var(--text));
+        background-size: 200% 100%;
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        animation: sheen 3s ease-in-out 1s infinite;
+      }
+      .subtitle { font-size: 12px; color: var(--faint); font-weight: 500; margin-top: 3px; }
+      .loader {
+        margin-top: 6px;
+        width: 190px;
+        height: 3px;
+        border-radius: 3px;
+        background: rgba(255, 255, 255, 0.07);
+        overflow: hidden;
+        position: relative;
+      }
+      .loader::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        height: 100%;
+        width: 40%;
+        border-radius: 3px;
+        background: linear-gradient(90deg, transparent, var(--accent), var(--up), transparent);
+        animation: sweep 1.25s ease-in-out infinite;
+      }
+      .status {
+        font-size: 11px;
+        color: var(--dim);
+        font-weight: 500;
+        letter-spacing: 0.3px;
+        height: 14px;
+        opacity: 0;
+        animation: fadein 0.6s ease 0.9s forwards;
+      }
+      @keyframes rise { to { opacity: 1; transform: translateY(0); } }
+      @keyframes pop { to { opacity: 1; transform: scale(1); } }
+      @keyframes draw { to { stroke-dashoffset: 0; } }
+      @keyframes sweep {
+        0% { transform: translateX(-110%); }
+        100% { transform: translateX(360%); }
+      }
+      @keyframes sheen { 0%, 100% { background-position: 200% 0; } 50% { background-position: 0% 0; } }
+      @keyframes glow { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
+      @keyframes fadein { to { opacity: 1; } }
+      /* Fade the whole splash out when the main window is ready */
+      body.closing .wrap { animation: fadeout 0.32s ease forwards; }
+      body.closing::before { animation: fadeout 0.32s ease forwards; }
+      @keyframes fadeout { to { opacity: 0; transform: translateY(-6px); } }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="logo">
+        <!-- lucide "trending-up" -->
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline>
+          <polyline points="16 7 22 7 22 13"></polyline>
+        </svg>
+      </div>
+      <div class="titles">
+        <div class="title">PT Financial Advisor</div>
+        <div class="subtitle">Multi-asset portfolio dashboard</div>
+      </div>
+      <div class="loader"></div>
+      <div class="status" id="status">Starting up…</div>
+    </div>
+  </body>
+</html>

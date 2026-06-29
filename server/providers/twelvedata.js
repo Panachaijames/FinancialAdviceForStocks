@@ -10,9 +10,15 @@
  */
 import { config } from '../config.js';
 import { classify } from '../util/assetType.js';
+import { createLimiter } from '../util/limit.js';
 
 const BASE = 'https://api.twelvedata.com';
 const KEY = config.keys.twelveData;
+
+// Twelve Data free tier is quota-limited (~8 req/min). Cap concurrency so a
+// burst of fallback lookups (Yahoo misses on app reopen) doesn't fire them all
+// at once and get rate-limited. All TD requests flow through fetchJson.
+const tdLimit = createLimiter(2);
 
 export function hasKey() {
   return !!KEY;
@@ -37,7 +43,7 @@ async function fetchJson(url, tries = 2) {
   let lastErr;
   for (let i = 0; i < tries; i += 1) {
     try {
-      const res = await fetch(url, { headers: { accept: 'application/json' } });
+      const res = await tdLimit(() => fetch(url, { headers: { accept: 'application/json' } }));
       const data = await res.json();
       return data;
     } catch (e) {

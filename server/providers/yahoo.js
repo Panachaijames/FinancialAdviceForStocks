@@ -1,5 +1,13 @@
 import yahooFinance from 'yahoo-finance2';
 import { classify } from '../util/assetType.js';
+import { createLimiter } from '../util/limit.js';
+
+// Cap concurrent upstream Yahoo calls. Opening the app with many holdings fans
+// out into one quote + candles + dividend fetch per card all at once; that
+// burst trips Yahoo's per-IP rate limit and prices/charts come back empty. The
+// limiter serializes the burst (every Yahoo call flows through withRetry below)
+// so requests succeed instead of being throttled. Shared across all callers.
+const yfLimit = createLimiter(3);
 
 // Silence yahoo-finance2 notices (survey + historical deprecation) at load.
 try {
@@ -23,7 +31,7 @@ async function withRetry(fn, tries = 3, baseMs = 600) {
   let lastErr;
   for (let i = 0; i < tries; i += 1) {
     try {
-      return await fn();
+      return await yfLimit(fn);
     } catch (e) {
       lastErr = e;
       const msg = String((e && e.message) || e);
@@ -88,6 +96,10 @@ function mapQuote(q) {
     open: num(q.regularMarketOpen) ?? 0,
     volume: num(q.regularMarketVolume) ?? 0,
     marketState: q.marketState || 'UNKNOWN',
+    preMarketPrice: num(q.preMarketPrice),
+    preMarketChangePct: num(q.preMarketChangePercent),
+    postMarketPrice: num(q.postMarketPrice),
+    postMarketChangePct: num(q.postMarketChangePercent),
     ts: q.regularMarketTime ? toMs(q.regularMarketTime) : Date.now(),
   };
 }
@@ -108,6 +120,57 @@ function toMs(t) {
   return n < 1e12 ? n * 1000 : n;
 }
 
+// Yahoo's public search endpoint (v1) needs NO crumb/cookie. By contrast the
+// crumb token endpoint (/v1/test/getcrumb) and quote() (v7) are aggressively
+// rate-limited per IP — they return 429 "Too Many Requests" / 401, which recurs
+// intermittently from any one machine. yahoo-finance2 v2's search() fetches a
+// crumb *first*, so it breaks whenever that token endpoint is throttled, even
+// though the search endpoint itself is perfectly healthy. We therefore call the
+// search endpoint directly (no crumb) — this keeps symbol search and news
+// working regardless of crumb throttling.
+const SEARCH_HOSTS = ['https://query1.finance.yahoo.com', 'https://query2.finance.yahoo.com'];
+const BROWSER_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+
+/**
+ * Call Yahoo's crumb-free search endpoint directly and return the raw payload.
+ * Tries query1 then query2; transient rate limits are retried via withRetry.
+ * @param {string} q
+ * @param {{ quotesCount?: number, newsCount?: number }} [opts]
+ * @returns {Promise<{ quotes: any[], news: any[] }>}
+ */
+async function searchYahooDirect(q, { quotesCount = 12, newsCount = 0 } = {}) {
+  const params = new URLSearchParams({
+    q,
+    quotesCount: String(quotesCount),
+    newsCount: String(newsCount),
+    enableFuzzyQuery: 'false',
+    lang: 'en-US',
+    region: 'US',
+  });
+  return withRetry(async () => {
+    let lastErr;
+    for (const host of SEARCH_HOSTS) {
+      try {
+        const res = await fetch(`${host}/v1/finance/search?${params.toString()}`, {
+          headers: { 'user-agent': BROWSER_UA, accept: 'application/json' },
+        });
+        // Non-2xx: surface the status (incl. 429) so withRetry can back off and
+        // the loop can also try the other host.
+        if (!res.ok) {
+          lastErr = new Error(`Yahoo search HTTP ${res.status}`);
+          continue;
+        }
+        const data = await res.json();
+        return { quotes: (data && data.quotes) || [], news: (data && data.news) || [] };
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr || new Error('Yahoo search request failed');
+  });
+}
+
 /**
  * Search for symbols.
  * @param {string} q
@@ -116,10 +179,7 @@ function toMs(t) {
 export async function searchSymbols(q) {
   if (!q || !q.trim()) return [];
   try {
-    const res = await withRetry(() =>
-      yahooFinance.search(q.trim(), { newsCount: 0, quotesCount: 12 })
-    );
-    const quotes = (res && res.quotes) || [];
+    const { quotes } = await searchYahooDirect(q.trim(), { quotesCount: 12, newsCount: 0 });
     const out = [];
     for (const item of quotes) {
       const symbol = item.symbol;
@@ -180,8 +240,126 @@ export function chartToQuote(symbol, res) {
   };
 }
 
-/** Fetch a single quote via the chart() endpoint (works when quote() is throttled). */
+/**
+ * Fetch the raw chart (v8) payload directly (crumb-free, like searchYahooDirect).
+ * Used to derive a quote plus pre-market / after-hours prices from the intraday
+ * series. Gated + retried via withRetry like the other Yahoo calls.
+ * @param {string} symbol
+ * @param {{ range?: string, interval?: string, includePrePost?: boolean }} [opts]
+ * @returns {Promise<any>} chart result ({ meta, timestamp, indicators })
+ */
+async function fetchChartJSON(symbol, { range = '1d', interval = '5m', includePrePost = true } = {}) {
+  const params = new URLSearchParams({
+    range,
+    interval,
+    includePrePost: includePrePost ? 'true' : 'false',
+  });
+  return withRetry(async () => {
+    let lastErr;
+    for (const host of SEARCH_HOSTS) {
+      try {
+        const res = await fetch(
+          `${host}/v8/finance/chart/${encodeURIComponent(symbol)}?${params.toString()}`,
+          { headers: { 'user-agent': BROWSER_UA, accept: 'application/json' } }
+        );
+        if (!res.ok) {
+          lastErr = new Error(`Yahoo chart HTTP ${res.status}`);
+          continue;
+        }
+        const data = await res.json();
+        const result = data && data.chart && data.chart.result && data.chart.result[0];
+        if (!result) {
+          lastErr = new Error('Yahoo chart: empty result');
+          continue;
+        }
+        return result;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr || new Error('Yahoo chart request failed');
+  });
+}
+
+/**
+ * Build a Quote (incl. pre-market / after-hours) from a raw chart result that was
+ * fetched with includePrePost. marketState is derived from meta.currentTradingPeriod
+ * (Yahoo only covers pre [~4am] → regular → post [~8pm ET]; there is no overnight
+ * session). The latest close inside the pre/post window gives the extended price.
+ * @param {string} symbol
+ * @param {any} result raw chart result
+ * @returns {import('../../types.js').Quote|null}
+ */
+function quoteFromChartJSON(symbol, result) {
+  const m = (result && result.meta) || {};
+  const price = num(m.regularMarketPrice);
+  if (price == null) return null;
+  const prevClose = num(m.chartPreviousClose) ?? num(m.previousClose) ?? price;
+  const ts = (result && result.timestamp) || [];
+  const q0 = result && result.indicators && result.indicators.quote && result.indicators.quote[0];
+  const closes = (q0 && q0.close) || [];
+  const cp = m.currentTradingPeriod || {};
+  const inWin = (t, w) => !!w && t >= w.start && t < w.end;
+
+  let lastPre = null;
+  let lastPost = null;
+  for (let i = 0; i < ts.length && i < closes.length; i += 1) {
+    const c = num(closes[i]);
+    if (c == null) continue;
+    const t = ts[i];
+    if (inWin(t, cp.pre)) lastPre = c;
+    else if (inWin(t, cp.post)) lastPost = c;
+  }
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  let marketState = 'CLOSED';
+  if (inWin(nowSec, cp.pre)) marketState = 'PRE';
+  else if (inWin(nowSec, cp.regular)) marketState = 'REGULAR';
+  else if (inWin(nowSec, cp.post)) marketState = 'POST';
+
+  const change = price - prevClose;
+  const changePct = prevClose ? (change / prevClose) * 100 : 0;
+
+  // Pre-market is quoted vs the previous regular close; after-hours vs today's close.
+  const preMarketChangePct =
+    lastPre != null && prevClose ? ((lastPre - prevClose) / prevClose) * 100 : null;
+  const postMarketChangePct =
+    lastPost != null && price ? ((lastPost - price) / price) * 100 : null;
+
+  return {
+    symbol,
+    type: refineType(symbol, m.instrumentType),
+    name: m.shortName || m.longName || m.symbol || symbol,
+    currency: m.currency || guessCurrency(symbol),
+    price,
+    prevClose,
+    change,
+    changePct,
+    dayHigh: num(m.regularMarketDayHigh) ?? 0,
+    dayLow: num(m.regularMarketDayLow) ?? 0,
+    open: 0,
+    volume: num(m.regularMarketVolume) ?? 0,
+    marketState,
+    preMarketPrice: lastPre,
+    preMarketChangePct,
+    postMarketPrice: lastPost,
+    postMarketChangePct,
+    ts: m.regularMarketTime ? toMs(m.regularMarketTime) : Date.now(),
+  };
+}
+
+/** Fetch a single quote (incl. pre/after-hours) via the lenient chart endpoint. */
 async function getQuoteViaChart(symbol) {
+  // 1-day intraday with pre/post: meta carries the regular price reliably (even
+  // when the market is closed) and the series yields the extended-hours price.
+  try {
+    const result = await fetchChartJSON(symbol, { range: '1d', interval: '5m', includePrePost: true });
+    const q = quoteFromChartJSON(symbol, result);
+    if (q && q.price != null) return q;
+  } catch {
+    /* fall through to the daily-close fallback */
+  }
+  // Fallback: a 5-day daily chart, robust across long market closures.
   try {
     const res = await withRetry(() =>
       yahooFinance.chart(symbol, { period1: new Date(Date.now() - 5 * DAY_MS), interval: '1d' })
@@ -489,10 +667,9 @@ export async function getNews(symbols) {
   await Promise.all(
     list.map(async (sym) => {
       try {
-        const res = await withRetry(() =>
-          yahooFinance.search(sym, { newsCount: 8, quotesCount: 0 })
-        );
-        const news = (res && res.news) || [];
+        // Crumb-free direct search (see searchYahooDirect) — yahooFinance.search()
+        // would fail whenever Yahoo's crumb endpoint is throttled.
+        const { news } = await searchYahooDirect(sym, { newsCount: 8, quotesCount: 0 });
         for (const n of news) {
           const id = n.uuid || n.link || n.title;
           if (!id) continue;
