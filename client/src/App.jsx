@@ -5,7 +5,6 @@ import { usePortfolioStore } from './store/portfolioStore.js';
 import marketSocket from './api/socket.js';
 
 import Header from './components/Header.jsx';
-import CurrencyToggle from './components/CurrencyToggle.jsx';
 import AddAssetBar from './components/AddAssetBar.jsx';
 import PortfolioSummary from './components/PortfolioSummary.jsx';
 import AssetCard from './components/AssetCard.jsx';
@@ -38,24 +37,13 @@ export default function App() {
   const openChart = useCallback((symbol) => setSelected(symbol), []);
   const closeChart = useCallback(() => setSelected(null), []);
 
-  const containerStyle = {
-    maxWidth: 1280,
-    margin: '0 auto',
-    padding: `${theme.space(5)}px ${theme.space(5)}px ${theme.space(12)}px`,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: theme.space(5),
-  };
-
   const sectionGap = { display: 'flex', flexDirection: 'column', gap: theme.space(5) };
 
   return (
     <div className="app-root">
-      <Header>
-        <CurrencyToggle />
-      </Header>
+      <Header />
 
-      <div style={containerStyle}>
+      <div className="app-container">
         <AddAssetBar />
 
         {holdings.length === 0 ? (
