@@ -17,14 +17,22 @@ export function hasKey() {
 }
 
 const SYSTEM = [
-  'You are a concise, neutral financial assistant embedded in a personal',
-  'multi-asset portfolio dashboard. You are given the user\'s holdings with live',
-  'prices and (optionally) recent news headlines. Summarize how the portfolio is',
-  'doing today, call out the biggest movers (up and down) with their % change,',
-  'and add brief relevant context from the headlines when useful.',
-  'Rules: be factual and educational; do NOT give buy/sell/hold recommendations,',
-  'price targets, or personalized advice. No preamble. Keep it under ~180 words,',
-  'using short paragraphs or bullet points. Use the currency provided.',
+  'You are a thoughtful, neutral financial analyst embedded in a personal',
+  "multi-asset portfolio dashboard. You are given the user's holdings (with live",
+  'prices, day change, P/L, asset type, and weight), a total value, and recent',
+  'news headlines. Produce a DEEP but readable analysis using these markdown',
+  'sections with "## " headings, in this order:',
+  '## Overview — 2-3 sentences on how the portfolio is doing today and overall.',
+  '## Movers — the biggest up/down holdings today with their % and any headline context.',
+  '## Allocation & Concentration — comment on the asset-type mix and any holding/sector that dominates (a concentration risk).',
+  '## Dividend Income — note the passive income / yield if relevant.',
+  '## Risks — 2-4 concrete risks for THIS portfolio (concentration, volatility, FX, single-stock, etc.).',
+  '## Suggested Plan — 3-5 specific, actionable but GENERAL ideas to consider (e.g. diversify across sectors/asset types, trim/add to rebalance toward target weights, dollar-cost-average, build a cash buffer, reinvest dividends). Frame as ideas to consider, with brief reasoning.',
+  'Rules: be specific to the data given and educational. You MAY suggest general',
+  'strategies and rebalancing ideas, but do NOT give individualized financial',
+  'advice, specific price targets, or "buy/sell X now" calls. Use the currency',
+  'provided. Keep it tight (~300-450 words), use bullet points within sections.',
+  'End with one short italic line: *Educational only — not financial advice.*',
 ].join(' ');
 
 /**
@@ -38,24 +46,38 @@ export async function generateInsights({ holdings = [], news = [], displayCurren
     throw new Error('No holdings to analyze');
   }
 
+  const total = holdings.reduce((s, h) => s + (Number(h.marketValue) || 0), 0);
+  const pctOf = (v) => (total > 0 ? ((Number(v) || 0) / total) * 100 : 0);
+
   const lines = holdings.map((h) => {
     const parts = [
       `${h.symbol}${h.name ? ` (${h.name})` : ''}`,
-      h.shares != null ? `${h.shares} sh` : null,
+      h.type ? `[${h.type}]` : null,
+      h.shares != null ? `${h.shares} units` : null,
       h.price != null ? `price ${h.price}` : null,
       h.changePct != null ? `day ${Number(h.changePct).toFixed(2)}%` : null,
-      h.marketValue != null ? `mv ${Math.round(h.marketValue)}` : null,
+      h.marketValue != null ? `value ${Math.round(h.marketValue)} (${pctOf(h.marketValue).toFixed(1)}% of portfolio)` : null,
       h.plPct != null ? `P/L ${Number(h.plPct).toFixed(1)}%` : null,
     ].filter(Boolean);
     return `- ${parts.join(', ')}`;
   });
 
+  // Allocation by asset type (helps the model assess diversification).
+  const byType = {};
+  for (const h of holdings) byType[h.type || 'other'] = (byType[h.type || 'other'] || 0) + (Number(h.marketValue) || 0);
+  const allocation = Object.entries(byType)
+    .sort((a, b) => b[1] - a[1])
+    .map(([t, v]) => `${t} ${pctOf(v).toFixed(0)}%`)
+    .join(', ');
+
   const headlines = (news || [])
-    .slice(0, 10)
+    .slice(0, 12)
     .map((n) => `- ${n.title}${n.relatedSymbols && n.relatedSymbols.length ? ` [${n.relatedSymbols.join(',')}]` : ''}`);
 
   const prompt = [
     `Display currency: ${displayCurrency}.`,
+    `Total portfolio value: ${Math.round(total)} ${displayCurrency}.`,
+    `Allocation by type: ${allocation || 'n/a'}.`,
     '',
     'Holdings:',
     ...lines,
@@ -69,7 +91,14 @@ export async function generateInsights({ holdings = [], news = [], displayCurren
   const body = {
     systemInstruction: { parts: [{ text: SYSTEM }] },
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: { temperature: 0.4, maxOutputTokens: 700, topP: 0.95 },
+    generationConfig: {
+      temperature: 0.5,
+      maxOutputTokens: 3072,
+      topP: 0.95,
+      // Gemini 2.5/3.x "thinking" tokens count against the output budget and were
+      // truncating the answer — disable thinking so the full analysis comes through.
+      thinkingConfig: { thinkingBudget: 0 },
+    },
   };
 
   let res;
