@@ -25,6 +25,30 @@ async function request(path, options) {
 }
 
 /**
+ * Search Thai mutual funds (RMF/LTF/SSF/...) via the SEC OpenAPI.
+ * @param {string} q
+ * @returns {Promise<Array<{projId,abbr,nameTh,nameEn,amc}>>}
+ */
+export async function searchFunds(q) {
+  const query = (q || '').trim();
+  if (!query) return [];
+  return request(`/api/funds/search?q=${encodeURIComponent(query)}`);
+}
+
+/**
+ * Latest NAV (+ day change) for a Thai fund by SEC proj_id. Returns null if none.
+ * @param {string} projId
+ */
+export async function getFundNav(projId) {
+  if (!projId) return null;
+  try {
+    return await request(`/api/funds/nav?id=${encodeURIComponent(projId)}`);
+  } catch {
+    return null; // 404/no-NAV -> treat as unavailable
+  }
+}
+
+/**
  * Request an AI insight for the current portfolio (Gemini-backed, analysis only).
  * @param {{ holdings: Array, displayCurrency?: string }} payload
  * @returns {Promise<{ text: string }>}

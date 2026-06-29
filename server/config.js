@@ -40,6 +40,10 @@ export const config = {
     // Google Gemini — powers the optional AI Insights panel (analysis only, no
     // market data). Accepts GEMINI_API_KEY or GOOGLE_API_KEY.
     gemini: firstNonEmpty(process.env.GEMINI_API_KEY, process.env.GOOGLE_API_KEY),
+    // Thai SEC OpenAPI (read-only fund NAV data) — powers Thai mutual-fund
+    // (RMF/LTF/SSF) tracking. Two free subscription keys.
+    secFundDaily: firstNonEmpty(process.env.SEC_FUND_DAILY_KEY),
+    secFactsheet: firstNonEmpty(process.env.SEC_FACTSHEET_KEY),
   },
   // Gemini model id (override with GEMINI_MODEL). Flash = fast + free-tier friendly.
   geminiModel: firstNonEmpty(process.env.GEMINI_MODEL) || 'gemini-3.5-flash',

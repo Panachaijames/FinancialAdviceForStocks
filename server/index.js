@@ -17,6 +17,7 @@ import dividendsRouter from './routes/dividends.js';
 import newsRouter from './routes/news.js';
 import fxRouter from './routes/fx.js';
 import analysisRouter from './routes/analysis.js';
+import fundsRouter from './routes/funds.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -44,6 +45,7 @@ app.get('/api/health', (req, res) => {
       twelveData: !!config.keys.twelveData,
       finnhub: !!config.keys.finnhub,
       gemini: !!config.keys.gemini,
+      secFunds: !!(config.keys.secFundDaily && config.keys.secFactsheet),
     },
   });
 });
@@ -56,6 +58,7 @@ app.use('/api/dividends', dividendsRouter);
 app.use('/api/news', newsRouter);
 app.use('/api/fx', fxRouter);
 app.use('/api/analysis', analysisRouter);
+app.use('/api/funds', fundsRouter);
 
 // Optionally serve the built client if it exists. CLIENT_DIST lets the packaged
 // desktop (Electron) app point at the bundled client build wherever it lands.

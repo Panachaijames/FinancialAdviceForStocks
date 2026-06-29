@@ -1,6 +1,7 @@
 import React from 'react';
 import { theme } from '../../lib/theme.js';
 import SavingsPanel from './SavingsPanel.jsx';
+import FundsPanel from './FundsPanel.jsx';
 import GoalPlanner from './GoalPlanner.jsx';
 import DividendProjection from './DividendProjection.jsx';
 import DcaBacktest from './DcaBacktest.jsx';
@@ -15,6 +16,7 @@ export default function PlanView() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: theme.space(5) }}>
       <SavingsPanel />
+      <FundsPanel />
       <GoalPlanner />
       <DividendProjection />
       <DcaBacktest />

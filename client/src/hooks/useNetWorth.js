@@ -5,6 +5,7 @@ import { usePortfolioStore } from '../store/portfolioStore.js';
 import { useSavingsStore } from '../store/savingsStore.js';
 import useQuotes from './useQuotes.js';
 import useFx from './useFx.js';
+import useFunds from './useFunds.js';
 
 export function useNetWorth() {
   const holdings = usePortfolioStore((s) => s.holdings);
@@ -12,6 +13,7 @@ export function useNetWorth() {
   const symbols = useMemo(() => holdings.map((h) => h.symbol), [holdings]);
   const { quotes } = useQuotes(symbols);
   const { convert } = useFx();
+  const { totalThb: fundsThb } = useFunds();
 
   const investments = holdings.reduce((sum, h) => {
     const q = quotes[h.symbol];
@@ -20,8 +22,9 @@ export function useNetWorth() {
     return sum + convert((Number(h.shares) || 0) * price, native);
   }, 0);
   const cash = savings.reduce((sum, s) => sum + convert(Number(s.amount) || 0, s.currency), 0);
+  const funds = convert(fundsThb || 0, 'THB'); // Thai fund NAVs are in THB
 
-  return { investments, cash, net: investments + cash };
+  return { investments, cash, funds, net: investments + cash + funds };
 }
 
 export default useNetWorth;
