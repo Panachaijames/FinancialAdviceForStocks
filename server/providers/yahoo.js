@@ -242,18 +242,26 @@ export function chartToQuote(symbol, res) {
 
 /**
  * Fetch the raw chart (v8) payload directly (crumb-free, like searchYahooDirect).
- * Used to derive a quote plus pre-market / after-hours prices from the intraday
- * series. Gated + retried via withRetry like the other Yahoo calls.
+ * This is the ONE Yahoo data path that works everywhere — including cloud IPs,
+ * where the yahoo-finance2 library's chart()/quoteSummary() (which do a crumb
+ * step) fail. Used for quotes, candles, and dividend history. Gated + retried.
  * @param {string} symbol
- * @param {{ range?: string, interval?: string, includePrePost?: boolean }} [opts]
- * @returns {Promise<any>} chart result ({ meta, timestamp, indicators })
+ * @param {{ range?: string, interval?: string, includePrePost?: boolean,
+ *           period1?: Date|number, period2?: Date|number, events?: string }} [opts]
+ * @returns {Promise<any>} chart result ({ meta, timestamp, indicators, events })
  */
-async function fetchChartJSON(symbol, { range = '1d', interval = '5m', includePrePost = true } = {}) {
-  const params = new URLSearchParams({
-    range,
-    interval,
-    includePrePost: includePrePost ? 'true' : 'false',
-  });
+async function fetchChartJSON(symbol, opts = {}) {
+  const { range, interval = '1d', includePrePost = false, period1, period2, events } = opts;
+  const params = new URLSearchParams({ interval });
+  if (period1 != null && period2 != null) {
+    const toSec = (v) => Math.floor((v instanceof Date ? v.getTime() : Number(v)) / 1000);
+    params.set('period1', String(toSec(period1)));
+    params.set('period2', String(toSec(period2)));
+  } else {
+    params.set('range', range || '1d');
+  }
+  if (includePrePost) params.set('includePrePost', 'true');
+  if (events) params.set('events', events);
   return withRetry(async () => {
     let lastErr;
     for (const host of SEARCH_HOSTS) {
@@ -470,8 +478,47 @@ function resolveRange(range, interval) {
   return { period1, period2, interval: iv };
 }
 
+/** Parse OHLCV candles from a raw chart result (timestamp[] + indicators.quote[0]). */
+function candlesFromChartJSON(result) {
+  const ts = (result && result.timestamp) || [];
+  const q0 =
+    (result && result.indicators && result.indicators.quote && result.indicators.quote[0]) || {};
+  const opens = q0.open || [];
+  const highs = q0.high || [];
+  const lows = q0.low || [];
+  const closes = q0.close || [];
+  const vols = q0.volume || [];
+  const out = [];
+  for (let i = 0; i < ts.length; i += 1) {
+    const close = num(closes[i]);
+    if (close == null) continue;
+    const time = Math.floor(Number(ts[i])); // raw timestamps are epoch seconds
+    if (!Number.isFinite(time)) continue;
+    out.push({
+      time,
+      open: num(opens[i]) ?? close,
+      high: num(highs[i]) ?? close,
+      low: num(lows[i]) ?? close,
+      close,
+      volume: num(vols[i]) ?? 0,
+    });
+  }
+  out.sort((a, b) => a.time - b.time);
+  const deduped = [];
+  let prev = -1;
+  for (const c of out) {
+    if (c.time === prev) deduped[deduped.length - 1] = c;
+    else {
+      deduped.push(c);
+      prev = c.time;
+    }
+  }
+  return deduped;
+}
+
 /**
- * Get OHLCV candles.
+ * Get OHLCV candles via the crumb-free direct chart endpoint (so Thai .BK and
+ * everything else load on cloud IPs, where the library's chart() fails).
  * @param {string} symbol
  * @param {string} range
  * @param {string} interval
@@ -481,44 +528,8 @@ export async function getCandles(symbol, range = '6mo', interval = 'auto') {
   if (!symbol) return [];
   const { period1, period2, interval: iv } = resolveRange(range, interval);
   try {
-    const res = await withRetry(() =>
-      yahooFinance.chart(symbol, {
-        period1,
-        period2,
-        interval: iv,
-        events: 'div',
-      })
-    );
-    const quotes = (res && res.quotes) || [];
-    const out = [];
-    for (const row of quotes) {
-      const close = num(row.close);
-      if (close == null) continue;
-      const date = row.date instanceof Date ? row.date : new Date(row.date);
-      const time = Math.floor(date.getTime() / 1000);
-      if (!Number.isFinite(time)) continue;
-      out.push({
-        time,
-        open: num(row.open) ?? close,
-        high: num(row.high) ?? close,
-        low: num(row.low) ?? close,
-        close,
-        volume: num(row.volume) ?? 0,
-      });
-    }
-    // Yahoo returns ascending; ensure unique, sorted-by-time ascending.
-    out.sort((a, b) => a.time - b.time);
-    const deduped = [];
-    let prev = -1;
-    for (const c of out) {
-      if (c.time === prev) {
-        deduped[deduped.length - 1] = c;
-      } else {
-        deduped.push(c);
-        prev = c.time;
-      }
-    }
-    return deduped;
+    const result = await fetchChartJSON(symbol, { period1, period2, interval: iv });
+    return candlesFromChartJSON(result);
   } catch {
     return [];
   }
@@ -554,27 +565,23 @@ async function getDividendHistory(symbol) {
   try {
     const period1 = new Date(Date.now() - 3 * 366 * DAY_MS);
     const period2 = new Date();
-    const res = await withRetry(() =>
-      yahooFinance.chart(symbol, {
-        period1,
-        period2,
-        interval: '1mo',
-        events: 'div',
-      })
-    );
-    const divs = (res && res.events && res.events.dividends) || {};
+    // Crumb-free direct fetch with dividend events (works on cloud IPs).
+    const result = await fetchChartJSON(symbol, {
+      period1,
+      period2,
+      interval: '1mo',
+      events: 'div',
+    });
+    const divs = (result && result.events && result.events.dividends) || {};
     const list = [];
-    // events.dividends can be a keyed object or an array depending on version.
-    const entries = Array.isArray(divs) ? divs : Object.values(divs);
-    for (const d of entries) {
+    for (const d of Object.values(divs)) {
       if (!d) continue;
       const amount = num(d.amount);
       if (amount == null) continue;
-      const rawDate = d.date;
-      let date;
-      if (rawDate instanceof Date) date = rawDate;
-      else if (typeof rawDate === 'number') date = new Date(rawDate < 1e12 ? rawDate * 1000 : rawDate);
-      else date = new Date(rawDate);
+      // raw endpoint: d.date is epoch seconds
+      const t = Number(d.date);
+      if (!Number.isFinite(t)) continue;
+      const date = new Date(t < 1e12 ? t * 1000 : t);
       if (Number.isNaN(date.getTime())) continue;
       list.push({ date: date.toISOString(), amount });
     }
@@ -623,7 +630,22 @@ export async function getDividend(symbol) {
 
   const currency = summaryDetail.currency || priceMod.currency || guessCurrency(symbol);
 
-  const perShareAnnual = num(summaryDetail.dividendRate);
+  // Prefer quoteSummary's dividendRate; fall back to the trailing-12-month sum of
+  // the (crumb-free) history so dividends work on cloud where quoteSummary fails.
+  let perShareAnnual = num(summaryDetail.dividendRate);
+  if (perShareAnnual == null && history.length) {
+    const cutoff = Date.now() - 366 * DAY_MS;
+    let sum = 0;
+    let n = 0;
+    for (const h of history) {
+      const t = Date.parse(h.date);
+      if (Number.isFinite(t) && t >= cutoff) {
+        sum += h.amount;
+        n += 1;
+      }
+    }
+    if (n > 0) perShareAnnual = sum;
+  }
 
   const yieldRaw = num(summaryDetail.dividendYield) ?? num(summaryDetail.trailingAnnualDividendYield);
   const yieldPct = yieldRaw == null ? null : yieldRaw * 100;

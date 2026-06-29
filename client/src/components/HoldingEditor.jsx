@@ -3,6 +3,22 @@ import { X } from 'lucide-react';
 import { theme } from '../lib/theme.js';
 import { assetMeta } from '../lib/assetType.js';
 
+/** Asset-appropriate wording for the quantity + per-unit cost fields. */
+function unitNoun(type) {
+  switch (type) {
+    case 'gold':
+      return { qty: 'Ounces', per: 'ounce', eg: '1.5' };
+    case 'crypto':
+      return { qty: 'Units', per: 'coin', eg: '0.25' };
+    case 'us_stock':
+    case 'etf':
+    case 'th_stock':
+      return { qty: 'Shares', per: 'share', eg: '10' };
+    default:
+      return { qty: 'Units', per: 'unit', eg: '10' };
+  }
+}
+
 /**
  * Modal form to capture / edit a holding's shares and average cost (native currency).
  * Used for both adding a new holding and editing an existing one.
@@ -43,6 +59,7 @@ export default function HoldingEditor({ asset, initial, mode = 'add', onSave, on
   const valid = sharesValid && avgCostValid;
 
   const meta = assetMeta(asset?.type);
+  const u = unitNoun(asset?.type);
   const currency = asset?.currency || (asset?.type === 'th_stock' ? 'THB' : 'USD');
 
   function handleSubmit(e) {
@@ -129,7 +146,7 @@ export default function HoldingEditor({ asset, initial, mode = 'add', onSave, on
                 marginBottom: theme.space(1),
               }}
             >
-              Shares / Units
+              {u.qty}
             </span>
             <input
               ref={firstFieldRef}
@@ -138,14 +155,14 @@ export default function HoldingEditor({ asset, initial, mode = 'add', onSave, on
               inputMode="decimal"
               step="any"
               min="0"
-              placeholder="e.g. 10"
+              placeholder={`e.g. ${u.eg}`}
               value={shares}
               onChange={(e) => setShares(e.target.value)}
               style={fieldStyle(sharesValid)}
             />
             {touched && !sharesValid && (
               <span style={{ fontSize: 11, color: theme.colors.down, marginTop: 4, display: 'block' }}>
-                Enter a positive number of shares.
+                Enter a positive number of {u.qty.toLowerCase()}.
               </span>
             )}
           </label>
@@ -162,7 +179,7 @@ export default function HoldingEditor({ asset, initial, mode = 'add', onSave, on
                 marginBottom: theme.space(1),
               }}
             >
-              <span>Average cost / share</span>
+              <span>Average cost / {u.per}</span>
               <span
                 style={{
                   fontFamily: theme.mono,
@@ -186,7 +203,7 @@ export default function HoldingEditor({ asset, initial, mode = 'add', onSave, on
             />
             {touched && !avgCostValid && (
               <span style={{ fontSize: 11, color: theme.colors.down, marginTop: 4, display: 'block' }}>
-                Enter a positive cost per share.
+                Enter a positive cost per {u.per}.
               </span>
             )}
           </label>
