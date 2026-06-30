@@ -6,6 +6,7 @@ import { useSettingsStore } from '../store/settingsStore.js';
 import { usePortfolioStore } from '../store/portfolioStore.js';
 import useQuotes from '../hooks/useQuotes.js';
 import useFx from '../hooks/useFx.js';
+import useFunds from '../hooks/useFunds.js';
 import { getDividend } from '../api/client.js';
 import { computeDividendIncome } from '../lib/dividends.js';
 
@@ -27,6 +28,7 @@ export default function PortfolioSummary() {
   const symbols = useMemo(() => holdings.map((h) => h.symbol), [holdings]);
   const { quotes } = useQuotes(symbols);
   const { convert } = useFx();
+  const { funds: fundRows } = useFunds();
 
   // Lazily fetch dividends for dividend-paying holdings; cache by symbol.
   const [divs, setDivs] = useState({}); // symbol -> Dividend
@@ -99,6 +101,15 @@ export default function PortfolioSummary() {
       }
     }
 
+    // Thai funds (NAV in THB) — counted as part of the portfolio.
+    for (const f of fundRows) {
+      const valueThb = f.valueThb != null ? f.valueThb : f.costThb;
+      marketValue += convert(valueThb, 'THB');
+      cost += convert(f.costThb, 'THB');
+      const prevThb = f.changePct != null ? valueThb / (1 + f.changePct / 100) : valueThb;
+      prevMarketValue += convert(prevThb, 'THB');
+    }
+
     todayChange = marketValue - prevMarketValue;
     const pl = marketValue - cost;
     const plPct = cost > 0 ? (pl / cost) * 100 : 0;
@@ -115,7 +126,7 @@ export default function PortfolioSummary() {
       annualDividend,
       yieldPct,
     };
-  }, [holdings, quotes, divs, convert]);
+  }, [holdings, quotes, divs, convert, fundRows]);
 
   if (holdings.length === 0) return null;
 
