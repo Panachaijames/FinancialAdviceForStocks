@@ -88,7 +88,10 @@ export function calcThaiTax2568(input = {}) {
 
   // Retirement group — annuity (≤15% & ≤200k), RMF (≤30% & ≤500k), PVD/GPF;
   // the three together are capped at 500,000.
-  const annuity = Math.min(n(input.annuity), income * L.annuityRate, L.annuityMax);
+  // Edge case: if NO general life/health insurance is claimed, annuity premiums
+  // may fill the unused 100,000 general-life slot, raising the ceiling to 300,000.
+  const annuityMax = lifeIns + healthIns === 0 ? L.annuityMax + L.lifeAndHealthCombined : L.annuityMax;
+  const annuity = Math.min(n(input.annuity), income * L.annuityRate, annuityMax);
   const rmf = Math.min(n(input.rmf), income * L.rmfRate, L.rmfMax);
   const pvd = n(input.pvd);
   const retirement = add(

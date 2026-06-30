@@ -1,9 +1,22 @@
 import React, { useMemo, useState } from 'react';
-import { Calculator, ChevronDown, ChevronUp } from 'lucide-react';
+import { Calculator, ChevronDown, ChevronUp, Download } from 'lucide-react';
 import { theme } from '../../lib/theme.js';
 import { fmtMoney } from '../../lib/format.js';
 import { calcThaiTax2568, TAX_LIMITS } from '../../lib/thaiTax.js';
+import useFunds from '../../hooks/useFunds.js';
 import { PanelHeader } from './SavingsPanel.jsx';
+
+/**
+ * Classify a tracked Thai fund into a tax-deduction bucket by its name/abbr.
+ * SSF is intentionally excluded — new SSF purchases are not deductible for 2568.
+ */
+function fundBucket(f) {
+  const s = `${f.abbr || ''} ${f.name || ''}`.toUpperCase();
+  if (s.includes('ESGX')) return 'thaiEsgxNew';
+  if (s.includes('ESG')) return 'thaiEsg';
+  if (s.includes('RMF')) return 'rmf';
+  return null;
+}
 
 const baht = (v) => fmtMoney(v, 'THB');
 
@@ -77,11 +90,36 @@ export default function ThaiTaxPanel() {
   const [f, setF] = useState(EMPTY);
   const [spouse, setSpouse] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
+  const [prefilled, setPrefilled] = useState(false);
+  const { funds } = useFunds();
   const set = (k) => (v) => setF((prev) => ({ ...prev, [k]: v }));
 
   const income = Number(f.income) || 0;
   const r = useMemo(() => calcThaiTax2568({ ...f, spouse }), [f, spouse]);
   const hasIncome = income > 0;
+
+  // Pre-fill RMF / Thai ESG / ESGX fields from tracked funds (cost basis). The
+  // cost is total tracked investment, not necessarily this tax year's purchase —
+  // it's a starting estimate to adjust.
+  const fundTotals = useMemo(() => {
+    const t = { rmf: 0, thaiEsg: 0, thaiEsgxNew: 0 };
+    for (const fund of funds) {
+      const bucket = fundBucket(fund);
+      if (bucket && t[bucket] != null) t[bucket] += Number(fund.costThb) || 0;
+    }
+    return t;
+  }, [funds]);
+  const canPrefill = fundTotals.rmf + fundTotals.thaiEsg + fundTotals.thaiEsgxNew > 0;
+
+  function prefillFromFunds() {
+    setF((prev) => ({
+      ...prev,
+      rmf: fundTotals.rmf > 0 ? String(Math.round(fundTotals.rmf)) : prev.rmf,
+      thaiEsg: fundTotals.thaiEsg > 0 ? String(Math.round(fundTotals.thaiEsg)) : prev.thaiEsg,
+      thaiEsgxNew: fundTotals.thaiEsgxNew > 0 ? String(Math.round(fundTotals.thaiEsgxNew)) : prev.thaiEsgxNew,
+    }));
+    setPrefilled(true);
+  }
 
   // Net-result presentation (owe more / refund / settled).
   let resultColor = theme.colors.textDim;
@@ -105,7 +143,26 @@ export default function ThaiTaxPanel() {
       <PanelHeader
         icon={<Calculator size={16} />}
         title="คำนวณภาษีเงินได้บุคคลธรรมดา ปี 2568"
+        right={
+          canPrefill ? (
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={prefillFromFunds}
+              title="เติม RMF / Thai ESG / ESGX จากกองทุนที่ติดตาม (ใช้ต้นทุนรวม)"
+              style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: theme.colors.accent }}
+            >
+              <Download size={14} /> ดึงจากพอร์ต
+            </button>
+          ) : null
+        }
       />
+
+      {prefilled && (
+        <div style={{ fontSize: 11.5, color: theme.colors.textDim, background: theme.colors.bgElev, borderRadius: theme.radius.sm, padding: theme.space(2), borderLeft: `3px solid ${theme.colors.accent}` }}>
+          เติมจากกองทุนที่ติดตามแล้ว (ใช้ <b>ต้นทุนรวม</b>) — โปรดปรับเป็น <b>ยอดที่ซื้อจริงในปีภาษี 2568</b> เท่านั้น
+        </div>
+      )}
 
       {/* 1. Income */}
       <div>
@@ -236,8 +293,10 @@ export default function ThaiTaxPanel() {
         </div>
       )}
 
-      <div style={{ fontSize: 10.5, color: theme.colors.textFaint }}>
-        * ประมาณการเบื้องต้นตามเกณฑ์ปี 2568 — ไม่ใช่คำแนะนำทางภาษี โปรดตรวจสอบกับกรมสรรพากร
+      <div style={{ fontSize: 10.5, color: theme.colors.textFaint, lineHeight: 1.5 }}>
+        * ประมาณการตามเกณฑ์ปี 2568 โดยสมมติเป็น <b>เงินเดือน (40(1))</b> — ไม่รวมเงินได้ประเภทอื่น และคิดเฉพาะปีภาษีเดียว
+        (เช่น สิทธิ ESGX จาก LTF ที่ทยอยใช้หลายปี จะคิดเฉพาะปีแรก). บุตรบุญธรรมคนที่ 2+ ใช้ช่อง “บุตรคนแรก” (30,000).
+        ไม่ใช่คำแนะนำทางภาษี โปรดตรวจสอบกับกรมสรรพากร
       </div>
     </div>
   );
