@@ -25,7 +25,7 @@ export default function IntroOverlay() {
     } catch {
       /* ignore */
     }
-    const t = setTimeout(() => setShow(false), 2400);
+    const t = setTimeout(() => setShow(false), 8600);
     return () => clearTimeout(t);
   }, [show]);
 
