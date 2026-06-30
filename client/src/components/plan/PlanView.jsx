@@ -4,12 +4,13 @@ import SavingsPanel from './SavingsPanel.jsx';
 import GoalPlanner from './GoalPlanner.jsx';
 import DividendProjection from './DividendProjection.jsx';
 import DcaBacktest from './DcaBacktest.jsx';
+import ThaiTaxPanel from './ThaiTaxPanel.jsx';
 
 /**
  * "Plan" view — future-planning tools: net worth & savings, a goal projection,
- * dividend-income projection, and a DCA backtest. All amounts respect the
- * active display currency (except the DCA backtest, which is in the asset's
- * native price currency).
+ * dividend-income projection, a DCA backtest, and a Thai income-tax estimator.
+ * All amounts respect the active display currency (except the DCA backtest,
+ * which is in the asset's native price currency, and the Thai tax tool, in THB).
  */
 export default function PlanView() {
   return (
@@ -18,6 +19,7 @@ export default function PlanView() {
       <GoalPlanner />
       <DividendProjection />
       <DcaBacktest />
+      <ThaiTaxPanel />
     </div>
   );
 }
