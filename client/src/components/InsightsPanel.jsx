@@ -5,6 +5,7 @@ import { usePortfolioStore } from '../store/portfolioStore.js';
 import { useSettingsStore } from '../store/settingsStore.js';
 import useQuotes from '../hooks/useQuotes.js';
 import useFx from '../hooks/useFx.js';
+import useFunds from '../hooks/useFunds.js';
 import { getAnalysis } from '../api/client.js';
 
 /**
@@ -18,6 +19,7 @@ export default function InsightsPanel() {
   const symbols = useMemo(() => holdings.map((h) => h.symbol), [holdings]);
   const { quotes } = useQuotes(symbols);
   const { convert } = useFx();
+  const { funds: fundRows } = useFunds();
 
   const [enabled, setEnabled] = useState(false);
   const [text, setText] = useState('');
@@ -37,35 +39,43 @@ export default function InsightsPanel() {
     };
   }, []);
 
-  if (holdings.length === 0 || !enabled) return null;
+  if ((holdings.length === 0 && fundRows.length === 0) || !enabled) return null;
 
   async function run() {
     setLoading(true);
     setError('');
     try {
-      const payload = {
-        displayCurrency,
-        holdings: holdings.map((h) => {
-          const q = quotes[h.symbol];
-          const native = h.currency || (h.type === 'th_stock' ? 'THB' : 'USD');
-          const price =
-            q && Number.isFinite(Number(q.price)) ? Number(q.price) : Number(h.avgCost) || 0;
-          const shares = Number(h.shares) || 0;
-          const mvNative = shares * price;
-          const costNative = shares * (Number(h.avgCost) || 0);
-          const plPct = costNative > 0 ? ((mvNative - costNative) / costNative) * 100 : 0;
-          return {
-            symbol: h.symbol,
-            name: h.name,
-            type: h.type,
-            shares,
-            price,
-            changePct: q && Number.isFinite(Number(q.changePct)) ? Number(q.changePct) : null,
-            marketValue: convert(mvNative, native),
-            plPct,
-          };
-        }),
-      };
+      const stockEntries = holdings.map((h) => {
+        const q = quotes[h.symbol];
+        const native = h.currency || (h.type === 'th_stock' ? 'THB' : 'USD');
+        const price = q && Number.isFinite(Number(q.price)) ? Number(q.price) : Number(h.avgCost) || 0;
+        const shares = Number(h.shares) || 0;
+        const mvNative = shares * price;
+        const costNative = shares * (Number(h.avgCost) || 0);
+        const plPct = costNative > 0 ? ((mvNative - costNative) / costNative) * 100 : 0;
+        return {
+          symbol: h.symbol,
+          name: h.name,
+          type: h.type,
+          shares,
+          price,
+          changePct: q && Number.isFinite(Number(q.changePct)) ? Number(q.changePct) : null,
+          marketValue: convert(mvNative, native),
+          plPct,
+        };
+      });
+      // Include tracked Thai funds (RMF/LTF/SSF) so the analysis covers them too.
+      const fundEntries = fundRows.map((f) => ({
+        symbol: f.abbr,
+        name: f.name,
+        type: 'thai_fund',
+        shares: Number(f.units) || 0,
+        price: f.nav != null ? f.nav : null,
+        changePct: f.changePct != null ? Number(f.changePct) : null,
+        marketValue: convert(f.valueThb != null ? f.valueThb : f.costThb, 'THB'),
+        plPct: f.plPct != null ? Number(f.plPct) : null,
+      }));
+      const payload = { displayCurrency, holdings: [...stockEntries, ...fundEntries] };
       const res = await getAnalysis(payload);
       setText((res && res.text) || '');
     } catch (e) {

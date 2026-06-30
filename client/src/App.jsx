@@ -13,6 +13,7 @@ import NewsPanel from './components/NewsPanel.jsx';
 import ChartModal from './components/ChartModal.jsx';
 import InsightsPanel from './components/InsightsPanel.jsx';
 import PlanView from './components/plan/PlanView.jsx';
+import FundsPanel from './components/plan/FundsPanel.jsx';
 
 const QUICK_ADD = [
   { symbol: 'AAPL', name: 'Apple Inc.', type: 'us_stock', currency: 'USD', exchange: 'NASDAQ' },
@@ -80,7 +81,10 @@ export default function App() {
             <AddAssetBar />
 
             {holdings.length === 0 ? (
-              <EmptyState onQuickAdd={(sr) => addHolding(sr, { shares: 0, avgCost: 0 })} />
+              <>
+                <FundsPanel />
+                <EmptyState onQuickAdd={(sr) => addHolding(sr, { shares: 0, avgCost: 0 })} />
+              </>
             ) : (
               <div style={sectionGap}>
                 <PortfolioSummary />
@@ -92,6 +96,8 @@ export default function App() {
                     <AssetCard key={h.id} holding={h} onOpen={() => openChart(h.symbol)} />
                   ))}
                 </div>
+
+                <FundsPanel />
 
                 <div
                   style={{
