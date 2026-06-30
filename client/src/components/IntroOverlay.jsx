@@ -11,7 +11,6 @@ export default function IntroOverlay() {
   const [show, setShow] = useState(() => {
     try {
       if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
-      if (sessionStorage.getItem('pt-intro-shown')) return false;
     } catch {
       /* ignore */
     }
@@ -20,11 +19,6 @@ export default function IntroOverlay() {
 
   useEffect(() => {
     if (!show) return undefined;
-    try {
-      sessionStorage.setItem('pt-intro-shown', '1');
-    } catch {
-      /* ignore */
-    }
     const t = setTimeout(() => setShow(false), 8600);
     return () => clearTimeout(t);
   }, [show]);
