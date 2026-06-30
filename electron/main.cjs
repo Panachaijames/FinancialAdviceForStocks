@@ -119,7 +119,9 @@ if (!gotLock) {
     if (!splashWindow) return;
     const win = splashWindow;
     splashWindow = null;
-    const MIN_MS = 1500;
+    // Short — the boot splash just covers server start; the in-app cinematic
+    // intro (IntroOverlay) takes over once the window content loads.
+    const MIN_MS = 300;
     const wait = Math.max(0, MIN_MS - (Date.now() - splashShownAt));
     setTimeout(() => {
       if (win.isDestroyed()) return;
