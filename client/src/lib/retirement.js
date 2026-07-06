@@ -24,6 +24,10 @@ export const RETIREMENT_DEFAULTS = {
   retireAge: 60,
   endAge: 85,
   swrPct: 4,
+  // Tax drag on investment gains. 15% ≈ US dividend withholding (treaty rate).
+  // Thai SET capital gains are exempt and RMF/Thai ESG gains are tax-free if
+  // held, so lower it for a SET/fund-heavy mix (0 = fully tax-sheltered).
+  investmentTaxPct: 15,
 };
 
 const num = (v) => {
@@ -66,6 +70,15 @@ export function projectRetirement(p = {}) {
   const monthlyExpenseToday = num(p.monthlyExpenseToday);
   const monthlyPensionToday = num(p.monthlyPensionToday);
 
+  // Tax drag: investment gains are taxed at `investmentTaxPct`, so each year's
+  // growth is kept only net of tax (principal is never taxed). Effective return
+  // = r * (1 - taxRate). Captures e.g. 15% US dividend withholding / Thai tax on
+  // remitted gains; set to 0 for tax-sheltered holdings (RMF, SET gains).
+  const invTax = Math.min(1, Math.max(0, pct(p.investmentTaxPct)));
+  const rPreNet = rPre * (1 - invTax);
+  const rPostNet = rPost * (1 - invTax);
+  const preReturnNetPct = (Number(p.preReturnPct) || 0) * (1 - invTax);
+
   const series = [];
   let balance = start;
   let depletionAge = null;
@@ -94,12 +107,12 @@ export function projectRetirement(p = {}) {
     if (age >= endAge) break;
 
     if (phase === 'accumulate') {
-      balance = balance * (1 + rPre) + monthly * 12;
+      balance = balance * (1 + rPreNet) + monthly * 12;
     } else {
       const expenseThisYear = monthlyExpenseToday * inflFactor * 12;
       const pensionThisYear = monthlyPensionToday * inflFactor * 12;
       const netNeed = Math.max(0, expenseThisYear - pensionThisYear);
-      balance = (balance - netNeed) * (1 + rPost);
+      balance = (balance - netNeed) * (1 + rPostNet);
       if (balance <= 0 && depletionAge == null) {
         depletionAge = age + 1;
         balance = 0;
@@ -124,7 +137,7 @@ export function projectRetirement(p = {}) {
       ? requiredMonthly({
           principal: start,
           target: freedomNumber,
-          annualReturnPct: Number(p.preReturnPct) || 0,
+          annualReturnPct: preReturnNetPct,
           years: retireAge - currentAge,
         })
       : 0;

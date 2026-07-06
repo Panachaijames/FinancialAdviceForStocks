@@ -73,6 +73,7 @@ export default function RetirementPlanner() {
   const [postReturn, setPostReturn] = useState(String(RETIREMENT_DEFAULTS.postReturnPct));
   const [inflation, setInflation] = useState(String(RETIREMENT_DEFAULTS.inflationPct));
   const [swr, setSwr] = useState(String(RETIREMENT_DEFAULTS.swrPct));
+  const [invTax, setInvTax] = useState(String(RETIREMENT_DEFAULTS.investmentTaxPct));
 
   const start = useNet ? net : Number(startManual) || 0;
 
@@ -90,8 +91,9 @@ export default function RetirementPlanner() {
         postReturnPct: Number(postReturn) || 0,
         inflationPct: Number(inflation) || 0,
         swrPct: Number(swr) || 0,
+        investmentTaxPct: Number(invTax) || 0,
       }),
-    [currentAge, retireAge, endAge, start, monthly, expense, pension, preReturn, postReturn, inflation, swr]
+    [currentAge, retireAge, endAge, start, monthly, expense, pension, preReturn, postReturn, inflation, swr, invTax]
   );
 
   const cur = displayCurrency;
@@ -123,6 +125,12 @@ export default function RetirementPlanner() {
         <Num label="Return %/yr (retired)" value={postReturn} onChange={setPostReturn} />
         <Num label="Inflation %/yr" value={inflation} onChange={setInflation} />
         <Num label="Withdrawal rate %" value={swr} onChange={setSwr} />
+        <Num label="Investment tax %" value={invTax} onChange={setInvTax} />
+      </div>
+
+      <div style={{ fontSize: 11, color: theme.colors.textFaint, marginTop: -theme.space(1) }}>
+        💸 Investment tax reduces your yearly gains (default 15% ≈ US dividend withholding). Lower it for
+        a Thai SET / RMF-heavy mix — SET capital gains are exempt and RMF/Thai ESG gains are tax-free if held.
       </div>
 
       {/* Make it explicit that the starting nest egg is your live portfolio:
