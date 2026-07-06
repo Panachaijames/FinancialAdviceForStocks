@@ -59,7 +59,7 @@ function Num({ label, value, onChange, step = 'any', integer = false }) {
  */
 export default function RetirementPlanner() {
   const displayCurrency = useSettingsStore((s) => s.displayCurrency);
-  const { net } = useNetWorth();
+  const { investments, cash, funds, net } = useNetWorth();
 
   const [currentAge, setCurrentAge] = useState('30');
   const [retireAge, setRetireAge] = useState(String(RETIREMENT_DEFAULTS.retireAge));
@@ -124,6 +124,18 @@ export default function RetirementPlanner() {
         <Num label="Inflation %/yr" value={inflation} onChange={setInflation} />
         <Num label="Withdrawal rate %" value={swr} onChange={setSwr} />
       </div>
+
+      {/* Make it explicit that the starting nest egg is your live portfolio:
+          stocks + Thai funds (incl. RMF) + cash. */}
+      {useNet && net > 0 && (
+        <div style={{ fontSize: 12, color: theme.colors.textDim, background: theme.colors.bgElev, borderRadius: theme.radius.sm, padding: theme.space(2), borderLeft: `3px solid ${theme.colors.accent}` }}>
+          Starting from your live portfolio:{' '}
+          <b style={{ color: theme.colors.accent }}>📈 {fmtMoney(investments, cur)}</b> stocks
+          {funds > 0 && (<> · <b style={{ color: theme.colors.crypto }}>🇹🇭 {fmtMoney(funds, cur)}</b> funds / RMF</>)}
+          {cash > 0 && (<> · <b style={{ color: theme.colors.up }}>💵 {fmtMoney(cash, cur)}</b> cash</>)}
+          {' = '}<b style={{ color: theme.colors.text }}>{fmtMoney(net, cur)}</b>
+        </div>
+      )}
 
       {/* Headline — does the money last? */}
       <div
