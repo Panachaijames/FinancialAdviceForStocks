@@ -47,7 +47,7 @@ app.get('/api/health', (req, res) => {
       twelveData: !!config.keys.twelveData,
       finnhub: !!config.keys.finnhub,
       gemini: !!config.keys.gemini,
-      secFunds: !!(config.keys.secFundDaily && config.keys.secFactsheet),
+      secFunds: !!config.keys.secApi,
       sync: syncConfigured(),
     },
   });

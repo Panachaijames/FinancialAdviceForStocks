@@ -9,7 +9,7 @@ const NAV_TTL_MS = 30 * 1000; // route-level dedup; provider caches ~1h
 
 // GET /api/funds/search?q=...  -> Thai mutual funds (RMF/LTF/SSF/...)
 router.get('/search', async (req, res) => {
-  if (!sec.hasKey()) return res.status(503).json({ error: 'Thai fund data unavailable — set SEC_FUND_DAILY_KEY + SEC_FACTSHEET_KEY' });
+  if (!sec.hasKey()) return res.status(503).json({ error: 'Thai fund data unavailable — set SEC_API_KEY' });
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
   if (!q) return res.json([]);
   try {

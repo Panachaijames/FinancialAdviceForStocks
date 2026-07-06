@@ -27,10 +27,12 @@ services:
         sync: false # for the AI Insights panel
       - key: GEMINI_MODEL
         value: gemini-3.5-flash
+      - key: SEC_API_KEY
+        sync: false # Thai SEC Open Data API v2 — ONE key from the new portal (replaces the two old vars below)
       - key: SEC_FUND_DAILY_KEY
-        sync: false # Thai SEC fund NAV (read-only)
+        sync: false # deprecated (old v1 API retired 30 Jun 2025) — kept as a fallback var name
       - key: SEC_FACTSHEET_KEY
-        sync: false
+        sync: false # deprecated (old v1 API retired 30 Jun 2025)
       - key: UPSTASH_REDIS_REST_URL
         sync: false # cross-device sync store (free Upstash Redis REST)
       - key: UPSTASH_REDIS_REST_TOKEN

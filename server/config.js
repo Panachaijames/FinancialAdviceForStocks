@@ -40,10 +40,11 @@ export const config = {
     // Google Gemini — powers the optional AI Insights panel (analysis only, no
     // market data). Accepts GEMINI_API_KEY or GOOGLE_API_KEY.
     gemini: firstNonEmpty(process.env.GEMINI_API_KEY, process.env.GOOGLE_API_KEY),
-    // Thai SEC OpenAPI (read-only fund NAV data) — powers Thai mutual-fund
-    // (RMF/LTF/SSF) tracking. Two free subscription keys.
-    secFundDaily: firstNonEmpty(process.env.SEC_FUND_DAILY_KEY),
-    secFactsheet: firstNonEmpty(process.env.SEC_FACTSHEET_KEY),
+    // Thai SEC Open Data API v2 (read-only fund NAV data) — powers Thai mutual-
+    // fund (RMF/SSF/Thai ESG/…) tracking. ONE free subscription key from the new
+    // portal (the old two-key v1 API was retired 30 Jun 2025). Falls back to the
+    // old var names so an existing var can just be repointed at the new key.
+    secApi: firstNonEmpty(process.env.SEC_API_KEY, process.env.SEC_FACTSHEET_KEY, process.env.SEC_FUND_DAILY_KEY),
     // Upstash Redis (REST) — persistent store for cross-device portfolio sync.
     upstashUrl: firstNonEmpty(process.env.UPSTASH_REDIS_REST_URL),
     upstashToken: firstNonEmpty(process.env.UPSTASH_REDIS_REST_TOKEN),
