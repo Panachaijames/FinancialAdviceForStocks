@@ -44,6 +44,9 @@ export const config = {
     // (RMF/LTF/SSF) tracking. Two free subscription keys.
     secFundDaily: firstNonEmpty(process.env.SEC_FUND_DAILY_KEY),
     secFactsheet: firstNonEmpty(process.env.SEC_FACTSHEET_KEY),
+    // Upstash Redis (REST) — persistent store for cross-device portfolio sync.
+    upstashUrl: firstNonEmpty(process.env.UPSTASH_REDIS_REST_URL),
+    upstashToken: firstNonEmpty(process.env.UPSTASH_REDIS_REST_TOKEN),
   },
   // Gemini model id (override with GEMINI_MODEL). Flash = fast + free-tier friendly.
   geminiModel: firstNonEmpty(process.env.GEMINI_MODEL) || 'gemini-3.5-flash',

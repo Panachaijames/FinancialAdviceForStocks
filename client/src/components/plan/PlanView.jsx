@@ -6,6 +6,7 @@ import RetirementPlanner from './RetirementPlanner.jsx';
 import DividendProjection from './DividendProjection.jsx';
 import DcaBacktest from './DcaBacktest.jsx';
 import ThaiTaxPanel from './ThaiTaxPanel.jsx';
+import SyncPanel from './SyncPanel.jsx';
 
 /**
  * "Plan" view — future-planning tools: net worth & savings, a goal projection,
@@ -23,6 +24,7 @@ export default function PlanView() {
       <DividendProjection />
       <DcaBacktest />
       <ThaiTaxPanel />
+      <SyncPanel />
     </div>
   );
 }

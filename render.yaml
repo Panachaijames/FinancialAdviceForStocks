@@ -31,3 +31,7 @@ services:
         sync: false # Thai SEC fund NAV (read-only)
       - key: SEC_FACTSHEET_KEY
         sync: false
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false # cross-device sync store (free Upstash Redis REST)
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false

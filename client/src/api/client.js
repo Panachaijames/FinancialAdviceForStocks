@@ -61,6 +61,39 @@ export async function getAnalysis(payload) {
   });
 }
 
+/** Server health + which providers/features are configured. */
+export async function getHealth() {
+  return request('/api/health');
+}
+
+/**
+ * Read a cross-device sync blob by code. Returns null if none stored yet.
+ * @param {string} code
+ * @returns {Promise<{data:object, updatedAt:number}|null>}
+ */
+export async function getSyncBlob(code) {
+  try {
+    return await request(`/api/sync/${encodeURIComponent(code)}`);
+  } catch (e) {
+    if (/\(404\)/.test(e.message)) return null;
+    throw e;
+  }
+}
+
+/**
+ * Write a cross-device sync blob by code.
+ * @param {string} code
+ * @param {object} data — { holdings, savings, funds }
+ * @param {number} updatedAt — epoch ms
+ */
+export async function putSyncBlob(code, data, updatedAt) {
+  return request(`/api/sync/${encodeURIComponent(code)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data, updatedAt }),
+  });
+}
+
 /**
  * Search for symbols.
  * @param {string} q

@@ -15,6 +15,7 @@ import InsightsPanel from './components/InsightsPanel.jsx';
 import PlanView from './components/plan/PlanView.jsx';
 import FundsPanel from './components/plan/FundsPanel.jsx';
 import IntroOverlay from './components/IntroOverlay.jsx';
+import useSync from './hooks/useSync.js';
 
 const QUICK_ADD = [
   { symbol: 'AAPL', name: 'Apple Inc.', type: 'us_stock', currency: 'USD', exchange: 'NASDAQ' },
@@ -37,6 +38,9 @@ export default function App() {
   useEffect(() => {
     marketSocket.ensureConnected();
   }, []);
+
+  // Cross-device sync engine (pull newer remote data + push local changes).
+  useSync();
 
   const openChart = useCallback((symbol) => setSelected(symbol), []);
   const closeChart = useCallback(() => setSelected(null), []);
