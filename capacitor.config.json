@@ -3,7 +3,8 @@
   "appName": "PT Financial Advisor",
   "webDir": "client/dist",
   "server": {
-    "androidScheme": "http",
+    "url": "https://pt-financial-advisor-u9fr.onrender.com",
+    "androidScheme": "https",
     "cleartext": true
   }
 }
