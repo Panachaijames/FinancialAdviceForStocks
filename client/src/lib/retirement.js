@@ -24,11 +24,45 @@ export const RETIREMENT_DEFAULTS = {
   retireAge: 60,
   endAge: 85,
   swrPct: 4,
-  // Tax drag on investment gains. 15% ≈ US dividend withholding (treaty rate).
-  // Thai SET capital gains are exempt and RMF/Thai ESG gains are tax-free if
-  // held, so lower it for a SET/fund-heavy mix (0 = fully tax-sheltered).
-  investmentTaxPct: 15,
+  // Tax drag on investment gains (% of total return). ~8% reflects a US
+  // buy-and-hold Thai resident: the US doesn't tax foreigners' capital gains,
+  // only ~15% on dividends, plus some Thai tax on remitted income. Lower for a
+  // SET/fund-heavy mix (RMF/Thai ESG gains are tax-free if held).
+  investmentTaxPct: 8,
 };
+
+// Effective planning tax rate on investment GAINS (% of total return) by asset
+// type for a Thai resident buy-and-hold retiree, 2568. Verified against Thai
+// sources; used to auto-suggest a blended rate from the user's holdings mix.
+export const ASSET_TAX_RATES = {
+  us_stock: 8, // US: no CGT for foreigners, ~15% div WHT; Thai tax on remittance
+  etf: 8, // US-listed ETF, treated like US stocks
+  th_stock: 3.5, // SET capital gains exempt; only ~10% dividend WHT
+  crypto: 2, // licensed-exchange gains exempt 2025-2029 (small residual)
+  gold: 0, // physical gold gains exempt (personal asset)
+  thai_fund: 0, // RMF / Thai ESG / SSF gains tax-free if held to conditions
+  cash: 15, // bank deposit interest 15% final WHT (small vs balance)
+};
+
+/**
+ * Blend a suggested investment-tax rate from market values by asset type.
+ * Value-weighted average of ASSET_TAX_RATES. Returns null if no value.
+ * @param {Record<string, number>} valuesByType
+ * @returns {number|null} percent, one decimal
+ */
+export function suggestInvestmentTax(valuesByType = {}) {
+  let total = 0;
+  let weighted = 0;
+  for (const [type, value] of Object.entries(valuesByType)) {
+    const v = Number(value) || 0;
+    if (v <= 0) continue;
+    const rate = ASSET_TAX_RATES[type] != null ? ASSET_TAX_RATES[type] : 10;
+    total += v;
+    weighted += v * rate;
+  }
+  if (total <= 0) return null;
+  return Math.round((weighted / total) * 10) / 10;
+}
 
 const num = (v) => {
   const x = Number(v);

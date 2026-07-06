@@ -3,7 +3,7 @@ import { Palmtree } from 'lucide-react';
 import { theme } from '../../lib/theme.js';
 import { fmtMoney } from '../../lib/format.js';
 import { useSettingsStore } from '../../store/settingsStore.js';
-import { projectRetirement, RETIREMENT_DEFAULTS } from '../../lib/retirement.js';
+import { projectRetirement, RETIREMENT_DEFAULTS, suggestInvestmentTax } from '../../lib/retirement.js';
 import useNetWorth from '../../hooks/useNetWorth.js';
 import ProjectionChart from '../ProjectionChart.jsx';
 import { PanelHeader } from './SavingsPanel.jsx';
@@ -59,7 +59,8 @@ function Num({ label, value, onChange, step = 'any', integer = false }) {
  */
 export default function RetirementPlanner() {
   const displayCurrency = useSettingsStore((s) => s.displayCurrency);
-  const { investments, cash, funds, net } = useNetWorth();
+  const { investments, cash, funds, net, byType } = useNetWorth();
+  const suggestedTax = useMemo(() => suggestInvestmentTax(byType), [byType]);
 
   const [currentAge, setCurrentAge] = useState('30');
   const [retireAge, setRetireAge] = useState(String(RETIREMENT_DEFAULTS.retireAge));
@@ -128,9 +129,24 @@ export default function RetirementPlanner() {
         <Num label="Investment tax %" value={invTax} onChange={setInvTax} />
       </div>
 
-      <div style={{ fontSize: 11, color: theme.colors.textFaint, marginTop: -theme.space(1) }}>
-        💸 Investment tax reduces your yearly gains (default 15% ≈ US dividend withholding). Lower it for
-        a Thai SET / RMF-heavy mix — SET capital gains are exempt and RMF/Thai ESG gains are tax-free if held.
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: theme.space(2), marginTop: -theme.space(1) }}>
+        <span style={{ fontSize: 11, color: theme.colors.textFaint, flex: '1 1 260px' }}>
+          💸 Investment tax reduces your yearly gains. ~8% suits US buy-and-hold (the US doesn't tax
+          foreigners' capital gains — only ~15% on dividends); SET gains are exempt and RMF/Thai ESG are
+          tax-free if held. Tap "from your mix" to blend by your actual holdings.
+        </span>
+        {suggestedTax != null && (
+          <button
+            type="button"
+            className="chip"
+            onClick={() => setInvTax(String(suggestedTax))}
+            title="Blend the tax rate from your actual holdings mix"
+            style={{ fontSize: 11.5, whiteSpace: 'nowrap' }}
+          >
+            💡 From your mix: <b style={{ color: theme.colors.accent, margin: '0 4px' }}>{suggestedTax}%</b>
+            {Number(invTax) === suggestedTax ? '✓' : '· tap to use'}
+          </button>
+        )}
       </div>
 
       {/* Make it explicit that the starting nest egg is your live portfolio:

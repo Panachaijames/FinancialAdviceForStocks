@@ -15,16 +15,24 @@ export function useNetWorth() {
   const { convert } = useFx();
   const { totalThb: fundsThb } = useFunds();
 
-  const investments = holdings.reduce((sum, h) => {
+  // Per-asset-type market values (display currency) so callers can weight by mix
+  // (e.g. the retirement tax-drag auto-suggest).
+  const byType = {};
+  let investments = 0;
+  for (const h of holdings) {
     const q = quotes[h.symbol];
     const native = h.currency || (h.type === 'th_stock' ? 'THB' : 'USD');
     const price = q && Number.isFinite(Number(q.price)) ? Number(q.price) : Number(h.avgCost) || 0;
-    return sum + convert((Number(h.shares) || 0) * price, native);
-  }, 0);
+    const mv = convert((Number(h.shares) || 0) * price, native);
+    investments += mv;
+    byType[h.type] = (byType[h.type] || 0) + mv;
+  }
   const cash = savings.reduce((sum, s) => sum + convert(Number(s.amount) || 0, s.currency), 0);
   const funds = convert(fundsThb || 0, 'THB'); // Thai fund NAVs are in THB
+  if (funds > 0) byType.thai_fund = (byType.thai_fund || 0) + funds;
+  if (cash > 0) byType.cash = (byType.cash || 0) + cash;
 
-  return { investments, cash, funds, net: investments + cash + funds };
+  return { investments, cash, funds, net: investments + cash + funds, byType };
 }
 
 export default useNetWorth;
