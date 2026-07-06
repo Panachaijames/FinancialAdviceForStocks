@@ -1,10 +1,11 @@
 /**
  * Electron main process for PT Financial Advisor.
  *
- * Starts the bundled Node/Express + WebSocket server (in-process) on a free
- * local port, then opens a desktop window pointing at it. Everything runs on the
- * user's own machine — so Yahoo Finance (which blocks cloud IPs) works, giving
- * full features (Thai stocks, dividends, realtime, news) with NO API keys.
+ * Thin shell: opens a desktop window that loads the app straight from the cloud
+ * (Render). So it always has the latest features (no re-shipping builds), ships
+ * with NO API keys (they live server-side), and is safe to distribute. The
+ * legacy in-process local-server code (startServer/pickPort/…) is kept below but
+ * unused — flip createWindow back to the local port to revert to a local build.
  */
 const { app, BrowserWindow, shell, dialog, Menu } = require('electron');
 const net = require('node:net');
@@ -20,6 +21,10 @@ if (!gotLock) {
   let splashWindow = null;
   let splashShownAt = 0;
   let port = 8787;
+
+  // The desktop loads the app from the cloud (like the mobile app), so features
+  // stay current and no keys are bundled.
+  const CLOUD_URL = 'https://pt-financial-advisor-u9fr.onrender.com';
 
   /** Resolve a free port, preferring 8787, falling back to an ephemeral one. */
   function pickPort(preferred) {
@@ -145,7 +150,7 @@ if (!gotLock) {
       webPreferences: { contextIsolation: true, nodeIntegration: false },
     });
     Menu.setApplicationMenu(null);
-    mainWindow.loadURL(`http://127.0.0.1:${port}`);
+    mainWindow.loadURL(CLOUD_URL);
 
     // Swap from splash to the real window once it's painted (with fallbacks so
     // we can never get stuck showing the splash).
@@ -158,7 +163,9 @@ if (!gotLock) {
     };
     mainWindow.once('ready-to-show', swap);
     mainWindow.webContents.once('did-finish-load', swap);
-    setTimeout(swap, 12000);
+    // Longer fallback: the cloud can cold-start on the free tier (the splash
+    // stays up meanwhile); did-finish-load normally wins well before this.
+    setTimeout(swap, 45000);
 
     // Open external links (e.g. news articles) in the user's default browser.
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -166,7 +173,7 @@ if (!gotLock) {
       return { action: 'deny' };
     });
     mainWindow.webContents.on('will-navigate', (e, url) => {
-      if (!url.startsWith(`http://127.0.0.1:${port}`)) {
+      if (!url.startsWith(CLOUD_URL)) {
         e.preventDefault();
         shell.openExternal(url);
       }
@@ -186,17 +193,7 @@ if (!gotLock) {
 
   app.whenReady().then(async () => {
     createSplash();
-    try {
-      port = await pickPort(8787);
-      await startServer(port);
-      await waitForServer(port);
-      createWindow();
-    } catch (err) {
-      if (splashWindow && !splashWindow.isDestroyed()) splashWindow.destroy();
-      splashWindow = null;
-      dialog.showErrorBox('PT Financial Advisor', `Failed to start:\n${err && err.message ? err.message : err}`);
-      app.quit();
-    }
+    createWindow(); // loads CLOUD_URL — no local server to start
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
