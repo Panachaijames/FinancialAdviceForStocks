@@ -94,6 +94,11 @@ export async function putSyncBlob(code, data, updatedAt) {
   });
 }
 
+/** Delete a transfer blob (called after a successful receive). */
+export async function deleteSyncBlob(code) {
+  return request(`/api/sync/${encodeURIComponent(code)}`, { method: 'DELETE' });
+}
+
 /**
  * Search for symbols.
  * @param {string} q

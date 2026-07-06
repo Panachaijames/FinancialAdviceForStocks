@@ -38,3 +38,8 @@ export async function kvSet(key, value, ttlSeconds) {
   const cmd = ttlSeconds ? ['SET', key, value, 'EX', String(ttlSeconds)] : ['SET', key, value];
   return command(cmd);
 }
+
+/** Delete a key. */
+export async function kvDel(key) {
+  return command(['DEL', key]);
+}

@@ -1,15 +1,17 @@
-// Cross-device portfolio sync — a private "sync code" maps to a stored blob of
-// the user's holdings/savings/funds. The code is a bearer secret (anyone with
-// it can read/write that blob), so it's long + random and the payload holds no
-// PII, credentials, or money movement — just tracked symbols and amounts.
+// One-time cross-device data transfer — a private "transfer code" maps to a
+// stored blob of the user's holdings/savings/funds. The sender PUTs it; the
+// receiver GETs then DELETEs it, so nothing lingers in the cloud. The code is a
+// bearer secret (anyone with it can read the blob), so it's random and the
+// payload holds no PII, credentials, or money movement — just tracked symbols
+// and amounts. Unclaimed transfers auto-expire via a short TTL.
 import express from 'express';
-import { isConfigured, kvGet, kvSet } from '../providers/kv.js';
+import { isConfigured, kvGet, kvSet, kvDel } from '../providers/kv.js';
 
 const router = express.Router();
 
 const CODE_RE = /^[A-Za-z0-9-]{6,40}$/;
 const MAX_BYTES = 256 * 1024;
-const TTL_SECONDS = 60 * 60 * 24 * 400; // ~400 days, refreshed on every write
+const TTL_SECONDS = 60 * 60 * 24; // 24h — a receive deletes it sooner; this is just the abandon fallback
 
 const guard = (req, res) => {
   if (!isConfigured()) {
@@ -56,6 +58,17 @@ router.put('/:code', async (req, res, next) => {
     if (raw.length > MAX_BYTES) return res.status(413).json({ error: 'too_large' });
     await kvSet(`sync:${req.params.code}`, raw, TTL_SECONDS);
     return res.json({ ok: true, updatedAt: payload.updatedAt });
+  } catch (e) {
+    return next(e);
+  }
+});
+
+// Delete a transfer blob (the receiver calls this once it has the data).
+router.delete('/:code', async (req, res, next) => {
+  try {
+    if (!guard(req, res)) return;
+    await kvDel(`sync:${req.params.code}`);
+    return res.json({ ok: true });
   } catch (e) {
     return next(e);
   }
