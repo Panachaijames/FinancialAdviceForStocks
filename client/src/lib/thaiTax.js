@@ -4,8 +4,10 @@
 // tested and reused. Mirrors the official progressive brackets and the common
 // allowances/deductions for a salaried filer (เงินได้ประเภท 40(1)). Amounts in THB.
 //
-// NOTE: caps and rules follow the 2568 reference the user supplied. This is an
-// estimate to help planning — always confirm against the Revenue Department.
+// Every rule here is unit-tested (client/test/thaiTax.test.mjs) and mapped to
+// its statutory basis in ./thaiTaxLaw.js (Revenue Code sections, royal decrees,
+// ministerial regulations — web-verified against rd.go.th in July 2026). This
+// is an estimate to help planning — always confirm against the Revenue Department.
 
 /** Progressive brackets (อัตราก้าวหน้า). `upTo` is the cumulative ceiling. */
 export const TAX_BRACKETS = [
@@ -35,7 +37,8 @@ export const TAX_LIMITS = {
   thaiEsgRate: 0.3,
   thaiEsgxNewMax: 300000,
   thaiEsgxLtfMax: 300000,
-  easyEReceipt: 50000,
+  easyEReceipt: 50000, // total cap
+  easyEReceiptGeneral: 30000, // general goods/services sub-cap within the total
   homeLoan: 100000,
   expensesMax: 100000,
   donationRate: 0.1,
@@ -103,7 +106,14 @@ export function calcThaiTax2568(input = {}) {
   const thaiEsgxNew = add('Thai ESGX (ลงทุนใหม่)', Math.min(n(input.thaiEsgxNew), income * L.thaiEsgRate, L.thaiEsgxNewMax));
   const thaiEsgxLtf = add('Thai ESGX (จาก LTF)', Math.min(n(input.thaiEsgxLtf), L.thaiEsgxLtfMax));
 
-  const easyEReceipt = add('Easy E-Receipt 2.0', Math.min(n(input.easyEReceipt), L.easyEReceipt));
+  // Easy E-Receipt 2.0 (16 ม.ค. – 28 ก.พ. 2568): general goods/services cap
+  // 30,000; OTOP/community/social-enterprise spending may add up to the 50,000
+  // total (and may also fill the general bucket) — กฎกระทรวง ฉบับที่ 397 (พ.ศ. 2568).
+  const eReceiptGeneral = Math.min(n(input.easyEReceipt), L.easyEReceiptGeneral);
+  const easyEReceipt = add(
+    'Easy E-Receipt 2.0',
+    Math.min(eReceiptGeneral + n(input.easyEReceiptOtop), L.easyEReceipt)
+  );
   const homeLoan = add('ดอกเบี้ยกู้ยืมเพื่อที่อยู่อาศัย', Math.min(n(input.homeLoan), L.homeLoan));
 
   const deductionsBeforeDonation =

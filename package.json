@@ -16,6 +16,7 @@
     "dev:client": "npm run dev --workspace client",
     "build": "npm run build --workspace client",
     "start": "npm run start --workspace server",
+    "test": "node --test \"client/test/*.test.mjs\"",
     "electron:start": "npm run build && electron .",
     "pack:win": "npm run build && electron-packager . --platform=win32 --arch=x64 --out=release --overwrite --no-asar --prune=true --name=\"PT Financial Advisor\" --executable-name=\"PT Financial Advisor\" --ignore=\"/release\" --ignore=\"/android\" --ignore=\"/capacitor\\.config\\.json\" --ignore=\"/\\.git\" --ignore=\"/\\.claude\" --ignore=\"/\\.env\\.example\" --ignore=\"/\\.env\\.local\" --ignore=\"/\\.env$\" --ignore=\"/client/src\" --ignore=\"/client/node_modules\" --ignore=\"/client/index.html\" --ignore=\"/client/vite.config.js\"",
     "dist": "npm run build && electron-builder --win",

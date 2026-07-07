@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { Calculator, ChevronDown, ChevronUp, Download } from 'lucide-react';
+import { Calculator, ChevronDown, ChevronUp, Download, Scale } from 'lucide-react';
 import { theme } from '../../lib/theme.js';
 import { fmtMoney } from '../../lib/format.js';
 import { calcThaiTax2568, TAX_LIMITS } from '../../lib/thaiTax.js';
+import { TAX_LAW_REFERENCES, TAX_LAW_VERIFIED_AT } from '../../lib/thaiTaxLaw.js';
 import useFunds from '../../hooks/useFunds.js';
 import { PanelHeader } from './SavingsPanel.jsx';
 
@@ -78,7 +79,7 @@ const EMPTY = {
   child1: '', child2: '', parents: '', disabled: '', maternity: '',
   socialSecurity: '', lifeInsurance: '', healthInsurance: '', parentHealthInsurance: '',
   annuity: '', rmf: '', pvd: '', thaiEsg: '', thaiEsgxNew: '', thaiEsgxLtf: '',
-  easyEReceipt: '', homeLoan: '', donationGeneral: '', donationSpecial: '',
+  easyEReceipt: '', easyEReceiptOtop: '', homeLoan: '', donationGeneral: '', donationSpecial: '',
 };
 
 /**
@@ -189,7 +190,7 @@ export default function ThaiTaxPanel() {
           <Field label="บุตรคนที่ 2 ขึ้นไป (คน)" value={f.child2} onChange={set('child2')} integer placeholder="จำนวนคน" hint="คนละ 60,000 (เกิดปี 2561+)" />
           <Field label="อุปการะบิดามารดา (คน)" value={f.parents} onChange={set('parents')} integer placeholder="0–4" hint="คนละ 30,000 สูงสุด 4 คน" />
           <Field label="อุปการะผู้พิการ (คน)" value={f.disabled} onChange={set('disabled')} integer placeholder="จำนวนคน" hint="คนละ 60,000" />
-          <Field label="ค่าฝากครรภ์และคลอดบุตร" value={f.maternity} onChange={set('maternity')} max={TAX_LIMITS.maternity} hint="สูงสุด 60,000" />
+          <Field label="ค่าฝากครรภ์และคลอดบุตร" value={f.maternity} onChange={set('maternity')} max={TAX_LIMITS.maternity} hint="สูงสุด 60,000 ต่อการตั้งครรภ์" />
         </div>
       </div>
 
@@ -214,7 +215,8 @@ export default function ThaiTaxPanel() {
       <div>
         <div style={sectionTitle}>4. มาตรการรัฐและที่อยู่อาศัย</div>
         <div style={grid3}>
-          <Field label="Easy E-Receipt 2.0" value={f.easyEReceipt} onChange={set('easyEReceipt')} max={TAX_LIMITS.easyEReceipt} hint="สูงสุด 50,000" />
+          <Field label="Easy E-Receipt 2.0 — ทั่วไป" value={f.easyEReceipt} onChange={set('easyEReceipt')} max={TAX_LIMITS.easyEReceiptGeneral} hint="สูงสุด 30,000 (16 ม.ค.–28 ก.พ. 2568, e-Tax Invoice)" />
+          <Field label="Easy E-Receipt — OTOP/วิสาหกิจชุมชน" value={f.easyEReceiptOtop} onChange={set('easyEReceiptOtop')} max={TAX_LIMITS.easyEReceipt} hint="เพิ่มได้ รวมทุกช่องไม่เกิน 50,000" />
           <Field label="ดอกเบี้ยกู้ยืมเพื่อที่อยู่อาศัย" value={f.homeLoan} onChange={set('homeLoan')} max={TAX_LIMITS.homeLoan} hint="สูงสุด 100,000" />
         </div>
       </div>
@@ -224,7 +226,7 @@ export default function ThaiTaxPanel() {
         <div style={sectionTitle}>5. เงินบริจาค</div>
         <div style={grid3}>
           <Field label="บริจาคทั่วไป" value={f.donationGeneral} onChange={set('donationGeneral')} hint="ไม่เกิน 10% ของเงินได้หลังหักค่าลดหย่อน" />
-          <Field label="บริจาคการศึกษา/กีฬา/รพ.รัฐ (2 เท่า)" value={f.donationSpecial} onChange={set('donationSpecial')} hint="ลดได้ 2 เท่า (ภายในเพดาน 10%)" />
+          <Field label="บริจาคการศึกษา/กีฬา/รพ.รัฐ (2 เท่า)" value={f.donationSpecial} onChange={set('donationSpecial')} hint="2 เท่า ภายในเพดาน 10% (การศึกษา/กีฬา ต้องผ่าน e-Donation)" />
         </div>
       </div>
 
@@ -293,11 +295,80 @@ export default function ThaiTaxPanel() {
         </div>
       )}
 
+      <LegalReferences />
+
       <div style={{ fontSize: 10.5, color: theme.colors.textFaint, lineHeight: 1.5 }}>
         * ประมาณการตามเกณฑ์ปี 2568 โดยสมมติเป็น <b>เงินเดือน (40(1))</b> — ไม่รวมเงินได้ประเภทอื่น และคิดเฉพาะปีภาษีเดียว
         (เช่น สิทธิ ESGX จาก LTF ที่ทยอยใช้หลายปี จะคิดเฉพาะปีแรก). บุตรบุญธรรมคนที่ 2+ ใช้ช่อง “บุตรคนแรก” (30,000).
         ไม่ใช่คำแนะนำทางภาษี โปรดตรวจสอบกับกรมสรรพากร
       </div>
+    </div>
+  );
+}
+
+/**
+ * Collapsible legal-reference table: every rule the calculator applies, mapped
+ * to its Revenue Code section / royal decree / ministerial regulation, with a
+ * link to the source. Data: thaiTaxLaw.js (web-verified against primary
+ * sources; see TAX_LAW_VERIFIED_AT).
+ */
+function LegalReferences() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <button
+        type="button"
+        className="btn-ghost"
+        onClick={() => setOpen((s) => !s)}
+        style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: theme.colors.accent }}
+      >
+        <Scale size={14} />
+        {open ? 'ซ่อนข้อกฎหมายอ้างอิง' : 'ดูข้อกฎหมายอ้างอิง (ที่มาของการคำนวณ)'}
+        {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+      </button>
+
+      {open && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: theme.space(2), marginTop: theme.space(2) }}>
+          <div style={{ fontSize: 11.5, color: theme.colors.textDim, lineHeight: 1.5 }}>
+            เกณฑ์ทุกข้อในเครื่องคำนวณนี้อ้างอิงกฎหมายด้านล่าง — ตรวจทานกับแหล่งข้อมูลทางการ (rd.go.th /
+            ราชกิจจานุเบกษา) ล่าสุดเมื่อ <b>{TAX_LAW_VERIFIED_AT}</b>. กดชื่อกฎหมายเพื่อเปิดแหล่งอ้างอิง.
+          </div>
+          <div style={{ overflowX: 'auto', border: `1px solid ${theme.colors.border}`, borderRadius: theme.radius.sm }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: theme.colors.bgElev }}>
+                  {['รายการ', 'หลักเกณฑ์ (ปีภาษี 2568)', 'กฎหมายอ้างอิง'].map((h, i) => (
+                    <th key={i} style={{ padding: `${theme.space(1)}px ${theme.space(2)}px`, fontSize: 11, color: theme.colors.textDim, textAlign: 'left', fontWeight: 600, whiteSpace: i === 0 ? 'nowrap' : undefined }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {TAX_LAW_REFERENCES.map((r) => (
+                  <tr key={r.id}>
+                    <td style={{ padding: `${theme.space(1)}px ${theme.space(2)}px`, borderTop: `1px solid ${theme.colors.border}`, fontSize: 12, fontWeight: 600, color: theme.colors.text, verticalAlign: 'top', whiteSpace: 'nowrap' }}>
+                      {r.label}
+                    </td>
+                    <td style={{ padding: `${theme.space(1)}px ${theme.space(2)}px`, borderTop: `1px solid ${theme.colors.border}`, fontSize: 11.5, color: theme.colors.textDim, verticalAlign: 'top', minWidth: 220, lineHeight: 1.5 }}>
+                      {r.rule}
+                      {r.note ? <div style={{ color: theme.colors.warn, marginTop: 2 }}>⚠ {r.note}</div> : null}
+                    </td>
+                    <td style={{ padding: `${theme.space(1)}px ${theme.space(2)}px`, borderTop: `1px solid ${theme.colors.border}`, fontSize: 11.5, verticalAlign: 'top', minWidth: 200, lineHeight: 1.5 }}>
+                      <a
+                        href={r.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: theme.colors.accent, textDecoration: 'none', borderBottom: `1px dotted ${theme.colors.accent}` }}
+                      >
+                        {r.law}
+                      </a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
