@@ -33,6 +33,7 @@ export function snapshot() {
   for (const key of Object.keys(PLAN_DEFAULTS)) plan[key] = planState[key];
   return {
     holdings: usePortfolioStore.getState().holdings || [],
+    transactions: usePortfolioStore.getState().transactions || [],
     savings: useSavingsStore.getState().savings || [],
     funds: useFundsStore.getState().funds || [],
     plan,
@@ -43,6 +44,8 @@ export function snapshot() {
 export function applySnapshot(data) {
   if (!data || typeof data !== 'object') return;
   if (Array.isArray(data.holdings)) usePortfolioStore.setState({ holdings: data.holdings });
+  // Older snapshots have no trade ledger — keep the local one then.
+  if (Array.isArray(data.transactions)) usePortfolioStore.setState({ transactions: data.transactions });
   if (Array.isArray(data.savings)) useSavingsStore.setState({ savings: data.savings });
   if (Array.isArray(data.funds)) useFundsStore.setState({ funds: data.funds });
   // Older snapshots have no plan — leave the local plan untouched then.

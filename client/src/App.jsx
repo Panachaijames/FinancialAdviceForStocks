@@ -12,6 +12,7 @@ import DividendPanel from './components/DividendPanel.jsx';
 import NewsPanel from './components/NewsPanel.jsx';
 import ChartModal from './components/ChartModal.jsx';
 import InsightsPanel from './components/InsightsPanel.jsx';
+import TransactionsPanel from './components/TransactionsPanel.jsx';
 import PlanView from './components/plan/PlanView.jsx';
 import FundsPanel from './components/plan/FundsPanel.jsx';
 import IntroOverlay from './components/IntroOverlay.jsx';
@@ -98,6 +99,8 @@ export default function App() {
                     <AssetCard key={h.id} holding={h} onOpen={() => openChart(h.symbol)} />
                   ))}
                 </div>
+
+                <TransactionsPanel />
 
                 <FundsPanel />
 

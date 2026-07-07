@@ -11,6 +11,8 @@ import { getDividend } from '../api/client.js';
 import { computeDividendIncome } from '../lib/dividends.js';
 import MiniChart from './MiniChart.jsx';
 import HoldingEditor from './HoldingEditor.jsx';
+import TradeDialog from './TradeDialog.jsx';
+import { realizedBySymbol } from '../lib/trades.js';
 
 const DIV_TYPES = new Set(['us_stock', 'etf', 'th_stock']);
 
@@ -59,8 +61,10 @@ export default function AssetCard({ holding, onOpen }) {
   const displayCurrency = useSettingsStore((s) => s.displayCurrency);
   const updateHolding = usePortfolioStore((s) => s.updateHolding);
   const removeHolding = usePortfolioStore((s) => s.removeHolding);
+  const transactions = usePortfolioStore((s) => s.transactions);
 
   const [editing, setEditing] = useState(false);
+  const [trading, setTrading] = useState(null); // null | 'buy' | 'sell'
   const [dividend, setDividend] = useState(undefined); // undefined = not fetched, null = none
 
   const q = quotes[symbol];
@@ -125,6 +129,9 @@ export default function AssetCard({ holding, onOpen }) {
 
   const priceColor = colorForChange(changePct);
   const plColor = colorForChange(plNative);
+
+  // Realized P/L already banked on this symbol (from recorded sells).
+  const realized = realizedBySymbol(transactions)[symbol];
 
   return (
     <>
@@ -330,6 +337,41 @@ export default function AssetCard({ holding, onOpen }) {
           </span>
         </div>
 
+        {/* Realized P/L banked from recorded sells */}
+        {realized && Math.abs(realized.realized) > 0.005 && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: -theme.space(1) }}>
+            <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.4, color: theme.colors.textDim }}>
+              Realized
+            </span>
+            <span style={{ fontSize: 12, fontWeight: 700, fontFamily: theme.mono, color: colorForChange(realized.realized) }}>
+              {fmtMoney(convert(realized.realized, realized.currency), displayCurrency)}
+            </span>
+          </div>
+        )}
+
+        {/* Record a buy/sell made at the broker (updates avg cost + realized P/L) */}
+        <div style={{ display: 'flex', gap: theme.space(2) }} onClick={stop}>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setTrading('buy')}
+            style={{ flex: 1, justifyContent: 'center', fontSize: 12, fontWeight: 700, color: theme.colors.up, borderColor: theme.colors.up + '55' }}
+            title="Record a buy you made at your broker"
+          >
+            Buy
+          </button>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setTrading('sell')}
+            disabled={(Number(shares) || 0) <= 0}
+            style={{ flex: 1, justifyContent: 'center', fontSize: 12, fontWeight: 700, color: theme.colors.down, borderColor: theme.colors.down + '55', opacity: (Number(shares) || 0) > 0 ? 1 : 0.45 }}
+            title="Record a sell — realized P/L is calculated against your average cost"
+          >
+            Sell
+          </button>
+        </div>
+
         {/* Dividend line */}
         {divLine && (
           <div
@@ -356,6 +398,15 @@ export default function AssetCard({ holding, onOpen }) {
           mode="edit"
           onSave={handleSave}
           onCancel={() => setEditing(false)}
+        />
+      )}
+
+      {trading && (
+        <TradeDialog
+          holding={holding}
+          side={trading}
+          livePrice={price}
+          onClose={() => setTrading(null)}
         />
       )}
     </>

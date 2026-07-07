@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Wallet, TrendingUp, TrendingDown, Coins, Activity } from 'lucide-react';
+import { Wallet, TrendingUp, TrendingDown, Coins, Activity, BadgeDollarSign } from 'lucide-react';
 import { theme } from '../lib/theme.js';
 import { fmtMoney, fmtSignedPct, classForChange } from '../lib/format.js';
 import { useSettingsStore } from '../store/settingsStore.js';
@@ -9,6 +9,7 @@ import useFx from '../hooks/useFx.js';
 import useFunds from '../hooks/useFunds.js';
 import { getDividend } from '../api/client.js';
 import { computeDividendIncome } from '../lib/dividends.js';
+import { realizedByCurrency } from '../lib/trades.js';
 
 const DIV_TYPES = new Set(['us_stock', 'etf', 'th_stock']);
 
@@ -24,6 +25,7 @@ function colorForChange(v) {
  */
 export default function PortfolioSummary() {
   const holdings = usePortfolioStore((s) => s.holdings);
+  const transactions = usePortfolioStore((s) => s.transactions);
   const displayCurrency = useSettingsStore((s) => s.displayCurrency);
   const symbols = useMemo(() => holdings.map((h) => h.symbol), [holdings]);
   const { quotes } = useQuotes(symbols);
@@ -128,6 +130,13 @@ export default function PortfolioSummary() {
     };
   }, [holdings, quotes, divs, convert, fundRows]);
 
+  // Realized P/L banked from recorded sells (display currency).
+  const realized = useMemo(() => {
+    const byCur = realizedByCurrency(transactions);
+    return Object.entries(byCur).reduce((sum, [c, v]) => sum + convert(v, c), 0);
+  }, [transactions, convert]);
+  const hasSells = useMemo(() => (transactions || []).some((t) => t && t.side === 'sell'), [transactions]);
+
   if (holdings.length === 0) return null;
 
   const cur = displayCurrency;
@@ -169,6 +178,20 @@ export default function PortfolioSummary() {
       color: totals.annualDividend > 0 ? theme.colors.gold : theme.colors.textDim,
       accent: theme.colors.gold,
     },
+    // Only once a sell has been recorded — before that the card is just noise.
+    ...(hasSells
+      ? [
+          {
+            key: 'realized',
+            label: 'Realized P/L',
+            icon: <BadgeDollarSign size={16} />,
+            value: fmtMoney(realized, cur),
+            sub: 'from recorded sells',
+            color: colorForChange(realized),
+            accent: colorForChange(realized),
+          },
+        ]
+      : []),
   ];
 
   return (

@@ -185,7 +185,13 @@
       "Bash(node \"C:\\\\Users\\\\DWP2\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-DWP2-Desktop-PTFinAdvice-FinancialAdviceForStocks\\\\7e719645-eed6-411a-b013-e3c27c635b95\\\\scratchpad\\\\extract.cjs\")",
       "Bash(git commit -m 'Tax: unit tests + Thai legal references verified against primary sources *)",
       "Bash(git commit *)",
-      "Bash(git commit -m 'AI deep research \\(Path Advisor + Trade Scout\\) + retirement planner upgrade *)"
+      "Bash(git commit -m 'AI deep research \\(Path Advisor + Trade Scout\\) + retirement planner upgrade *)",
+      "Bash(grep -n \"loadURL\\\\|loadFile\\\\|CLOUD\\\\|https://\\\\|render\\\\|onrender\" electron/main.cjs)",
+      "Bash(curl -s --max-time 30 \"https://pt-financial-advisor-u9fr.onrender.com/api/health\")",
+      "Bash(curl -s --max-time 30 -o /dev/null -w \"HTTP %{http_code}\" -X POST -H \"Content-Type: application/json\" -d '{}' \"https://pt-financial-advisor-u9fr.onrender.com/api/analysis/trade\")",
+      "Bash(curl -s --max-time 30 -o /dev/null -w \"retirement route: HTTP %{http_code}\" -X POST -H \"Content-Type: application/json\" -d '{\"plan\":{},\"holdings\":[]}' \"https://pt-financial-advisor-u9fr.onrender.com/api/analysis/retirement\")",
+      "Bash(kill %1)",
+      "Bash(git commit -m 'Trade ledger: record buys/sells to track realized P/L \\(average-cost\\) *)"
     ]
   }
 }
