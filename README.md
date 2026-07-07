@@ -47,6 +47,7 @@ FINNHUB_KEY=your_finnhub_key
 
 - **Twelve Data** (`TWELVEDATA_KEY`) — fallback for US stock & gold **quotes and candles** when Yahoo throttles. Free plan is 8 req/min · 800/day, so it's used as a *fallback* (not the 5-second realtime poll) to stay within quota. SET (Thai) symbols need a paid plan, so Thai stays on Yahoo. Used by `server/providers/twelvedata.js`.
 - **Finnhub** (`FINNHUB_KEY`) — *primary* news source: per-symbol company news for equities/ETFs, plus general market news to fill crypto/gold-only portfolios. Falls back to Yahoo news if unavailable. Used by `server/providers/finnhub.js`.
+- **Google Gemini** (`GEMINI_API_KEY`) — powers the three AI panels (analysis only, never a price source): the portfolio **AI Insights** summary, the **AI Path Advisor** on the Plan tab (multi-round retirement research), and the per-symbol **AI Trade Scout** in the chart modal (short-term dossier). The last two run an iterative research loop (`server/providers/geminiDeep.js`) with **Google Search grounding**, so the model reads current news/macro and returns clickable sources. Rounds per analysis: `GEMINI_DEEP_ROUNDS` (default 3, clamped 1–10). Free key from [Google AI Studio](https://aistudio.google.com/apikey); grounded requests have their own free monthly allowance on the Gemini 3 tier.
 
 Keys are loaded by `server/config.js` from `.env.local` → `.env` (repo root), accepting either `TWELVEDATA_KEY`/`FINNHUB_KEY` or the longer `*_API_KEY` names. FX intentionally does **not** use Twelve Data (the free open.er-api.com fallback is unlimited; TD quota is reserved for stock/gold data).
 
@@ -188,3 +189,14 @@ The Yahoo Finance symbol is the canonical id stored in your portfolio:
 - One-click USD &harr; THB display currency switching with a live rate.
 - Symbol search and smart input normalization (e.g. `bitcoin` &rarr; `BTC-USD`, `gold` &rarr; `GC=F`).
 - Portfolio-scoped news feed.
+- **Plan tab** — savings/net-worth tracker; retirement & financial-freedom simulator with an **AI Path Advisor** (deep research on current Thai + US markets and macro → target allocation, glide path, RMF/Thai ESG wrapper order, scenarios, action checklist); dividend projection; DCA backtest; Thai personal income tax estimator (ปีภาษี 2568).
+- **Thai tax estimator with legal references** — every bracket/deduction is mapped to its statutory basis (Revenue Code sections, royal decrees, ministerial regulations — verified against rd.go.th sources) in [`client/src/lib/thaiTaxLaw.js`](client/src/lib/thaiTaxLaw.js), viewable in-app via “ดูข้อกฎหมายอ้างอิง”.
+- **AI Trade Scout** — per-symbol short-term (days-to-weeks) dossier in the chart modal: live-web-researched catalysts with sources, a technical read from server-computed indicators (SMA/RSI/MACD/volume), a hypothetical entry/stop/target scenario, the bear case, and what to watch next. Educational scenarios, not financial advice.
+
+## Tests
+
+```bash
+npm test           # node --test — Thai tax calculator + planning/retirement math
+```
+
+The tax tests assert hand-computed statutory values (e.g. ฿800,000 salary → ฿48,500 tax) for every bracket boundary, each deduction cap, the retirement-group 500,000 combined cap, the annuity 300,000 edge case, the Easy E-Receipt 30k/50k split, and the donation double/10%-cap interaction.

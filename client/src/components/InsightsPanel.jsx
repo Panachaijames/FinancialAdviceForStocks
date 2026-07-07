@@ -7,6 +7,7 @@ import useQuotes from '../hooks/useQuotes.js';
 import useFx from '../hooks/useFx.js';
 import useFunds from '../hooks/useFunds.js';
 import { getAnalysis } from '../api/client.js';
+import AiMarkdown from './AiMarkdown.jsx';
 
 /**
  * AI Insights panel (Gemini-backed). Analysis only — summarizes the portfolio +
@@ -153,7 +154,7 @@ export default function InsightsPanel() {
       {error ? (
         <div style={{ fontSize: 13, color: theme.colors.down }}>{error}</div>
       ) : hasText ? (
-        <Markdown text={text} />
+        <AiMarkdown text={text} />
       ) : (
         <div style={{ fontSize: 13, color: theme.colors.textDim }}>
           Get a deep AI read on your portfolio — today's movers, allocation &amp; concentration,
@@ -168,68 +169,3 @@ export default function InsightsPanel() {
   );
 }
 
-/** Render inline **bold** / *italic* within a line. */
-function inline(s, keyBase) {
-  const out = [];
-  const re = /(\*\*[^*]+\*\*|\*[^*]+\*)/g;
-  let last = 0;
-  let m;
-  let i = 0;
-  while ((m = re.exec(s)) !== null) {
-    if (m.index > last) out.push(s.slice(last, m.index));
-    const tok = m[0];
-    if (tok.startsWith('**')) out.push(<strong key={`${keyBase}-${i}`}>{tok.slice(2, -2)}</strong>);
-    else out.push(<em key={`${keyBase}-${i}`} style={{ color: theme.colors.textDim }}>{tok.slice(1, -1)}</em>);
-    last = m.index + tok.length;
-    i += 1;
-  }
-  if (last < s.length) out.push(s.slice(last));
-  return out;
-}
-
-/** Minimal markdown renderer for the AI output (## headings, bullets, bold/italic). */
-function Markdown({ text }) {
-  const lines = String(text).split('\n');
-  const blocks = [];
-  let bullets = null;
-  const flush = () => {
-    if (bullets) {
-      blocks.push(
-        <ul key={`ul-${blocks.length}`} style={{ margin: '2px 0 2px 0', paddingLeft: 18, listStyle: 'disc' }}>
-          {bullets.map((b, i) => (
-            <li key={i} style={{ marginBottom: 3, lineHeight: 1.5 }}>{inline(b, `li-${blocks.length}-${i}`)}</li>
-          ))}
-        </ul>
-      );
-      bullets = null;
-    }
-  };
-  lines.forEach((raw, idx) => {
-    const line = raw.trim();
-    if (!line) {
-      flush();
-      return;
-    }
-    if (line.startsWith('## ')) {
-      flush();
-      blocks.push(
-        <div key={`h-${idx}`} style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5, color: theme.colors.accent, marginTop: blocks.length ? 8 : 0 }}>
-          {line.slice(3)}
-        </div>
-      );
-    } else if (/^[-*]\s+/.test(line)) {
-      (bullets || (bullets = [])).push(line.replace(/^[-*]\s+/, ''));
-    } else {
-      flush();
-      blocks.push(
-        <p key={`p-${idx}`} style={{ margin: 0, lineHeight: 1.6 }}>{inline(line, `p-${idx}`)}</p>
-      );
-    }
-  });
-  flush();
-  return (
-    <div style={{ fontSize: 13.5, color: theme.colors.text, display: 'flex', flexDirection: 'column', gap: 4 }}>
-      {blocks}
-    </div>
-  );
-}

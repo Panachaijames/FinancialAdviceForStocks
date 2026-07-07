@@ -8,6 +8,7 @@ import { useSettingsStore } from '../store/settingsStore.js';
 import { fmtMoney, fmtSignedPct, classForChange } from '../lib/format.js';
 import FullChart from './FullChart.jsx';
 import IndicatorControls, { DEFAULT_INDICATOR_CONFIG } from './IndicatorControls.jsx';
+import TradeScout from './TradeScout.jsx';
 
 const RANGES = ['1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', 'max'];
 const CHART_TYPES = [
@@ -214,29 +215,32 @@ export default function ChartModal({ symbol, name, type, onClose }) {
           </label>
         </div>
 
-        {/* Body: chart + indicator controls side by side */}
+        {/* Body: chart + indicator controls side by side, AI trade scout below */}
         <div
           className="scroll-area"
           style={{
             display: 'flex',
+            flexDirection: 'column',
             gap: theme.space(3),
             padding: theme.space(4),
             flex: 1,
             minHeight: 0,
             overflow: 'auto',
-            alignItems: 'flex-start',
           }}
         >
-          <FullChart
-            key={`${symbol}:${range}`}
-            symbol={symbol}
-            range={range}
-            interval="auto"
-            chartType={chartType}
-            logScale={logScale}
-            indicators={indicators}
-          />
-          <IndicatorControls config={indicators} onChange={setIndicators} />
+          <div style={{ display: 'flex', gap: theme.space(3), alignItems: 'flex-start', width: '100%' }}>
+            <FullChart
+              key={`${symbol}:${range}`}
+              symbol={symbol}
+              range={range}
+              interval="auto"
+              chartType={chartType}
+              logScale={logScale}
+              indicators={indicators}
+            />
+            <IndicatorControls config={indicators} onChange={setIndicators} />
+          </div>
+          <TradeScout symbol={symbol} />
         </div>
       </div>
     </div>

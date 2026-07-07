@@ -61,6 +61,33 @@ export async function getAnalysis(payload) {
   });
 }
 
+/**
+ * Deep-research AI retirement path plan (Gemini + Google Search grounding).
+ * Slow by design (multi-round research) — expect ~30-90s.
+ * @param {{ plan:object, projection:object, holdings:Array, displayCurrency?:string, depth?:'fast'|'deep' }} payload
+ * @returns {Promise<{ text:string, sources:{title:string,url:string}[], rounds:number }>}
+ */
+export async function getRetirementAdvice(payload) {
+  return request('/api/analysis/retirement', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload || {}),
+  });
+}
+
+/**
+ * Deep-research short-term trade dossier for one symbol.
+ * @param {{ symbol:string, depth?:'fast'|'deep' }} payload
+ * @returns {Promise<{ text:string, sources:{title:string,url:string}[], rounds:number }>}
+ */
+export async function getTradeIdea(payload) {
+  return request('/api/analysis/trade', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload || {}),
+  });
+}
+
 /** Server health + which providers/features are configured. */
 export async function getHealth() {
   return request('/api/health');

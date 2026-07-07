@@ -1,10 +1,12 @@
 // One-time cross-device data transfer. The sender uploads a snapshot of the
-// three persisted stores (holdings, savings, funds) under a private code; the
-// receiver downloads it, replaces its local data, then deletes the cloud entry.
-// No ongoing link and nothing left in the cloud — each device keeps its own copy.
+// persisted stores (holdings, savings, funds, retirement plan) under a private
+// code; the receiver downloads it, replaces its local data, then deletes the
+// cloud entry. No ongoing link and nothing left in the cloud — each device
+// keeps its own copy.
 import { usePortfolioStore } from '../store/portfolioStore.js';
 import { useSavingsStore } from '../store/savingsStore.js';
 import { useFundsStore } from '../store/fundsStore.js';
+import { usePlanStore, PLAN_DEFAULTS } from '../store/planStore.js';
 import { getSyncBlob, putSyncBlob, deleteSyncBlob } from '../api/client.js';
 
 // Unambiguous charset (no 0/O/1/I/L) for a human-copyable code.
@@ -25,10 +27,15 @@ export function generateCode() {
 
 /** Current local data across the transferred stores. */
 export function snapshot() {
+  // Only the plan's data fields — the store also holds setter functions.
+  const planState = usePlanStore.getState();
+  const plan = {};
+  for (const key of Object.keys(PLAN_DEFAULTS)) plan[key] = planState[key];
   return {
     holdings: usePortfolioStore.getState().holdings || [],
     savings: useSavingsStore.getState().savings || [],
     funds: useFundsStore.getState().funds || [],
+    plan,
   };
 }
 
@@ -38,6 +45,14 @@ export function applySnapshot(data) {
   if (Array.isArray(data.holdings)) usePortfolioStore.setState({ holdings: data.holdings });
   if (Array.isArray(data.savings)) useSavingsStore.setState({ savings: data.savings });
   if (Array.isArray(data.funds)) useFundsStore.setState({ funds: data.funds });
+  // Older snapshots have no plan — leave the local plan untouched then.
+  if (data.plan && typeof data.plan === 'object') {
+    const clean = {};
+    for (const key of Object.keys(PLAN_DEFAULTS)) {
+      if (key in data.plan) clean[key] = data.plan[key];
+    }
+    usePlanStore.setState(clean);
+  }
 }
 
 /** Count items in a snapshot, for a friendly confirmation message. */

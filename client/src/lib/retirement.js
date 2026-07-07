@@ -29,17 +29,32 @@ export const RETIREMENT_DEFAULTS = {
   // only ~15% on dividends, plus some Thai tax on remitted income. Lower for a
   // SET/fund-heavy mix (RMF/Thai ESG gains are tax-free if held).
   investmentTaxPct: 8,
+  // Optional refinements (all no-ops at their defaults):
+  contributionGrowthPct: 0, // yearly raise applied to the monthly contribution
+  retireSpendPct: 100, // % of today's spending the retired lifestyle needs
+  careFromAge: 75, // late-life care: spending bump starts at this age…
+  careBumpPct: 0, // …adding this % on top of the (inflated) spending need
 };
 
 // Effective planning tax rate on investment GAINS (% of total return) by asset
-// type for a Thai resident buy-and-hold retiree, 2568. Verified against Thai
-// sources; used to auto-suggest a blended rate from the user's holdings mix.
+// type for a Thai resident buy-and-hold retiree, re-verified against primary
+// sources in July 2026; used to auto-suggest a blended rate from the holdings
+// mix. Legal basis per rule:
+//   - SET capital gains exempt: กฎกระทรวง 126 ข้อ 2(23) under มาตรา 42(17).
+//   - Thai dividends: 10% final WHT option (มาตรา 50(2)(จ) + 48(3)).
+//   - US side (Thai NRA): no US CGT (IRC §871(a)(2)); dividends 15% under the
+//     US-Thai treaty Art. 10(2)(b). Thai tax applies when gains are REMITTED:
+//     Por. 161/162/2566 still operative as of Jul 2026 — the 2025 draft easing
+//     (remit in year earned or next year = exempt) was never gazetted.
+//   - Crypto via SEC-licensed Thai exchanges: gains exempt 2568-2572 per
+//     กฎกระทรวง ฉบับที่ 399 (พ.ศ. 2568) (a ministerial regulation, not a decree).
+//   - Deposit interest: 15% final WHT (มาตรา 48(3)(ก)).
 export const ASSET_TAX_RATES = {
   us_stock: 8, // US: no CGT for foreigners, ~15% div WHT; Thai tax on remittance
   etf: 8, // US-listed ETF, treated like US stocks
   th_stock: 3.5, // SET capital gains exempt; only ~10% dividend WHT
-  crypto: 2, // licensed-exchange gains exempt 2025-2029 (small residual)
-  gold: 0, // physical gold gains exempt (personal asset)
+  crypto: 2, // licensed-exchange gains exempt 2568-2572 (small residual)
+  gold: 0, // physical gold gains untaxed in practice (มาตรา 42(9) personal asset)
   thai_fund: 0, // RMF / Thai ESG / SSF gains tax-free if held to conditions
   cash: 15, // bank deposit interest 15% final WHT (small vs balance)
 };
@@ -77,8 +92,20 @@ const clampInt = (v, lo, hi, dflt) => {
 
 /**
  * Project accumulation → drawdown, year by year, with inflation.
- * Contributions are flat (nominal), consistent with the app's other planners;
- * the retirement spending need grows with inflation each year.
+ * The retirement spending need grows with inflation each year.
+ *
+ * Optional refinements (each a no-op at its default):
+ *   contributionGrowthPct — contributions rise this % per year (salary raises /
+ *     DCA step-ups) instead of staying flat.
+ *   retireSpendPct — the retired lifestyle costs this % of today's spending
+ *     (e.g. 80 = paid-off house / fewer obligations; 120 = more travel).
+ *   pensionStartAge — pension income begins at this age (default: retirement;
+ *     clamped to the drawdown phase — e.g. Thai SSO starts paying at 55+ but
+ *     only matters here once spending starts).
+ *   lumpSumAmount / lumpSumAge — a one-time addition at a given age
+ *     (inheritance, property sale, PVD payout).
+ *   careFromAge / careBumpPct — late-life care: from careFromAge the yearly
+ *     spending need is (1 + careBumpPct/100) × the inflated base.
  *
  * @param {object} p
  * @returns {{
@@ -101,8 +128,21 @@ export function projectRetirement(p = {}) {
   const rPost = pct(p.postReturnPct);
   const infl = pct(p.inflationPct);
   const swr = pct(p.swrPct) || 0.04;
-  const monthlyExpenseToday = num(p.monthlyExpenseToday);
   const monthlyPensionToday = num(p.monthlyPensionToday);
+
+  // Refinement inputs (defaults keep the old behavior exactly).
+  const contribGrowth = (Number(p.contributionGrowthPct) || 0) / 100;
+  const spendPct = Number(p.retireSpendPct) > 0 ? Number(p.retireSpendPct) / 100 : 1;
+  const pensionStartAge = clampInt(p.pensionStartAge, retireAge, endAge, retireAge);
+  const lumpSumAmount = num(p.lumpSumAmount);
+  const lumpAgeRaw = Math.round(Number(p.lumpSumAge));
+  const lumpSumAge =
+    Number.isFinite(lumpAgeRaw) && lumpAgeRaw >= currentAge && lumpAgeRaw <= endAge ? lumpAgeRaw : null;
+  const careFromAge = clampInt(p.careFromAge, retireAge, 120, RETIREMENT_DEFAULTS.careFromAge);
+  const careBump = Math.max(0, Number(p.careBumpPct) || 0) / 100;
+
+  // Spending base: today's spend scaled by the retirement replacement rate.
+  const monthlyExpenseToday = num(p.monthlyExpenseToday) * spendPct;
 
   // Tax drag: investment gains are taxed at `investmentTaxPct`, so each year's
   // growth is kept only net of tax (principal is never taxed). Effective return
@@ -123,12 +163,20 @@ export function projectRetirement(p = {}) {
   for (let age = currentAge; age <= endAge; age += 1) {
     const inflFactor = Math.pow(1 + infl, age - currentAge);
     const phase = age < retireAge ? 'accumulate' : 'draw';
+
+    // One-time lump sum (inheritance / property sale / PVD payout) lands at the
+    // start of its year, so it shows in this year's balance and growth.
+    if (lumpSumAge != null && age === lumpSumAge && lumpSumAmount > 0) {
+      balance += lumpSumAmount;
+    }
+
     series.push({ age, balance: Math.max(0, balance), phase });
 
     // Earliest age at which assets could sustain the (inflated) lifestyle at the
-    // SWR forever = "financial freedom" age.
+    // SWR forever = "financial freedom" age. Pension offsets only once it pays.
     if (freedomAge == null && monthlyExpenseToday > 0) {
-      const netMonthly = Math.max(0, monthlyExpenseToday - monthlyPensionToday);
+      const pensionNow = age >= pensionStartAge ? monthlyPensionToday : 0;
+      const netMonthly = Math.max(0, monthlyExpenseToday - pensionNow);
       const fiNumberNow = (netMonthly * inflFactor * 12) / swr;
       if (fiNumberNow > 0 && balance >= fiNumberNow) freedomAge = age;
     }
@@ -141,10 +189,13 @@ export function projectRetirement(p = {}) {
     if (age >= endAge) break;
 
     if (phase === 'accumulate') {
-      balance = balance * (1 + rPreNet) + monthly * 12;
+      // Contributions step up each year with raises (flat when growth = 0).
+      const contribThisYear = monthly * 12 * Math.pow(1 + contribGrowth, age - currentAge);
+      balance = balance * (1 + rPreNet) + contribThisYear;
     } else {
-      const expenseThisYear = monthlyExpenseToday * inflFactor * 12;
-      const pensionThisYear = monthlyPensionToday * inflFactor * 12;
+      const careFactor = age >= careFromAge ? 1 + careBump : 1;
+      const expenseThisYear = monthlyExpenseToday * inflFactor * 12 * careFactor;
+      const pensionThisYear = age >= pensionStartAge ? monthlyPensionToday * inflFactor * 12 : 0;
       const netNeed = Math.max(0, expenseThisYear - pensionThisYear);
       balance = (balance - netNeed) * (1 + rPostNet);
       if (balance <= 0 && depletionAge == null) {
@@ -157,7 +208,9 @@ export function projectRetirement(p = {}) {
   if (nestEggAtRetirement == null) nestEggAtRetirement = Math.max(0, balance);
 
   const annualExpenseAtRetirement = monthlyExpenseAtRetirement * 12;
-  const annualPensionAtRetirement = monthlyPensionToday * Math.pow(1 + infl, retireAge - currentAge) * 12;
+  // Pension offsets the freedom number only if it is already paying at retirement.
+  const annualPensionAtRetirement =
+    pensionStartAge <= retireAge ? monthlyPensionToday * Math.pow(1 + infl, retireAge - currentAge) * 12 : 0;
   const netAnnualNeed = Math.max(0, annualExpenseAtRetirement - annualPensionAtRetirement);
   const freedomNumber = swr > 0 ? netAnnualNeed / swr : 0;
   const freedomGap = freedomNumber - nestEggAtRetirement;
