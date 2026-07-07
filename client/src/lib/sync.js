@@ -7,6 +7,8 @@ import { usePortfolioStore } from '../store/portfolioStore.js';
 import { useSavingsStore } from '../store/savingsStore.js';
 import { useFundsStore } from '../store/fundsStore.js';
 import { usePlanStore, PLAN_DEFAULTS } from '../store/planStore.js';
+import { useTargetsStore } from '../store/targetsStore.js';
+import { useAlertsStore } from '../store/alertsStore.js';
 import { getSyncBlob, putSyncBlob, deleteSyncBlob } from '../api/client.js';
 
 // Unambiguous charset (no 0/O/1/I/L) for a human-copyable code.
@@ -37,6 +39,8 @@ export function snapshot() {
     savings: useSavingsStore.getState().savings || [],
     funds: useFundsStore.getState().funds || [],
     plan,
+    targets: useTargetsStore.getState().targets || {},
+    alerts: useAlertsStore.getState().alerts || [],
   };
 }
 
@@ -48,7 +52,7 @@ export function applySnapshot(data) {
   if (Array.isArray(data.transactions)) usePortfolioStore.setState({ transactions: data.transactions });
   if (Array.isArray(data.savings)) useSavingsStore.setState({ savings: data.savings });
   if (Array.isArray(data.funds)) useFundsStore.setState({ funds: data.funds });
-  // Older snapshots have no plan — leave the local plan untouched then.
+  // Older snapshots lack these keys — leave the local data untouched then.
   if (data.plan && typeof data.plan === 'object') {
     const clean = {};
     for (const key of Object.keys(PLAN_DEFAULTS)) {
@@ -56,6 +60,8 @@ export function applySnapshot(data) {
     }
     usePlanStore.setState(clean);
   }
+  if (data.targets && typeof data.targets === 'object') useTargetsStore.setState({ targets: data.targets });
+  if (Array.isArray(data.alerts)) useAlertsStore.setState({ alerts: data.alerts });
 }
 
 /** Count items in a snapshot, for a friendly confirmation message. */

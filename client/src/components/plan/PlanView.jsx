@@ -5,6 +5,7 @@ import RetirementPlanner from './RetirementPlanner.jsx';
 import DividendProjection from './DividendProjection.jsx';
 import DcaBacktest from './DcaBacktest.jsx';
 import ThaiTaxPanel from './ThaiTaxPanel.jsx';
+import TaxReportPanel from './TaxReportPanel.jsx';
 import SyncPanel from './SyncPanel.jsx';
 
 /**
@@ -24,6 +25,7 @@ export default function PlanView() {
       <DividendProjection />
       <DcaBacktest />
       <ThaiTaxPanel />
+      <TaxReportPanel />
       <SyncPanel />
     </div>
   );

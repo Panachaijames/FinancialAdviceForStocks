@@ -116,6 +116,7 @@ export const usePortfolioStore = create(
         const tx = {
           id: `tx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           symbol: h.symbol,
+          type: h.type, // asset class — the tax report groups by it
           side,
           qty,
           price,
@@ -145,6 +146,43 @@ export const usePortfolioStore = create(
           transactions: [...state.transactions, tx],
         }));
         return tx;
+      },
+
+      /**
+       * Bulk-import parsed broker trades (lib/csvImport.js output, oldest
+       * first). Unknown symbols become new holdings (0 shares) so the buys
+       * replay into them; each trade goes through recordTrade so average-cost
+       * math and the ledger stay consistent. Trades are applied to the
+       * CURRENT position state — importing a full history into an empty
+       * portfolio reproduces exact avg cost and realized P/L.
+       * @param {{date:string, side:'buy'|'sell', symbol:string, qty:number, price:number, fee:number}[]} trades
+       * @returns {{applied:number, skipped:string[]}}
+       */
+      importTrades(trades = []) {
+        const skipped = [];
+        let applied = 0;
+        for (const t of trades) {
+          if (!t || !t.symbol) continue;
+          let holding = get().holdings.find((x) => x.symbol === t.symbol);
+          if (!holding) {
+            get().addHolding({ symbol: t.symbol }, { shares: 0, avgCost: 0 });
+            holding = get().holdings.find((x) => x.symbol === t.symbol);
+          }
+          if (!holding) {
+            skipped.push(`${t.symbol}: could not create holding`);
+            continue;
+          }
+          const tx = get().recordTrade(holding.id, {
+            side: t.side,
+            qty: t.qty,
+            price: t.price,
+            fee: t.fee,
+            at: t.date,
+          });
+          if (tx) applied += 1;
+          else skipped.push(`${t.symbol} ${t.side} ${t.qty} @ ${t.price}: invalid (selling more than held?)`);
+        }
+        return { applied, skipped };
       },
 
       /**

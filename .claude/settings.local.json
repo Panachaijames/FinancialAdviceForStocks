@@ -191,7 +191,8 @@
       "Bash(curl -s --max-time 30 -o /dev/null -w \"HTTP %{http_code}\" -X POST -H \"Content-Type: application/json\" -d '{}' \"https://pt-financial-advisor-u9fr.onrender.com/api/analysis/trade\")",
       "Bash(curl -s --max-time 30 -o /dev/null -w \"retirement route: HTTP %{http_code}\" -X POST -H \"Content-Type: application/json\" -d '{\"plan\":{},\"holdings\":[]}' \"https://pt-financial-advisor-u9fr.onrender.com/api/analysis/retirement\")",
       "Bash(kill %1)",
-      "Bash(git commit -m 'Trade ledger: record buys/sells to track realized P/L \\(average-cost\\) *)"
+      "Bash(git commit -m 'Trade ledger: record buys/sells to track realized P/L \\(average-cost\\) *)",
+      "Bash(git commit -m 'Portfolio analytics: tax report, benchmark, rebalance, price alerts, CSV import *)"
     ]
   }
 }

@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { History, Undo2, ChevronDown, ChevronUp } from 'lucide-react';
+import { History, Undo2, ChevronDown, ChevronUp, Upload } from 'lucide-react';
 import { theme } from '../lib/theme.js';
 import { fmtMoney, fmtNumber, classForChange } from '../lib/format.js';
 import { usePortfolioStore } from '../store/portfolioStore.js';
 import { useSettingsStore } from '../store/settingsStore.js';
 import useFx from '../hooks/useFx.js';
 import { realizedByCurrency } from '../lib/trades.js';
+import CsvImportDialog from './CsvImportDialog.jsx';
 
 const SHOW_COLLAPSED = 8;
 
@@ -28,6 +29,7 @@ export default function TransactionsPanel() {
   const displayCurrency = useSettingsStore((s) => s.displayCurrency);
   const { convert } = useFx();
   const [showAll, setShowAll] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   const rows = useMemo(
     () => [...(transactions || [])].sort((a, b) => (a.at < b.at ? 1 : -1)),
@@ -52,8 +54,6 @@ export default function TransactionsPanel() {
     return Object.entries(byCur).reduce((sum, [cur, v]) => sum + convert(v, cur), 0);
   }, [transactions, convert]);
 
-  if (rows.length === 0) return null;
-
   const visible = showAll ? rows : rows.slice(0, SHOW_COLLAPSED);
   const td = { padding: `${theme.space(1)}px ${theme.space(2)}px`, borderTop: `1px solid ${theme.colors.border}`, fontSize: 12.5, whiteSpace: 'nowrap' };
   const right = { textAlign: 'right', fontFamily: theme.mono };
@@ -65,16 +65,37 @@ export default function TransactionsPanel() {
           <History size={15} style={{ color: theme.colors.accent }} />
           Trades ({rows.length})
         </div>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: theme.space(1) }}>
-          <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4, color: theme.colors.textDim }}>
-            Realized P/L
-          </span>
-          <span style={{ fontSize: 15, fontWeight: 800, fontFamily: theme.mono, color: colorForChange(totalRealized) }}>
-            {fmtMoney(totalRealized, displayCurrency)}
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: theme.space(3) }}>
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() => setImporting(true)}
+            title="Import a broker CSV of trades"
+            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: theme.colors.accent }}
+          >
+            <Upload size={14} /> Import CSV
+          </button>
+          {rows.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: theme.space(1) }}>
+              <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4, color: theme.colors.textDim }}>
+                Realized P/L
+              </span>
+              <span style={{ fontSize: 15, fontWeight: 800, fontFamily: theme.mono, color: colorForChange(totalRealized) }}>
+                {fmtMoney(totalRealized, displayCurrency)}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
+      {importing && <CsvImportDialog onClose={() => setImporting(false)} />}
+
+      {rows.length === 0 ? (
+        <div style={{ fontSize: 12.5, color: theme.colors.textDim }}>
+          Record buys/sells with the <b>Buy / Sell</b> buttons on your asset cards — or import your broker's
+          CSV — to track realized profit &amp; loss here.
+        </div>
+      ) : (
       <div style={{ overflowX: 'auto', border: `1px solid ${theme.colors.border}`, borderRadius: theme.radius.sm }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
@@ -144,6 +165,7 @@ export default function TransactionsPanel() {
           </tbody>
         </table>
       </div>
+      )}
 
       {rows.length > SHOW_COLLAPSED && (
         <button
@@ -157,10 +179,12 @@ export default function TransactionsPanel() {
         </button>
       )}
 
-      <div style={{ fontSize: 10.5, color: theme.colors.textFaint }}>
-        Records of what you did at your broker — realized P/L uses the average-cost method. Only the latest
-        trade per symbol can be undone.
-      </div>
+      {rows.length > 0 && (
+        <div style={{ fontSize: 10.5, color: theme.colors.textFaint }}>
+          Records of what you did at your broker — realized P/L uses the average-cost method. Only the latest
+          trade per symbol can be undone.
+        </div>
+      )}
     </div>
   );
 }

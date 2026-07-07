@@ -192,6 +192,11 @@ The Yahoo Finance symbol is the canonical id stored in your portfolio:
 - **Plan tab** — savings/net-worth tracker; retirement & financial-freedom simulator with an **AI Path Advisor** (deep research on current Thai + US markets and macro → target allocation, glide path, RMF/Thai ESG wrapper order, scenarios, action checklist); dividend projection; DCA backtest; Thai personal income tax estimator (ปีภาษี 2568).
 - **Thai tax estimator with legal references** — every bracket/deduction is mapped to its statutory basis (Revenue Code sections, royal decrees, ministerial regulations — verified against rd.go.th sources) in [`client/src/lib/thaiTaxLaw.js`](client/src/lib/thaiTaxLaw.js), viewable in-app via “ดูข้อกฎหมายอ้างอิง”.
 - **AI Trade Scout** — per-symbol short-term (days-to-weeks) dossier in the chart modal: live-web-researched catalysts with sources, a technical read from server-computed indicators (SMA/RSI/MACD/volume), a hypothetical entry/stop/target scenario, the bear case, and what to watch next. Educational scenarios, not financial advice.
+- **Trade ledger** — Buy/Sell buttons record what you did at your broker (no real orders): average-cost math, realized P/L per sale, history with LIFO undo, and **broker CSV import** (flexible column matching, preview before apply).
+- **Investment tax report** — yearly realized P/L per asset class from the ledger with each class's Thai tax treatment (SET exempt, US remittance rule, crypto 2568–2572 exemption, …) linked to the legal sources.
+- **Benchmark comparison** — your current mix indexed against the S&P 500 and SET Index over 3mo–2y.
+- **Target allocation & rebalance** — set target weights per asset class; see live drift and the exact buy/sell amounts to restore them.
+- **Price alerts** — above/below/day-move alerts per symbol, watched against live quotes; fire once with in-app banner + browser notification, re-armable.
 
 ## Tests
 

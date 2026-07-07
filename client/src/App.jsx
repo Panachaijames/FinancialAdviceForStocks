@@ -13,6 +13,9 @@ import NewsPanel from './components/NewsPanel.jsx';
 import ChartModal from './components/ChartModal.jsx';
 import InsightsPanel from './components/InsightsPanel.jsx';
 import TransactionsPanel from './components/TransactionsPanel.jsx';
+import AlertsPanel from './components/AlertsPanel.jsx';
+import RebalancePanel from './components/RebalancePanel.jsx';
+import BenchmarkPanel from './components/BenchmarkPanel.jsx';
 import PlanView from './components/plan/PlanView.jsx';
 import FundsPanel from './components/plan/FundsPanel.jsx';
 import IntroOverlay from './components/IntroOverlay.jsx';
@@ -92,6 +95,8 @@ export default function App() {
               <div style={sectionGap}>
                 <PortfolioSummary />
 
+                <AlertsPanel />
+
                 <InsightsPanel />
 
                 <div className="cards-grid">
@@ -101,6 +106,10 @@ export default function App() {
                 </div>
 
                 <TransactionsPanel />
+
+                <RebalancePanel />
+
+                <BenchmarkPanel />
 
                 <FundsPanel />
 

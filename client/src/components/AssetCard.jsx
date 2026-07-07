@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Trash2, Bell } from 'lucide-react';
 import { theme } from '../lib/theme.js';
 import { fmtMoney, fmtNumber, fmtSignedPct, classForChange } from '../lib/format.js';
 import { assetMeta } from '../lib/assetType.js';
@@ -12,6 +12,7 @@ import { computeDividendIncome } from '../lib/dividends.js';
 import MiniChart from './MiniChart.jsx';
 import HoldingEditor from './HoldingEditor.jsx';
 import TradeDialog from './TradeDialog.jsx';
+import AlertDialog from './AlertDialog.jsx';
 import { realizedBySymbol } from '../lib/trades.js';
 
 const DIV_TYPES = new Set(['us_stock', 'etf', 'th_stock']);
@@ -65,6 +66,7 @@ export default function AssetCard({ holding, onOpen }) {
 
   const [editing, setEditing] = useState(false);
   const [trading, setTrading] = useState(null); // null | 'buy' | 'sell'
+  const [alerting, setAlerting] = useState(false);
   const [dividend, setDividend] = useState(undefined); // undefined = not fetched, null = none
 
   const q = quotes[symbol];
@@ -193,6 +195,19 @@ export default function AssetCard({ holding, onOpen }) {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 4 }}>
+            <button
+              type="button"
+              className="btn-ghost"
+              aria-label="Set price alert"
+              title="Set a price alert"
+              onClick={(e) => {
+                stop(e);
+                setAlerting(true);
+              }}
+              style={{ padding: 6, lineHeight: 0 }}
+            >
+              <Bell size={15} />
+            </button>
             <button
               type="button"
               className="btn-ghost"
@@ -407,6 +422,15 @@ export default function AssetCard({ holding, onOpen }) {
           side={trading}
           livePrice={price}
           onClose={() => setTrading(null)}
+        />
+      )}
+
+      {alerting && (
+        <AlertDialog
+          symbol={symbol}
+          livePrice={price}
+          currency={native}
+          onClose={() => setAlerting(false)}
         />
       )}
     </>
