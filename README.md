@@ -197,6 +197,7 @@ The Yahoo Finance symbol is the canonical id stored in your portfolio:
 - **Benchmark comparison** — your current mix indexed against the S&P 500 and SET Index over 3mo–2y.
 - **Target allocation & rebalance** — set target weights per asset class; see live drift and the exact buy/sell amounts to restore them.
 - **Price alerts** — above/below/day-move alerts per symbol, watched against live quotes; fire once with in-app banner + browser notification, re-armable.
+- **Forecast lab** (Forecast tab) — client-side price prediction with three model families trained **in your browser** (nothing leaves your machine): an **LSTM** neural network (TensorFlow.js, lazy-loaded chunk), **ARIMA(p,1,q)** (Hannan–Rissanen), and **XGBoost-style gradient boosting** (pure JS). Features: 13 technical indicators + 9 macro-economic series (S&P 500, VIX, US 10Y, dollar index, gold, oil, USD/THB, SET, BTC) + calendar. Each model is scored on a 60-day holdout (RMSE/MAE/direction vs a naive baseline), forecasts roll forward recursively with √t uncertainty bands, and the boosting model reports feature importances. Educational — daily returns are mostly noise, and the page says so.
 
 ## Tests
 

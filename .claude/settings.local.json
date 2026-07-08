@@ -192,7 +192,18 @@
       "Bash(curl -s --max-time 30 -o /dev/null -w \"retirement route: HTTP %{http_code}\" -X POST -H \"Content-Type: application/json\" -d '{\"plan\":{},\"holdings\":[]}' \"https://pt-financial-advisor-u9fr.onrender.com/api/analysis/retirement\")",
       "Bash(kill %1)",
       "Bash(git commit -m 'Trade ledger: record buys/sells to track realized P/L \\(average-cost\\) *)",
-      "Bash(git commit -m 'Portfolio analytics: tax report, benchmark, rebalance, price alerts, CSV import *)"
+      "Bash(git commit -m 'Portfolio analytics: tax report, benchmark, rebalance, price alerts, CSV import *)",
+      "Bash(curl -s --max-time 30 \"https://pt-financial-advisor-u9fr.onrender.com/\")",
+      "Skill(dataviz)",
+      "Skill(dataviz:*)",
+      "Bash(node scripts/validate_palette.js \"#9aa4b8,#3b82f6,#f59e0b,#a78bfa,#06b6d4\" --mode dark)",
+      "Bash(node scripts/validate_palette.js \"#3987e5,#c98500,#9085e9,#d55181\" --mode dark)",
+      "PowerShell(node --test \"client/test/arima.test.mjs\")",
+      "PowerShell(node --test \"client/test/gbdt.test.mjs\")",
+      "PowerShell(node -e \"import\\('./client/src/lib/forecast/gbdt.js'\\).then\\(async \\({trainGBDT, predictGBDT}\\) => { function mb\\(s\\){let a=s>>>0;return function\\(\\){a=\\(a+0x6d2b79f5\\)|0;let t=Math.imul\\(a^\\(a>>>15\\),1|a\\);t=\\(t+Math.imul\\(t^\\(t>>>7\\),61|t\\)\\)^t;return\\(\\(t^\\(t>>>14\\)\\)>>>0\\)/4294967296}} const r=mb\\(1\\); const X=Array.from\\({length:600},\\(\\)=>Array.from\\({length:4},\\(\\)=>r\\(\\)\\)\\); const y=X.map\\(row=>row[0]>0.5?1:-1\\); const m=await trainGBDT\\(X,y,{nTrees:150,seed:42}\\); console.log\\('step finalRmse', m.trainRmse[149].toFixed\\(4\\), 'imp0', m.featureImportance[0].toFixed\\(4\\)\\); }\\)\")",
+      "Bash(awk '{print $5, $9}')",
+      "Bash(grep -v \"^$\")",
+      "Bash(git commit -m 'Forecast lab: LSTM + ARIMA + XGBoost-style price prediction \\(in-browser\\) *)"
     ]
   }
 }

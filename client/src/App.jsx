@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { theme } from './lib/theme.js';
 import { assetMeta } from './lib/assetType.js';
 import { usePortfolioStore } from './store/portfolioStore.js';
@@ -19,6 +19,9 @@ import BenchmarkPanel from './components/BenchmarkPanel.jsx';
 import PlanView from './components/plan/PlanView.jsx';
 import FundsPanel from './components/plan/FundsPanel.jsx';
 import IntroOverlay from './components/IntroOverlay.jsx';
+
+// Heavy page (TensorFlow.js etc.) — its chunk loads only when the tab opens.
+const ForecastView = React.lazy(() => import('./components/forecast/ForecastView.jsx'));
 
 const QUICK_ADD = [
   { symbol: 'AAPL', name: 'Apple Inc.', type: 'us_stock', currency: 'USD', exchange: 'NASDAQ' },
@@ -58,6 +61,7 @@ export default function App() {
           {[
             ['portfolio', 'Portfolio'],
             ['plan', 'Plan'],
+            ['forecast', 'Forecast'],
           ].map(([key, label]) => {
             const active = view === key;
             return (
@@ -82,6 +86,16 @@ export default function App() {
 
         {view === 'plan' ? (
           <PlanView />
+        ) : view === 'forecast' ? (
+          <Suspense
+            fallback={
+              <div style={{ padding: theme.space(8), textAlign: 'center', color: theme.colors.textDim, fontSize: 13 }}>
+                Loading forecast lab…
+              </div>
+            }
+          >
+            <ForecastView />
+          </Suspense>
         ) : (
           <>
             <AddAssetBar />
