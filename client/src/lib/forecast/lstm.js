@@ -92,7 +92,10 @@ export async function trainLSTM(tf, rows, targets, opts = {}) {
         history.loss.push(logs.loss);
         history.valLoss.push(logs.val_loss ?? null);
         if (onEpoch) onEpoch(epoch + 1, epochs, logs.loss, logs.val_loss ?? null);
-        await tf.nextFrame(); // let the browser paint the progress bar
+        // Yield so the progress bar paints. setTimeout, NOT tf.nextFrame():
+        // nextFrame waits on requestAnimationFrame, which browsers starve in
+        // background/hidden tabs — training would silently stall there.
+        await new Promise((r) => setTimeout(r, 0));
       },
     },
   });
