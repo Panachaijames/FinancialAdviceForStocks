@@ -16,6 +16,9 @@ export const FORECAST_DEFAULTS = {
   params: {
     arimaAuto: true, arimaP: '5', arimaQ: '1', arimaMaxP: '5', arimaMaxQ: '5',
     trees: '300', depth: '3', lr: '0.05',
+    // XGBoost regularization knobs (real reg_lambda / gamma / colsample_bytree)
+    // + early stopping to auto-pick the tree count.
+    regLambda: '1', gamma: '0', colsample: '0.8', earlyStop: '20',
     window: '30', units: '32', epochs: '60',
   },
 };
@@ -53,7 +56,25 @@ export const useForecastStore = create(
         set({ runs: [] });
       },
     }),
-    { name: 'pt-forecast', version: 1 }
+    {
+      name: 'pt-forecast',
+      version: 1,
+      // Deep-merge persisted state over the defaults so newly-added nested keys
+      // (e.g. XGBoost λ/γ/colsample/early-stop, the news feature toggle) always
+      // pick up their defaults for users who saved an older shape. (merge runs
+      // on every rehydration — no version bump needed, which would instead
+      // DISCARD old state when no migrate() is supplied.)
+      merge: (persisted, current) => {
+        const p = persisted || {};
+        return {
+          ...current,
+          ...p,
+          models: { ...current.models, ...(p.models || {}) },
+          feats: { ...current.feats, ...(p.feats || {}) },
+          params: { ...current.params, ...(p.params || {}) },
+        };
+      },
+    }
   )
 );
 

@@ -227,26 +227,41 @@ export default function ForecastView() {
         });
       }
 
-      // ── 3. Gradient boosting (XGBoost-style) ────────────────────────────
+      // ── 3. Gradient boosting (XGBoost-style, regularized) ───────────────
       if (models.gbdt) {
+        const maxTrees = Math.max(20, Math.round(Number(params.trees)) || 300);
+        const earlyStop = Math.max(0, Math.round(Number(params.earlyStop)) || 0);
         const opts = {
-          nTrees: Math.max(20, Math.round(Number(params.trees)) || 300),
+          nTrees: maxTrees,
           maxDepth: Math.max(1, Math.round(Number(params.depth)) || 3),
           learningRate: Number(params.lr) > 0 ? Number(params.lr) : 0.05,
+          regLambda: Number(params.regLambda) >= 0 ? Number(params.regLambda) : 1,
+          gamma: Number(params.gamma) >= 0 ? Number(params.gamma) : 0,
+          colsample: Number(params.colsample) > 0 && Number(params.colsample) <= 1 ? Number(params.colsample) : 1,
         };
-        const g1 = stageStart('XGBoost — holdout model', `${opts.nTrees} trees, depth ${opts.maxDepth}, lr ${opts.learningRate}`);
+        const regDetail = `depth ${opts.maxDepth}, lr ${opts.learningRate}, λ ${opts.regLambda}, γ ${opts.gamma}, colsample ${opts.colsample}`;
+
+        // Holdout model — early-stops on a validation tail to AUTO-PICK the
+        // tree count (bestIteration), then scores the 60-day test window.
+        const g1 = stageStart('XGBoost — holdout model', `${maxTrees} trees max, ${regDetail}${earlyStop ? ` · early stop ${earlyStop}` : ''}`);
         const mdl = await trainGBDT(trainRows, trainY, {
           ...opts,
+          valFraction: earlyStop ? 0.15 : 0,
+          earlyStoppingRounds: earlyStop,
           onProgress: (i, n) => stagePatch(g1, { progress: { done: i, total: n, unit: 'trees' } }),
         });
         const preds = testRows.map((r) => predictGBDT(mdl, r));
         const m = evaluateOneStep(preds, testY);
         metrics.push({ model: 'XGBoost-style GBDT', color: SERIES_COLORS.gbdt, ...m });
-        stageDone(g1, `${opts.nTrees} trees · holdout direction ${m.dirAcc.toFixed(0)}%`);
+        const chosenTrees = earlyStop ? mdl.bestIteration : maxTrees;
+        stageDone(g1, `${earlyStop ? `best ${chosenTrees}/${maxTrees} trees (early-stopped)` : `${maxTrees} trees`} · holdout direction ${m.dirAcc.toFixed(0)}%`);
 
-        const g2 = stageStart('XGBoost — full model + forecast', 'retraining on all data…');
+        // Full model on ALL data, using the auto-tuned tree count so the
+        // forecast isn't over/under-fit.
+        const g2 = stageStart('XGBoost — full model + forecast', `retraining ${chosenTrees} trees on all data…`);
         const full = await trainGBDT(ds.rows, ds.targets, {
           ...opts,
+          nTrees: chosenTrees,
           onProgress: (i, n) => stagePatch(g2, { progress: { done: i, total: n, unit: 'trees' } }),
         });
         importance = full.featureImportance
@@ -262,8 +277,14 @@ export default function ForecastView() {
           closes: path.closes,
           band: bandFor(path.closes, m.rmse),
         });
-        stageDone(g2, `${opts.nTrees} trees · top feature: ${importance[0]?.name || '—'} · ${horizon}-day path done`);
-        runModels.push({ key: 'gbdt', short: `XGB ${opts.nTrees}t`, detail: `${opts.nTrees} trees, depth ${opts.maxDepth}, lr ${opts.learningRate}`, dirAcc: m.dirAcc, rmse: m.rmse });
+        stageDone(g2, `${chosenTrees} trees · top feature: ${importance[0]?.name || '—'} · ${horizon}-day path done`);
+        runModels.push({
+          key: 'gbdt',
+          short: `XGB ${chosenTrees}t`,
+          detail: `${chosenTrees}${earlyStop ? `/${maxTrees} (early-stop)` : ''} trees, ${regDetail}`,
+          dirAcc: m.dirAcc,
+          rmse: m.rmse,
+        });
       }
 
       // ── 4. LSTM (TensorFlow.js — trained in the browser) ────────────────
@@ -473,9 +494,13 @@ export default function ForecastView() {
                   <label><span style={field}>ARIMA q (MA lags)</span><input className="input" type="number" value={params.arimaQ} onChange={setP('arimaQ')} /></label>
                 </>
               )}
-              <label><span style={field}>Boosting trees</span><input className="input" type="number" value={params.trees} onChange={setP('trees')} /></label>
+              <label><span style={field}>Boosting trees (max)</span><input className="input" type="number" value={params.trees} onChange={setP('trees')} /></label>
               <label><span style={field}>Tree depth</span><input className="input" type="number" value={params.depth} onChange={setP('depth')} /></label>
               <label><span style={field}>Learning rate</span><input className="input" type="number" step="0.01" value={params.lr} onChange={setP('lr')} /></label>
+              <label title="reg_lambda — L2 penalty on leaf weights (shrinks them toward 0)"><span style={field}>XGB L2 (λ)</span><input className="input" type="number" step="0.5" value={params.regLambda} onChange={setP('regLambda')} /></label>
+              <label title="gamma — minimum gain to make a split (prunes weak splits)"><span style={field}>XGB min-split (γ)</span><input className="input" type="number" step="0.01" value={params.gamma} onChange={setP('gamma')} /></label>
+              <label title="colsample_bytree — fraction of features each tree may use"><span style={field}>XGB feature frac</span><input className="input" type="number" step="0.1" value={params.colsample} onChange={setP('colsample')} /></label>
+              <label title="Stop adding trees when validation RMSE hasn't improved for this many rounds (0 = off). The chosen count also trains the forecast model."><span style={field}>XGB early stop</span><input className="input" type="number" value={params.earlyStop} onChange={setP('earlyStop')} /></label>
               <label><span style={field}>LSTM window</span><input className="input" type="number" value={params.window} onChange={setP('window')} /></label>
               <label><span style={field}>LSTM units</span><input className="input" type="number" value={params.units} onChange={setP('units')} /></label>
               <label><span style={field}>LSTM epochs</span><input className="input" type="number" value={params.epochs} onChange={setP('epochs')} /></label>

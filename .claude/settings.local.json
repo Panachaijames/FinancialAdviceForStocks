@@ -214,7 +214,10 @@
       "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('supported:', d.get\\('supported'\\), '| coverageDays:', d.get\\('coverageDays'\\), '| articles:', d.get\\('articles'\\)\\); ds=d.get\\('daily',[]\\); print\\('sample daily[:3]:', ds[:3]\\); print\\('sample daily[-3:]:', ds[-3:]\\)\")",
       "Bash(curl -s --max-time 30 \"http://localhost:8787/api/forecast/news-sentiment?symbol=PTT.BK&days=365\")",
       "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('PTT.BK supported:', d.get\\('supported'\\), '| daily:', len\\(d.get\\('daily',[]\\)\\)\\)\")",
-      "Bash(git commit -m 'Forecast lab: news-sentiment feature, auto-ARIMA, tuned LSTM *)"
+      "Bash(git commit -m 'Forecast lab: news-sentiment feature, auto-ARIMA, tuned LSTM *)",
+      "Bash(curl -s --max-time 30 -o /dev/null -w \"news-sentiment route: HTTP %{http_code}\" \"https://pt-financial-advisor-u9fr.onrender.com/api/forecast/news-sentiment?symbol=AAPL&days=30\")",
+      "Bash(node --test \"client/test/gbdt.test.mjs\")",
+      "Bash(git commit -m 'XGBoost: regularized objective + column subsampling + early stopping *)"
     ]
   }
 }

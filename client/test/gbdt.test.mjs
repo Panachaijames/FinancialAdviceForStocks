@@ -149,3 +149,58 @@ test('minSamplesLeaf respected: 200-row leaves on 300 rows keep every tree depth
     assert.ok(treeDepth(tree) <= 1, `tree depth ${treeDepth(tree)} should be <= 1`);
   }
 });
+
+// ── XGBoost regularization + early stopping ─────────────────────────────────
+
+test('regLambda shrinks leaf weights toward zero', async () => {
+  const rand = mulberry32(3);
+  const X = makeRows(400, 3, rand);
+  const y = X.map((row) => (row[0] > 0.5 ? 1 : -1));
+  // One tree, no shrinkage, so leaf values are directly comparable.
+  const noReg = await trainGBDT(X, y, { nTrees: 1, learningRate: 1, regLambda: 0, subsample: 1, seed: 7 });
+  const bigReg = await trainGBDT(X, y, { nTrees: 1, learningRate: 1, regLambda: 500, subsample: 1, seed: 7 });
+  const leaves = (node, out = []) => { if (node.left) { leaves(node.left, out); leaves(node.right, out); } else out.push(Math.abs(node.value)); return out; };
+  const maxNo = Math.max(...leaves(noReg.trees[0]));
+  const maxBig = Math.max(...leaves(bigReg.trees[0]));
+  assert.ok(maxBig < maxNo, `lambda should shrink leaves: ${maxBig} < ${maxNo}`);
+});
+
+test('gamma (min split gain) prunes weak splits down to a stump/leaf', async () => {
+  const rand = mulberry32(5);
+  const X = makeRows(400, 3, rand);
+  const y = X.map((row) => (row[0] > 0.5 ? 1 : -1));
+  const treeDepth = (node) => (node.left ? 1 + Math.max(treeDepth(node.left), treeDepth(node.right)) : 0);
+  // A huge gamma makes no split worth its complexity cost -> leaf-only trees.
+  const model = await trainGBDT(X, y, { nTrees: 5, gamma: 1e6, seed: 9 });
+  for (const t of model.trees) assert.equal(treeDepth(t), 0);
+});
+
+test('colsample < 1 still learns the dominant feature and stays deterministic', async () => {
+  const rand = mulberry32(13);
+  const X = makeRows(500, 6, rand);
+  const y = X.map((row) => (row[0] > 0.5 ? 1 : -1));
+  const a = await trainGBDT(X, y, { nTrees: 120, colsample: 0.5, seed: 42 });
+  const b = await trainGBDT(X, y, { nTrees: 120, colsample: 0.5, seed: 42 });
+  assert.deepEqual(a.featureImportance, b.featureImportance); // deterministic
+  // x0 drives y, so even with half the columns sampled it should dominate.
+  const top = a.featureImportance.indexOf(Math.max(...a.featureImportance));
+  assert.equal(top, 0);
+});
+
+test('early stopping picks a bestIteration and truncates the ensemble', async () => {
+  const rand = mulberry32(17);
+  // Signal only in the first ~150 rows' relationship; later rows are noisier so
+  // validation stops improving well before nTrees.
+  const X = makeRows(600, 4, rand);
+  const y = X.map((row) => Math.sin(3 * row[0]) + 0.3 * row[1] + (rand() - 0.5) * 0.2);
+  const model = await trainGBDT(X, y, {
+    nTrees: 400, learningRate: 0.1, valFraction: 0.2, earlyStoppingRounds: 15, seed: 1,
+  });
+  assert.ok(model.bestIteration >= 1);
+  assert.ok(model.bestIteration <= 400);
+  assert.equal(model.trees.length, model.bestIteration); // truncated to best
+  assert.ok(model.valRmse.length >= model.bestIteration);
+  // The kept ensemble is the val-RMSE minimizer among what was recorded.
+  const minVal = Math.min(...model.valRmse);
+  assert.ok(Math.abs(model.valRmse[model.bestIteration - 1] - minVal) < 1e-9);
+});
