@@ -33,13 +33,16 @@ router.post('/', async (req, res) => {
   const body = req.body || {};
   const holdings = Array.isArray(body.holdings) ? body.holdings : [];
   const displayCurrency = typeof body.displayCurrency === 'string' ? body.displayCurrency : 'USD';
+  const goal = typeof body.goal === 'string' ? body.goal.trim().slice(0, 500) : '';
   if (holdings.length === 0) {
     return res.status(400).json({ error: 'No holdings to analyze' });
   }
   try {
     const symbols = Array.from(new Set(holdings.map((h) => h && h.symbol).filter(Boolean)));
-    // Cache by symbol set so rapid re-clicks don't burn Gemini quota.
-    const key = `analysis:${displayCurrency}:${symbols.slice().sort().join(',')}`;
+    // Cache by symbol set + goal so different goals don't collide, but rapid
+    // re-clicks with the same goal don't burn Gemini quota.
+    const goalKey = goal ? createHash('sha1').update(goal).digest('hex').slice(0, 12) : 'none';
+    const key = `analysis:${displayCurrency}:${goalKey}:${symbols.slice().sort().join(',')}`;
     const text = await wrap(key, ANALYSIS_TTL_MS, async () => {
       let news = [];
       try {
@@ -47,7 +50,7 @@ router.post('/', async (req, res) => {
       } catch {
         news = [];
       }
-      return gemini.generateInsights({ holdings, news, displayCurrency });
+      return gemini.generateInsights({ holdings, news, displayCurrency, goal });
     });
     return res.json({ text });
   } catch (err) {

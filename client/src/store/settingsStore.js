@@ -7,6 +7,7 @@ export const useSettingsStore = create(
     (set, get) => ({
       displayCurrency: 'USD',
       refreshMs: 5000,
+      analysisGoal: '', // user's stated objective for the AI Insights panel
 
       /**
        * Set the display currency ('USD' | 'THB').
@@ -21,6 +22,13 @@ export const useSettingsStore = create(
        */
       toggleCurrency() {
         set({ displayCurrency: get().displayCurrency === 'USD' ? 'THB' : 'USD' });
+      },
+
+      /**
+       * Set the user's AI-analysis goal (capped so it stays a short objective).
+       */
+      setAnalysisGoal(v) {
+        set({ analysisGoal: typeof v === 'string' ? v.slice(0, 500) : '' });
       },
 
       /**

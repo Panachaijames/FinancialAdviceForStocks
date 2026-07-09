@@ -36,11 +36,34 @@ const SYSTEM = [
 ].join(' ');
 
 /**
+ * When the user states a goal, tailor the whole analysis to it: add a
+ * "Goal Fit" section and make the plan serve that objective specifically.
+ */
+function systemFor(goal) {
+  if (!goal) return SYSTEM;
+  return [
+    SYSTEM,
+    '',
+    `IMPORTANT — THE USER'S STATED GOAL FOR THIS PORTFOLIO: "${goal}".`,
+    'Tailor the ENTIRE analysis to this goal — interpret every section through it,',
+    'not as a generic summary. Insert a "## Goal Fit" section right after Overview',
+    'that judges, specifically and honestly, how well the current holdings serve',
+    'the goal: what already aligns, what gaps or conflicts exist, and how far off',
+    'the portfolio is. Then make "## Suggested Plan" a prioritized set of ideas',
+    'that move the portfolio toward THIS goal (and rename mentally toward it),',
+    'each with one line of reasoning tied back to the goal. If the goal is vague,',
+    'risky, or unrealistic given the holdings, say so plainly. Keep all the',
+    'guardrails above (general strategies only, no buy/sell-now calls or price',
+    'targets). You may extend to ~500 words to cover the goal properly.',
+  ].join(' ');
+}
+
+/**
  * Generate a short AI insight for a portfolio.
- * @param {{ holdings: Array, news?: Array, displayCurrency?: string }} ctx
+ * @param {{ holdings: Array, news?: Array, displayCurrency?: string, goal?: string }} ctx
  * @returns {Promise<string>} the insight text
  */
-export async function generateInsights({ holdings = [], news = [], displayCurrency = 'USD' } = {}) {
+export async function generateInsights({ holdings = [], news = [], displayCurrency = 'USD', goal = '' } = {}) {
   if (!KEY) throw new Error('Gemini API key not configured');
   if (!Array.isArray(holdings) || holdings.length === 0) {
     throw new Error('No holdings to analyze');
@@ -74,8 +97,11 @@ export async function generateInsights({ holdings = [], news = [], displayCurren
     .slice(0, 12)
     .map((n) => `- ${n.title}${n.relatedSymbols && n.relatedSymbols.length ? ` [${n.relatedSymbols.join(',')}]` : ''}`);
 
+  const cleanGoal = typeof goal === 'string' ? goal.trim().slice(0, 500) : '';
+
   const prompt = [
     `Display currency: ${displayCurrency}.`,
+    cleanGoal ? `The user's goal for this portfolio: "${cleanGoal}".` : '',
     `Total portfolio value: ${Math.round(total)} ${displayCurrency}.`,
     `Allocation by type: ${allocation || 'n/a'}.`,
     '',
@@ -84,12 +110,12 @@ export async function generateInsights({ holdings = [], news = [], displayCurren
     headlines.length ? '\nRecent headlines:' : '',
     ...headlines,
   ]
-    .filter((s) => s !== undefined)
+    .filter((s) => s !== undefined && s !== '')
     .join('\n');
 
   const url = `${BASE}/models/${encodeURIComponent(MODEL)}:generateContent?key=${encodeURIComponent(KEY)}`;
   const body = {
-    systemInstruction: { parts: [{ text: SYSTEM }] },
+    systemInstruction: { parts: [{ text: systemFor(cleanGoal) }] },
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
     generationConfig: {
       temperature: 0.5,
