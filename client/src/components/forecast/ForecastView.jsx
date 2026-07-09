@@ -254,7 +254,8 @@ export default function ForecastView() {
         const m = evaluateOneStep(preds, testY);
         metrics.push({ model: 'XGBoost-style GBDT', color: SERIES_COLORS.gbdt, ...m });
         const chosenTrees = earlyStop ? mdl.bestIteration : maxTrees;
-        stageDone(g1, `${earlyStop ? `best ${chosenTrees}/${maxTrees} trees (early-stopped)` : `${maxTrees} trees`} · holdout direction ${m.dirAcc.toFixed(0)}%`);
+        const valNote = earlyStop && mdl.bestScore != null ? ` · min val RMSE ${(mdl.bestScore * 100).toFixed(2)}%` : '';
+        stageDone(g1, `${earlyStop ? `best ${chosenTrees}/${maxTrees} trees (early-stopped)` : `${maxTrees} trees`}${valNote} · holdout direction ${m.dirAcc.toFixed(0)}%`);
 
         // Full model on ALL data, using the auto-tuned tree count so the
         // forecast isn't over/under-fit.
@@ -311,8 +312,11 @@ export default function ForecastView() {
         });
         lstmHistory = l.history;
         const ranEpochs = l.history.epochs || lopts.epochs;
-        const stopped = l.history.stoppedEpoch ? ` (early-stopped)` : '';
-        stageDone(lId, `${ranEpochs}/${lopts.epochs} epochs${stopped} · final loss ${lastLoss != null ? lastLoss.toExponential(2) : '—'}`);
+        const bestNote = l.history.bestEpoch
+          ? ` · kept best epoch ${l.history.bestEpoch} (val ${l.history.bestValLoss != null ? l.history.bestValLoss.toFixed(3) : '—'})`
+          : '';
+        const stopped = l.history.stoppedEpoch ? ' (early-stopped)' : '';
+        stageDone(lId, `${ranEpochs}/${lopts.epochs} epochs${stopped}${bestNote}`);
 
         const sId = stageStart('LSTM — scoring + forecast', `${TEST_DAYS}-day holdout, then ${horizon}-day rollout…`);
         const preds = [];
@@ -608,6 +612,14 @@ export default function ForecastView() {
             recursive guesses whose uncertainty (shaded bands) grows fast. These models know nothing about
             tomorrow's news. Treat this page as an <b>experiment lab</b> for understanding models and features —
             educational only, not financial advice, never a reason on its own to trade.
+            <div style={{ marginTop: theme.space(2), color: theme.colors.textFaint }}>
+              <b>On loss &amp; early stopping:</b> the loss can't fall to zero — it bottoms out near the symbol's own
+              daily volatility (a ~2%/day stock floors around 2, a ~5%/day one around 5), because tomorrow's return
+              is mostly unpredictable. Early stopping watches <b>validation</b> loss (unseen data), not training
+              loss: it keeps the point that generalizes best, so a low <i>training</i> loss past that would just be
+              memorizing noise. To fit harder anyway, raise epochs/trees and the patience (XGB early-stop), lower
+              the learning rate, or set early-stop to 0 to train the full count.
+            </div>
           </div>
         </>
       )}

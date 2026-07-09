@@ -217,7 +217,8 @@
       "Bash(git commit -m 'Forecast lab: news-sentiment feature, auto-ARIMA, tuned LSTM *)",
       "Bash(curl -s --max-time 30 -o /dev/null -w \"news-sentiment route: HTTP %{http_code}\" \"https://pt-financial-advisor-u9fr.onrender.com/api/forecast/news-sentiment?symbol=AAPL&days=30\")",
       "Bash(node --test \"client/test/gbdt.test.mjs\")",
-      "Bash(git commit -m 'XGBoost: regularized objective + column subsampling + early stopping *)"
+      "Bash(git commit -m 'XGBoost: regularized objective + column subsampling + early stopping *)",
+      "Bash(git commit -m 'Forecast: restore-best-weights for LSTM + transparent early-stop loss *)"
     ]
   }
 }

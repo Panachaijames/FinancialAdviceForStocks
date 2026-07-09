@@ -293,6 +293,9 @@ export async function trainGBDT(X, y, {
     trainRmse,
     valRmse,
     bestIteration: useEarlyStop ? bestIteration : kept.length,
+    // Validation RMSE at the kept iteration (the value early stopping settled
+    // on) — null when early stopping was off. Lets the UI show WHY it stopped.
+    bestScore: useEarlyStop && Number.isFinite(bestVal) ? bestVal : null,
   };
 }
 

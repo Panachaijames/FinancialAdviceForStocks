@@ -18,7 +18,7 @@ export const FORECAST_DEFAULTS = {
     trees: '300', depth: '3', lr: '0.05',
     // XGBoost regularization knobs (real reg_lambda / gamma / colsample_bytree)
     // + early stopping to auto-pick the tree count.
-    regLambda: '1', gamma: '0', colsample: '0.8', earlyStop: '20',
+    regLambda: '1', gamma: '0', colsample: '0.8', earlyStop: '40',
     window: '30', units: '32', epochs: '60',
   },
 };

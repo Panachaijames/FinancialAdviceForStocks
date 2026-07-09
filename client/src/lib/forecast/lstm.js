@@ -70,7 +70,7 @@ export async function trainLSTM(tf, rows, targets, opts = {}) {
     layers = 1,
     dropout = 0.2,
     l2 = 1e-4,
-    patience = 8,
+    patience = 15,
     onEpoch = null,
   } = opts;
 
@@ -131,15 +131,22 @@ export async function trainLSTM(tf, rows, targets, opts = {}) {
     loss: 'meanAbsoluteError',
   });
 
-  // Manual early stopping: we track the best validation loss inside our own
-  // onEpochEnd and call model.stopTraining = true. (We deliberately do NOT use
-  // tf.callbacks.earlyStopping mixed into the callbacks array — combining a
-  // BaseCallback instance with a plain-object callback breaks tfjs's callback
-  // list and stalls training. A single object callback is the reliable form.)
-  const history = { loss: [], valLoss: [], stoppedEpoch: null, epochs: 0 };
+  // Manual early stopping with RESTORE-BEST-WEIGHTS: we track the best
+  // validation loss inside our own onEpochEnd, snapshot the model's weights at
+  // that epoch, and reload them after training — so the model you keep is the
+  // one that generalized best, not whatever the last (often worse) epoch left
+  // behind. (We deliberately do NOT use tf.callbacks.earlyStopping mixed into
+  // the callbacks array — combining a BaseCallback instance with a plain-object
+  // callback breaks tfjs's callback list and stalls training.)
+  const history = { loss: [], valLoss: [], stoppedEpoch: null, epochs: 0, bestEpoch: null, bestValLoss: null };
   let bestVal = Infinity;
   let bestEpoch = 0;
+  let bestWeights = null; // cloned snapshot of the best-val-loss weights
   const usePatience = patience > 0 && validationSplit > 0;
+  const snapshot = () => {
+    if (bestWeights) for (const w of bestWeights) w.dispose();
+    bestWeights = model.getWeights().map((w) => w.clone());
+  };
 
   await model.fit(xT, yT, {
     epochs,
@@ -158,6 +165,7 @@ export async function trainLSTM(tf, rows, targets, opts = {}) {
           if (valLoss < bestVal - 1e-4) {
             bestVal = valLoss;
             bestEpoch = epoch;
+            snapshot();
           } else if (epoch - bestEpoch >= patience) {
             history.stoppedEpoch = epoch + 1;
             model.stopTraining = true;
@@ -169,6 +177,14 @@ export async function trainLSTM(tf, rows, targets, opts = {}) {
       },
     },
   });
+
+  // Restore the best-generalizing weights (the val-loss minimizer).
+  if (bestWeights) {
+    model.setWeights(bestWeights);
+    for (const w of bestWeights) w.dispose();
+    history.bestEpoch = bestEpoch + 1;
+    history.bestValLoss = bestVal;
+  }
   xT.dispose();
   yT.dispose();
 
