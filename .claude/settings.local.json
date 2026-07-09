@@ -204,7 +204,17 @@
       "Bash(awk '{print $5, $9}')",
       "Bash(grep -v \"^$\")",
       "Bash(git commit -m 'Forecast lab: LSTM + ARIMA + XGBoost-style price prediction \\(in-browser\\) *)",
-      "Bash(git commit -m 'Forecast lab: live training status log + persisted run history *)"
+      "Bash(git commit -m 'Forecast lab: live training status log + persisted run history *)",
+      "Bash(node --check server/providers/newsHistory.js)",
+      "Bash(node --check server/routes/forecast.js)",
+      "Bash(node --check server/index.js)",
+      "Bash(node --test \"client/test/forecastEnhancements.test.mjs\")",
+      "Bash(node client/test/forecastEnhancements.test.mjs)",
+      "Bash(curl -s --max-time 90 \"http://localhost:8787/api/forecast/news-sentiment?symbol=AAPL&days=365\")",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('supported:', d.get\\('supported'\\), '| coverageDays:', d.get\\('coverageDays'\\), '| articles:', d.get\\('articles'\\)\\); ds=d.get\\('daily',[]\\); print\\('sample daily[:3]:', ds[:3]\\); print\\('sample daily[-3:]:', ds[-3:]\\)\")",
+      "Bash(curl -s --max-time 30 \"http://localhost:8787/api/forecast/news-sentiment?symbol=PTT.BK&days=365\")",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('PTT.BK supported:', d.get\\('supported'\\), '| daily:', len\\(d.get\\('daily',[]\\)\\)\\)\")",
+      "Bash(git commit -m 'Forecast lab: news-sentiment feature, auto-ARIMA, tuned LSTM *)"
     ]
   }
 }

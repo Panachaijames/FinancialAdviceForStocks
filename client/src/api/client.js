@@ -88,6 +88,23 @@ export async function getTradeIdea(payload) {
   });
 }
 
+/**
+ * Historical daily news-sentiment series for the Forecast lab (Finnhub-backed).
+ * Returns { supported:false, daily:[] } when unavailable (no key / unsupported
+ * asset) so the caller can just skip the news feature.
+ * @param {string} symbol
+ * @param {number} days lookback (<= ~370 on the free tier)
+ */
+export async function getNewsSentiment(symbol, days = 365) {
+  const sym = (symbol || '').trim();
+  if (!sym) return { symbol: '', supported: false, daily: [], articles: 0, coverageDays: 0 };
+  try {
+    return await request(`/api/forecast/news-sentiment?symbol=${encodeURIComponent(sym)}&days=${days}`);
+  } catch {
+    return { symbol: sym, supported: false, daily: [], articles: 0, coverageDays: 0 };
+  }
+}
+
 /** Server health + which providers/features are configured. */
 export async function getHealth() {
   return request('/api/health');

@@ -19,6 +19,7 @@ import fxRouter from './routes/fx.js';
 import analysisRouter from './routes/analysis.js';
 import fundsRouter from './routes/funds.js';
 import syncRouter from './routes/sync.js';
+import forecastRouter from './routes/forecast.js';
 import { isConfigured as syncConfigured } from './providers/kv.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -63,6 +64,7 @@ app.use('/api/fx', fxRouter);
 app.use('/api/analysis', analysisRouter);
 app.use('/api/funds', fundsRouter);
 app.use('/api/sync', syncRouter);
+app.use('/api/forecast', forecastRouter);
 
 // Optionally serve the built client if it exists. CLIENT_DIST lets the packaged
 // desktop (Electron) app point at the bundled client build wherever it lands.

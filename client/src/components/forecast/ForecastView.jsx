@@ -4,7 +4,7 @@ import { theme } from '../../lib/theme.js';
 import { fmtMoney } from '../../lib/format.js';
 import { usePortfolioStore } from '../../store/portfolioStore.js';
 import { useForecastStore } from '../../store/forecastStore.js';
-import { getCandles } from '../../api/client.js';
+import { getCandles, getNewsSentiment } from '../../api/client.js';
 import {
   MACRO_SERIES,
   buildDataset,
@@ -13,7 +13,7 @@ import {
   arimaOneStepPreds,
   nextBusinessDay,
 } from '../../lib/forecast/features.js';
-import { fitArima, forecastArima } from '../../lib/forecast/arima.js';
+import { fitArima, autoArima, forecastArima } from '../../lib/forecast/arima.js';
 import { trainGBDT, predictGBDT } from '../../lib/forecast/gbdt.js';
 import ForecastChart, { SERIES_COLORS } from './ForecastChart.jsx';
 
@@ -130,14 +130,37 @@ export default function ForecastView() {
       }
       stageDone(dataId, `${target.length} candles${macro ? ` · ${Object.values(macro).filter((c) => c.length > 9).length}/${MACRO_SERIES.length} macro series` : ''}`);
 
+      // Optional: historical daily news sentiment (US equities/ETFs only).
+      let newsDaily = null;
+      if (feats.news) {
+        const newsId = stageStart('News sentiment', 'fetching + scoring headlines (Finnhub)…');
+        try {
+          const ns = await getNewsSentiment(sym, 365);
+          if (ns && ns.supported && ns.daily && ns.daily.length) {
+            newsDaily = ns.daily;
+            stageDone(newsId, `${ns.coverageDays} days covered · ${ns.articles} articles scored`);
+          } else {
+            stageDone(newsId, ns && !ns.supported ? 'not available for this symbol — feature skipped' : 'no news found — feature skipped');
+          }
+        } catch {
+          stageDone(newsId, 'unavailable — feature skipped');
+        }
+      }
+
       const featId = stageStart('Features', 'building the feature matrix…');
       await new Promise((r) => setTimeout(r, 20));
-      const ds = buildDataset(target, macro, {
-        technical: feats.technical,
-        macro: feats.macro,
-        calendar: feats.calendar,
-      });
-      stageDone(featId, `${ds.names.length} features × ${ds.rows.length} samples`);
+      const ds = buildDataset(
+        target,
+        macro,
+        {
+          technical: feats.technical,
+          macro: feats.macro,
+          calendar: feats.calendar,
+          news: feats.news && !!newsDaily,
+        },
+        newsDaily
+      );
+      stageDone(featId, `${ds.names.length} features × ${ds.rows.length} samples${newsDaily ? ' (incl. news)' : ''}`);
 
       const nRows = ds.rows.length;
       if (nRows <= TEST_DAYS + 120) throw new Error('Not enough history after warmup — pick a longer range.');
@@ -153,15 +176,33 @@ export default function ForecastView() {
       let importance = null;
       let lstmHistory = null;
 
-      // ── 2. ARIMA ─────────────────────────────────────────────────────────
+      // ── 2. ARIMA (optionally auto-selected order) ──────────────────────────
       if (models.arima) {
-        const p = Math.max(0, Math.round(Number(params.arimaP)) || 0);
-        const q = Math.max(0, Math.round(Number(params.arimaQ)) || 0);
-        const arimaId = stageStart(`ARIMA(${p},1,${q})`, 'fitting (Hannan–Rissanen)…');
-        await new Promise((r) => setTimeout(r, 20));
         const logAll = ds.closes.map(Math.log);
         const returnsAll = [];
         for (let i = 1; i < logAll.length; i += 1) returnsAll.push(logAll[i] - logAll[i - 1]);
+
+        let p;
+        let q;
+        let selectDetail = '';
+        if (params.arimaAuto) {
+          const maxP = Math.max(0, Math.min(8, Math.round(Number(params.arimaMaxP)) || 5));
+          const maxQ = Math.max(0, Math.min(8, Math.round(Number(params.arimaMaxQ)) || 5));
+          const autoId = stageStart('Auto-ARIMA', `grid p≤${maxP}, q≤${maxQ} — selecting by AIC…`);
+          await new Promise((r) => setTimeout(r, 20));
+          // Search on the TRAIN portion so the order isn't chosen using holdout data.
+          const auto = autoArima(logAll.slice(0, logAll.length - TEST_DAYS), { maxP, maxQ, criterion: 'aic' });
+          p = auto.best.p;
+          q = auto.best.q;
+          selectDetail = `auto-selected (${p},1,${q}) from ${auto.table.filter((r) => r.ok).length} candidates`;
+          stageDone(autoId, selectDetail);
+        } else {
+          p = Math.max(0, Math.round(Number(params.arimaP)) || 0);
+          q = Math.max(0, Math.round(Number(params.arimaQ)) || 0);
+        }
+
+        const arimaId = stageStart(`ARIMA(${p},1,${q})`, 'fitting (Hannan–Rissanen)…');
+        await new Promise((r) => setTimeout(r, 20));
         const mTrain = fitArima(logAll.slice(0, logAll.length - TEST_DAYS), { p, q });
         const preds = arimaOneStepPreds(mTrain, returnsAll, returnsAll.length - TEST_DAYS);
         const m = evaluateOneStep(preds, returnsAll.slice(-TEST_DAYS));
@@ -170,14 +211,20 @@ export default function ForecastView() {
         const fc = forecastArima(mFull, logAll, horizon);
         forecasts.push({
           key: 'arima',
-          label: 'ARIMA',
+          label: params.arimaAuto ? `ARIMA(${p},1,${q})*` : 'ARIMA',
           color: SERIES_COLORS.arima,
           dates: fDates,
           closes: fc.mean.map(Math.exp),
           band: { lower: fc.lower95.map(Math.exp), upper: fc.upper95.map(Math.exp) },
         });
         stageDone(arimaId, `fitted on ${returnsAll.length} returns · holdout direction ${m.dirAcc.toFixed(0)}%`);
-        runModels.push({ key: 'arima', short: `ARIMA(${p},1,${q})`, detail: `p=${p}, q=${q}`, dirAcc: m.dirAcc, rmse: m.rmse });
+        runModels.push({
+          key: 'arima',
+          short: `ARIMA(${p},1,${q})${params.arimaAuto ? '*' : ''}`,
+          detail: params.arimaAuto ? `${selectDetail}; p=${p}, q=${q}` : `p=${p}, q=${q}`,
+          dirAcc: m.dirAcc,
+          rmse: m.rmse,
+        });
       }
 
       // ── 3. Gradient boosting (XGBoost-style) ────────────────────────────
@@ -230,6 +277,7 @@ export default function ForecastView() {
           window: Math.max(10, Math.round(Number(params.window)) || 30),
           units: Math.max(4, Math.round(Number(params.units)) || 32),
           epochs: Math.min(500, Math.max(5, Math.round(Number(params.epochs)) || 60)),
+          layers: 1, // single tuned layer — fast + reliable in-browser (see lstm.js)
         };
         const lId = stageStart('LSTM — training', `${lopts.units} units · window ${lopts.window} · ${lopts.epochs} epochs`);
         let lastLoss = null;
@@ -241,7 +289,9 @@ export default function ForecastView() {
           },
         });
         lstmHistory = l.history;
-        stageDone(lId, `${lopts.epochs}/${lopts.epochs} epochs · final loss ${lastLoss != null ? lastLoss.toExponential(2) : '—'}`);
+        const ranEpochs = l.history.epochs || lopts.epochs;
+        const stopped = l.history.stoppedEpoch ? ` (early-stopped)` : '';
+        stageDone(lId, `${ranEpochs}/${lopts.epochs} epochs${stopped} · final loss ${lastLoss != null ? lastLoss.toExponential(2) : '—'}`);
 
         const sId = stageStart('LSTM — scoring + forecast', `${TEST_DAYS}-day holdout, then ${horizon}-day rollout…`);
         const preds = [];
@@ -262,7 +312,7 @@ export default function ForecastView() {
           band: bandFor(path.closes, m.rmse),
         });
         stageDone(sId, `holdout direction ${m.dirAcc.toFixed(0)}% · path done`);
-        runModels.push({ key: 'lstm', short: `LSTM ${lopts.epochs}ep`, detail: `${lopts.units} units, window ${lopts.window}, ${lopts.epochs} epochs, final loss ${lastLoss != null ? lastLoss.toExponential(2) : '—'}`, dirAcc: m.dirAcc, rmse: m.rmse });
+        runModels.push({ key: 'lstm', short: `LSTM ${l.history.epochs || lopts.epochs}ep`, detail: `${lopts.layers >= 2 ? '2-layer ' : ''}${lopts.units} units, window ${lopts.window}, ${l.history.epochs || lopts.epochs}/${lopts.epochs} epochs${l.history.stoppedEpoch ? ' (early stop)' : ''}, final loss ${lastLoss != null ? lastLoss.toExponential(2) : '—'}`, dirAcc: m.dirAcc, rmse: m.rmse });
       }
 
       if (forecasts.length === 0) throw new Error('Enable at least one model.');
@@ -392,9 +442,9 @@ export default function ForecastView() {
           <div>
             <span style={field}>Feature groups</span>
             <div style={{ display: 'flex', gap: theme.space(2), flexWrap: 'wrap' }}>
-              {[['technical', 'Technical indicators (13)'], ['macro', `Macro-economic (${MACRO_SERIES.length})`], ['calendar', 'Calendar (2)']].map(([k, label]) => (
-                <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: feats[k] ? theme.colors.text : theme.colors.textDim, cursor: 'pointer' }}>
-                  <input type="checkbox" checked={feats[k]} onChange={() => toggleFeat(k)} style={{ accentColor: theme.colors.accent }} />
+              {[['technical', 'Technical indicators (13)'], ['macro', `Macro-economic (${MACRO_SERIES.length})`], ['news', 'News sentiment (3)'], ['calendar', 'Calendar (2)']].map(([k, label]) => (
+                <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: feats[k] ? theme.colors.text : theme.colors.textDim, cursor: 'pointer' }} title={k === 'news' ? 'Historical daily headline sentiment (Finnhub) — US stocks/ETFs only, ~1 year of coverage' : undefined}>
+                  <input type="checkbox" checked={!!feats[k]} onChange={() => toggleFeat(k)} style={{ accentColor: theme.colors.accent }} />
                   {label}
                 </label>
               ))}
@@ -406,15 +456,30 @@ export default function ForecastView() {
           {showAdvanced ? <ChevronUp size={14} /> : <ChevronDown size={14} />} Hyperparameters
         </button>
         {showAdvanced && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: theme.space(2) }}>
-            <label><span style={field}>ARIMA p (AR lags)</span><input className="input" type="number" value={params.arimaP} onChange={setP('arimaP')} /></label>
-            <label><span style={field}>ARIMA q (MA lags)</span><input className="input" type="number" value={params.arimaQ} onChange={setP('arimaQ')} /></label>
-            <label><span style={field}>Boosting trees</span><input className="input" type="number" value={params.trees} onChange={setP('trees')} /></label>
-            <label><span style={field}>Tree depth</span><input className="input" type="number" value={params.depth} onChange={setP('depth')} /></label>
-            <label><span style={field}>Learning rate</span><input className="input" type="number" step="0.01" value={params.lr} onChange={setP('lr')} /></label>
-            <label><span style={field}>LSTM window</span><input className="input" type="number" value={params.window} onChange={setP('window')} /></label>
-            <label><span style={field}>LSTM units</span><input className="input" type="number" value={params.units} onChange={setP('units')} /></label>
-            <label><span style={field}>LSTM epochs</span><input className="input" type="number" value={params.epochs} onChange={setP('epochs')} /></label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: theme.space(2) }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: theme.colors.text, cursor: 'pointer' }}>
+              <input type="checkbox" checked={!!params.arimaAuto} onChange={(e) => store.patchSetting('params', { arimaAuto: e.target.checked })} style={{ accentColor: SERIES_COLORS.arima }} />
+              Auto-ARIMA — grid-search the order and keep the best by AIC
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: theme.space(2) }}>
+              {params.arimaAuto ? (
+                <>
+                  <label><span style={field}>Auto max p</span><input className="input" type="number" value={params.arimaMaxP} onChange={setP('arimaMaxP')} /></label>
+                  <label><span style={field}>Auto max q</span><input className="input" type="number" value={params.arimaMaxQ} onChange={setP('arimaMaxQ')} /></label>
+                </>
+              ) : (
+                <>
+                  <label><span style={field}>ARIMA p (AR lags)</span><input className="input" type="number" value={params.arimaP} onChange={setP('arimaP')} /></label>
+                  <label><span style={field}>ARIMA q (MA lags)</span><input className="input" type="number" value={params.arimaQ} onChange={setP('arimaQ')} /></label>
+                </>
+              )}
+              <label><span style={field}>Boosting trees</span><input className="input" type="number" value={params.trees} onChange={setP('trees')} /></label>
+              <label><span style={field}>Tree depth</span><input className="input" type="number" value={params.depth} onChange={setP('depth')} /></label>
+              <label><span style={field}>Learning rate</span><input className="input" type="number" step="0.01" value={params.lr} onChange={setP('lr')} /></label>
+              <label><span style={field}>LSTM window</span><input className="input" type="number" value={params.window} onChange={setP('window')} /></label>
+              <label><span style={field}>LSTM units</span><input className="input" type="number" value={params.units} onChange={setP('units')} /></label>
+              <label><span style={field}>LSTM epochs</span><input className="input" type="number" value={params.epochs} onChange={setP('epochs')} /></label>
+            </div>
           </div>
         )}
 

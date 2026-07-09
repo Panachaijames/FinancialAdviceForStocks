@@ -96,7 +96,12 @@ const TECH_NAMES = [
   'macdHist', 'rsi14', 'bbPos', 'bbWidth',
   'vol21', 'rangePos63', 'volRatio',
 ];
+const NEWS_NAMES = ['newsSent', 'newsSentEMA', 'newsVol'];
 const CAL_NAMES = ['dayOfWeek', 'monthFrac'];
+
+// How fast stale news sentiment fades when there is no fresh coverage (per day),
+// and the same decay applied to future (news-less) forecast steps.
+const NEWS_DECAY = 0.85;
 
 /**
  * Compute one feature row at time index t.
@@ -179,6 +184,12 @@ export function featureRowAt(s, t) {
     }
   }
 
+  if (options.news && s.newsSent) {
+    row.push(s.newsSent[t] ?? 0); // decayed daily sentiment [-1,1]
+    row.push(s.newsSentEMA[t] ?? 0); // 5-day EMA of sentiment
+    row.push(Math.log1p(s.newsCount[t] ?? 0)); // article-volume (attention) signal
+  }
+
   if (options.calendar) {
     const d = new Date(dates[t] * 1000);
     row.push(d.getUTCDay() / 6);
@@ -197,15 +208,46 @@ export function featureNames(options, macroKeys = MACRO_SERIES.map((m) => m.key)
   if (options.macro) {
     for (const m of MACRO_SERIES) if (macroKeys.includes(m.key)) names.push(`macro:${m.key}`);
   }
+  if (options.news) names.push(...NEWS_NAMES);
   if (options.calendar) names.push(...CAL_NAMES);
   return names;
+}
+
+/**
+ * Align a daily news-sentiment series onto candle dates: forward-fill sentiment
+ * with per-day decay toward neutral (so stale headlines fade), keep the raw
+ * article count per day (0 when none), and compute a 5-day EMA of sentiment.
+ * @param {number[]} dates candle timestamps (epoch sec, ascending)
+ * @param {{date:string, score:number, count:number}[]} newsDaily
+ */
+function alignNews(dates, newsDaily) {
+  const byDay = new Map();
+  for (const d of newsDaily || []) if (d && d.date) byDay.set(d.date, d);
+  const sent = new Array(dates.length).fill(0);
+  const count = new Array(dates.length).fill(0);
+  const ema = new Array(dates.length).fill(0);
+  const k = 2 / (5 + 1);
+  for (let i = 0; i < dates.length; i += 1) {
+    const day = new Date(dates[i] * 1000).toISOString().slice(0, 10);
+    const hit = byDay.get(day);
+    if (hit) {
+      sent[i] = Number(hit.score) || 0;
+      count[i] = Number(hit.count) || 0;
+    } else {
+      sent[i] = i > 0 ? sent[i - 1] * NEWS_DECAY : 0; // fade prior sentiment
+      count[i] = 0;
+    }
+    ema[i] = i > 0 ? ema[i - 1] + k * (sent[i] - ema[i - 1]) : sent[i];
+  }
+  return { sent, count, ema };
 }
 
 /**
  * Build the supervised dataset from candles.
  * @param {{time:number, close:number, volume?:number}[]} targetCandles daily, ascending
  * @param {Record<string, {time:number, close:number}[]>} macroCandles by MACRO_SERIES key
- * @param {{technical:boolean, macro:boolean, calendar:boolean}} options
+ * @param {{technical:boolean, macro:boolean, calendar:boolean, news?:boolean}} options
+ * @param {{date:string, score:number, count:number}[]} [newsDaily] daily sentiment (optional)
  * @returns {{
  *   dates:number[], closes:number[], volumes:number[], macroFF:Record<string,number[]>|null,
  *   state:object, names:string[], rows:number[][], targets:number[], firstRowIndex:number
@@ -213,7 +255,7 @@ export function featureNames(options, macroKeys = MACRO_SERIES.map((m) => m.key)
  *   rows[i] is the feature row at time index (firstRowIndex + i); targets[i] is
  *   the log return from that day to the next.
  */
-export function buildDataset(targetCandles, macroCandles, options) {
+export function buildDataset(targetCandles, macroCandles, options, newsDaily = null) {
   const rowsIn = (targetCandles || []).filter((c) => c && Number.isFinite(c.close) && c.close > 0);
   rowsIn.sort((a, b) => a.time - b.time);
   const dates = rowsIn.map((c) => c.time);
@@ -252,17 +294,26 @@ export function buildDataset(targetCandles, macroCandles, options) {
   }
   const macroKeys = macroFF ? Object.keys(macroFF) : [];
 
+  // Align the daily news sentiment onto candle dates (forward-fill + decay).
+  let news = null;
+  if (options.news && newsDaily && newsDaily.length) news = alignNews(dates, newsDaily);
+
   const state = {
     closes,
     volumes,
     dates,
     macroFF,
-    options,
+    options: { ...options, news: !!news }, // if no news data, drop the feature group cleanly
+    newsSent: news ? news.sent : null,
+    newsCount: news ? news.count : null,
+    newsSentEMA: news ? news.ema : null,
     ema12: emaSeries(closes, 12),
     ema26: emaSeries(closes, 26),
   };
 
-  const names = featureNames(options, macroKeys);
+  // Names must match the EFFECTIVE options (news is dropped when no data), so
+  // rows and names always have the same width.
+  const names = featureNames(state.options, macroKeys);
   const rows = [];
   const targets = [];
   const firstRowIndex = WARMUP;
@@ -300,6 +351,7 @@ export async function recursiveForecast(dataset, predictFn, horizon) {
   const macroFF = dataset.macroFF
     ? Object.fromEntries(Object.entries(dataset.macroFF).map(([k, v]) => [k, v.slice()]))
     : null;
+  const hasNews = !!dataset.state.newsSent;
   const state = {
     ...dataset.state,
     closes,
@@ -308,6 +360,9 @@ export async function recursiveForecast(dataset, predictFn, horizon) {
     macroFF,
     ema12: dataset.state.ema12.slice(),
     ema26: dataset.state.ema26.slice(),
+    newsSent: hasNews ? dataset.state.newsSent.slice() : null,
+    newsCount: hasNews ? dataset.state.newsCount.slice() : null,
+    newsSentEMA: hasNews ? dataset.state.newsSentEMA.slice() : null,
   };
 
   // Rebuild the rows history (training rows end one day early — add today's).
@@ -337,6 +392,14 @@ export async function recursiveForecast(dataset, predictFn, horizon) {
     // Extend the EMA caches incrementally.
     state.ema12.push(state.ema12[state.ema12.length - 1] == null ? null : newClose * k12 + state.ema12[state.ema12.length - 1] * (1 - k12));
     state.ema26.push(state.ema26[state.ema26.length - 1] == null ? null : newClose * k26 + state.ema26[state.ema26.length - 1] * (1 - k26));
+    // No future news exists — decay sentiment toward neutral, zero the volume.
+    if (hasNews) {
+      const prevSent = state.newsSent[state.newsSent.length - 1] * 0.85;
+      state.newsSent.push(prevSent);
+      state.newsCount.push(0);
+      const kEma = 2 / 6;
+      state.newsSentEMA.push(state.newsSentEMA[state.newsSentEMA.length - 1] + kEma * (prevSent - state.newsSentEMA[state.newsSentEMA.length - 1]));
+    }
 
     rowsHistory.push(featureRowAt(state, closes.length - 1));
     outDates.push(dates[dates.length - 1]);

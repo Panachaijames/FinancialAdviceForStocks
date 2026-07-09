@@ -11,9 +11,10 @@ export const FORECAST_DEFAULTS = {
   range: '2y',
   horizon: 30,
   models: { arima: true, gbdt: true, lstm: true },
-  feats: { technical: true, macro: true, calendar: true },
+  // news defaults off — it's US-equity-only and adds a fetch; opt in per run.
+  feats: { technical: true, macro: true, calendar: true, news: false },
   params: {
-    arimaP: '5', arimaQ: '1',
+    arimaAuto: true, arimaP: '5', arimaQ: '1', arimaMaxP: '5', arimaMaxQ: '5',
     trees: '300', depth: '3', lr: '0.05',
     window: '30', units: '32', epochs: '60',
   },

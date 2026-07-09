@@ -173,6 +173,68 @@ export function fitArima(logPrices, { p = 5, q = 1 } = {}) {
 }
 
 /**
+ * Auto-ARIMA: grid-search the AR/MA orders and keep the best by information
+ * criterion, mimicking Hyndman's auto.arima intent (though via exhaustive
+ * search, not the stepwise heuristic). d is fixed at 1 (log prices are I(1)).
+ *
+ * Fair comparison: every candidate is scored on the SAME evaluation window
+ * — one-step residuals over [startCommon, n) where startCommon is chosen to be
+ * at least every candidate's stage-2 start — so models with different lag
+ * counts are compared on identical observations. AIC/BIC use the Gaussian
+ * form dropping the shared constant:
+ *   AIC = N·ln(SSE/N) + 2k ,  BIC = N·ln(SSE/N) + k·ln(N) ,  k = 1 + p + q.
+ *
+ * @param {number[]} logPrices daily log prices
+ * @param {{maxP?:number, maxQ?:number, criterion?:'aic'|'bic'}} [opts]
+ * @returns {{
+ *   best:{p:number,q:number}, model: ReturnType<typeof fitArima>,
+ *   criterion:'aic'|'bic',
+ *   table:{p:number,q:number,aic:number,bic:number,ok:boolean}[]
+ * }}
+ */
+export function autoArima(logPrices, { maxP = 5, maxQ = 5, criterion = 'aic' } = {}) {
+  checkLogPrices(logPrices);
+  const r = diff(logPrices);
+  const n = r.length;
+  if (n < 60) throw new Error('Need at least 60 data points');
+
+  maxP = Math.max(0, Math.min(12, Math.floor(maxP)));
+  maxQ = Math.max(0, Math.min(12, Math.floor(maxQ)));
+  const crit = criterion === 'bic' ? 'bic' : 'aic';
+
+  // A common evaluation start >= every candidate's stage-2 t0 (m <= 20).
+  const startCommon = Math.min(n - 20, Math.max(maxP, 20 + maxQ));
+  const N = n - startCommon;
+  if (N <= maxP + maxQ + 5) throw new Error('Not enough data for the requested order grid');
+
+  const table = [];
+  let best = null;
+  for (let p = 0; p <= maxP; p += 1) {
+    for (let q = 0; q <= maxQ; q += 1) {
+      if (p === 0 && q === 0) continue;
+      let model;
+      try {
+        model = fitArima(logPrices, { p, q });
+      } catch {
+        table.push({ p, q, aic: Infinity, bic: Infinity, ok: false });
+        continue;
+      }
+      let sse = 0;
+      for (let t = startCommon; t < n; t += 1) sse += model.residuals[t] * model.residuals[t];
+      const k = 1 + p + q;
+      const base = N * Math.log(sse / N);
+      const aic = base + 2 * k;
+      const bic = base + k * Math.log(N);
+      table.push({ p, q, aic, bic, ok: true });
+      const score = crit === 'bic' ? bic : aic;
+      if (!best || score < best.score) best = { p, q, score, model };
+    }
+  }
+  if (!best) throw new Error('Auto-ARIMA found no viable model');
+  return { best: { p: best.p, q: best.q }, model: best.model, criterion: crit, table };
+}
+
+/**
  * Forecast `horizon` steps ahead on the LOG-price scale.
  * Point forecasts iterate the ARMA recursion with future shocks set to 0;
  * the 95% band uses psi weights accumulated for the integrated series.
