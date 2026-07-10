@@ -19,7 +19,6 @@ import RebalancePanel from './components/RebalancePanel.jsx';
 import BenchmarkPanel from './components/BenchmarkPanel.jsx';
 import PlanView from './components/plan/PlanView.jsx';
 import FundsPanel from './components/plan/FundsPanel.jsx';
-import IntroOverlay from './components/IntroOverlay.jsx';
 import Aurora from './components/fx/Aurora.jsx';
 import SlidingTabs from './components/fx/SlidingTabs.jsx';
 import TickerTape from './components/fx/TickerTape.jsx';
@@ -58,7 +57,6 @@ export default function App() {
   return (
     <div className="app-root">
       <Aurora />
-      <IntroOverlay />
       <Header />
       <TickerTape />
 
