@@ -34,7 +34,7 @@ export default function PortfolioSummary() {
   const transactions = usePortfolioStore((s) => s.transactions);
   const displayCurrency = useSettingsStore((s) => s.displayCurrency);
   const symbols = useMemo(() => holdings.map((h) => h.symbol), [holdings]);
-  const { quotes } = useQuotes(symbols);
+  const { quotes, loading, error } = useQuotes(symbols);
   const { convert, rate, fx } = useFx();
   const { funds: fundRows } = useFunds();
 
@@ -158,6 +158,15 @@ export default function PortfolioSummary() {
     ready: quotesReady && fx != null,
   });
 
+  // Honest number states: skeleton while the first batch is in flight; once
+  // settled (or the fetch gave up), flag any holdings still valued at cost.
+  const showSkeleton = loading && !error && !quotesReady; // first load in flight
+  const quotedCount = holdings.filter((h) => {
+    const q = quotes[h.symbol];
+    return q && Number.isFinite(Number(q.price));
+  }).length;
+  const partial = !showSkeleton && quotedCount < holdings.length; // settled (or gave up) with gaps
+
   if (holdings.length === 0) return null;
 
   const cur = displayCurrency;
@@ -171,7 +180,12 @@ export default function PortfolioSummary() {
       icon: <Wallet size={16} />,
       value: totals.marketValue,
       format: fmtCur,
-      sub: `Cost ${fmtMoney(totals.cost, cur)}`,
+      sub: partial
+        ? `Cost ${fmtMoney(totals.cost, cur)} · ${quotedCount}/${holdings.length} priced live`
+        : `Cost ${fmtMoney(totals.cost, cur)}`,
+      subTitle: partial
+        ? 'Holdings without a live quote are valued at your average cost'
+        : undefined,
       color: theme.colors.text,
       accent: theme.colors.accent,
     },
@@ -234,7 +248,10 @@ export default function PortfolioSummary() {
         gap: theme.space(3),
       }}
     >
-      {cards.map((c, i) => (
+      {cards.map((c, i) => {
+        // Realized P/L derives from recorded transactions, not quotes — no skeleton.
+        const skel = showSkeleton && c.key !== 'realized';
+        return (
         <Reveal key={c.key} delay={Math.min(i * 70, 350)} style={{ minWidth: 0 }}>
           <SpotlightCard
             className="panel"
@@ -263,7 +280,10 @@ export default function PortfolioSummary() {
               <span style={{ color: c.accent, display: 'flex' }}>{c.icon}</span>
               {c.label}
             </div>
-            {c.key === 'mv' ? (
+            {skel ? (
+              /* First quote batch in flight — never tween from cost-basis zeros */
+              <div className="skeleton" style={{ height: 26, width: '70%' }} />
+            ) : c.key === 'mv' ? (
               /* Market Value gets the mechanical rolling-digit odometer */
               <Odometer
                 value={c.value}
@@ -291,10 +311,13 @@ export default function PortfolioSummary() {
                 }}
               />
             )}
-            <div style={{ fontSize: 13, color: c.color, fontWeight: 600 }}>{c.sub}</div>
+            <div style={{ fontSize: 13, color: c.color, fontWeight: 600 }} title={c.subTitle}>
+              {skel ? ' ' : c.sub}
+            </div>
           </SpotlightCard>
         </Reveal>
-      ))}
+        );
+      })}
     </div>
     </>
   );

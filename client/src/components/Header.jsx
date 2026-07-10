@@ -20,6 +20,7 @@ const FX_TITLE = {
  */
 export default function Header() {
   const [connected, setConnected] = useState(false);
+  const [everConnected, setEverConnected] = useState(false);
   const fxMode = useSettingsStore((s) => s.fxMode);
   const setFxMode = useSettingsStore((s) => s.setFxMode);
   const glassMode = useSettingsStore((s) => s.glassMode);
@@ -27,15 +28,14 @@ export default function Header() {
 
   useEffect(() => {
     marketSocket.ensureConnected();
-    const offQuote = marketSocket.onQuote(() => setConnected(true));
-    const offFx = marketSocket.onFx(() => setConnected(true));
-    // Optimistically mark connected shortly after mount; live ticks confirm it.
-    const t = setTimeout(() => setConnected(true), 1200);
-    return () => {
-      clearTimeout(t);
-      offQuote && offQuote();
-      offFx && offFx();
-    };
+    // Seed from the socket's real current state (it may already be open).
+    setConnected(marketSocket.connected);
+    if (marketSocket.connected) setEverConnected(true);
+    const off = marketSocket.onStatus((on) => {
+      setConnected(on);
+      if (on) setEverConnected(true);
+    });
+    return off;
   }, []);
 
   const cycleFx = () =>
@@ -86,15 +86,21 @@ export default function Header() {
         </button>
         <div
           className="app-conn"
-          title={connected ? 'Live market data connected' : 'Connecting to live data…'}
+          title={
+            connected
+              ? 'Live market data connected'
+              : everConnected
+                ? 'Connection lost — reconnecting to live data…'
+                : 'Connecting to live data…'
+          }
         >
           {connected ? (
             <span className="live-dot" aria-hidden="true" />
           ) : (
             <span className="conn-dot-off" aria-hidden="true" />
           )}
-          <span className="app-conn-label" data-on={connected ? '1' : '0'}>
-            {connected ? 'Live' : 'Offline'}
+          <span className="app-conn-label" data-on={connected ? '1' : '0'} aria-live="polite">
+            {connected ? 'Live' : everConnected ? 'Reconnecting…' : 'Offline'}
           </span>
         </div>
         <CurrencyToggle />

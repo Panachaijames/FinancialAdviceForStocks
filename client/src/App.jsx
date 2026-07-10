@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { theme } from './lib/theme.js';
 import { assetMeta } from './lib/assetType.js';
+import { motionEnabled } from './lib/motion.js';
 import { usePortfolioStore } from './store/portfolioStore.js';
 import marketSocket from './api/socket.js';
 
@@ -8,7 +9,7 @@ import Header from './components/Header.jsx';
 import AddAssetBar from './components/AddAssetBar.jsx';
 import PortfolioSummary from './components/PortfolioSummary.jsx';
 import AllocationDonut from './components/AllocationDonut.jsx';
-import AssetCard from './components/AssetCard.jsx';
+import HoldingsSection from './components/HoldingsSection.jsx';
 import DividendPanel from './components/DividendPanel.jsx';
 import NewsPanel from './components/NewsPanel.jsx';
 import ChartModal from './components/ChartModal.jsx';
@@ -17,12 +18,13 @@ import TransactionsPanel from './components/TransactionsPanel.jsx';
 import AlertsPanel from './components/AlertsPanel.jsx';
 import RebalancePanel from './components/RebalancePanel.jsx';
 import BenchmarkPanel from './components/BenchmarkPanel.jsx';
+import UndoRemoveBar from './components/UndoRemoveBar.jsx';
 import PlanView from './components/plan/PlanView.jsx';
 import FundsPanel from './components/plan/FundsPanel.jsx';
 import Aurora from './components/fx/Aurora.jsx';
 import SlidingTabs from './components/fx/SlidingTabs.jsx';
 import TickerTape from './components/fx/TickerTape.jsx';
-import Reveal, { RevealGroup } from './components/fx/Reveal.jsx';
+import Reveal from './components/fx/Reveal.jsx';
 
 // Heavy page (TensorFlow.js etc.) — its chunk loads only when the tab opens.
 const ForecastView = React.lazy(() => import('./components/forecast/ForecastView.jsx'));
@@ -42,7 +44,17 @@ export default function App() {
   const holdings = usePortfolioStore((s) => s.holdings);
   const addHolding = usePortfolioStore((s) => s.addHolding);
   const [selected, setSelected] = useState(null);
-  const [view, setView] = useState('portfolio'); // 'portfolio' | 'plan'
+  const [view, setView] = useState('portfolio'); // 'portfolio' | 'plan' | 'forecast'
+
+  // Lazy-first-visit gate: a pane's children mount only once its tab has been
+  // opened, and then stay mounted forever. Charts (lightweight-charts) measure
+  // their container on mount, so the first mount must happen while visible —
+  // never inside display:none (0px width). After that, the panes' own
+  // ResizeObservers self-heal on re-show.
+  const [visited, setVisited] = useState({ portfolio: true, plan: false, forecast: false });
+  useEffect(() => {
+    setVisited((v) => (v[view] ? v : { ...v, [view]: true }));
+  }, [view]);
 
   // Open the live socket as soon as the app mounts.
   useEffect(() => {
@@ -74,88 +86,122 @@ export default function App() {
           ]}
         />
 
-        {/* Animated view container — the key remounts it on tab switch so the
-            new view fades/slides in (.view-anim; disabled under data-motion). */}
-        <div key={view} className="view-anim" style={sectionGap}>
-        {view === 'plan' ? (
-          <PlanView />
-        ) : view === 'forecast' ? (
-          <Suspense
-            fallback={
-              <div style={{ padding: theme.space(8), textAlign: 'center', color: theme.colors.textDim, fontSize: 13 }}>
-                Loading forecast lab…
-              </div>
-            }
-          >
-            <ForecastView />
-          </Suspense>
-        ) : (
-          <>
-            <AddAssetBar />
+        {/* All three views stay mounted after first visit; ViewPane toggles
+            visibility and retriggers the .view-anim entrance on activation.
+            No remount means AI Insights text, benchmark runs, fetched news,
+            forecast training state, and panel open-states all survive tab
+            switches (and useQuotes subscriptions stop churning). */}
+        <ViewPane active={view === 'portfolio'}>
+          <AddAssetBar />
 
-            {holdings.length === 0 ? (
-              <>
+          {holdings.length === 0 ? (
+            <>
+              <FundsPanel />
+              <EmptyState onQuickAdd={(sr) => addHolding(sr, { shares: 0, avgCost: 0 })} />
+            </>
+          ) : (
+            <div style={sectionGap}>
+              <PortfolioSummary />
+
+              <Reveal blur={0} distance={16}>
+                <AllocationDonut />
+              </Reveal>
+
+              <Reveal blur={0} distance={16}>
+                <AlertsPanel />
+              </Reveal>
+
+              <Reveal blur={0} distance={16}>
+                <InsightsPanel />
+              </Reveal>
+
+              <HoldingsSection onOpenChart={openChart} />
+
+              <Reveal blur={0} distance={16}>
+                <TransactionsPanel />
+              </Reveal>
+
+              <Reveal blur={0} distance={16}>
+                <RebalancePanel />
+              </Reveal>
+
+              <Reveal blur={0} distance={16}>
+                <BenchmarkPanel />
+              </Reveal>
+
+              <Reveal blur={0} distance={16}>
                 <FundsPanel />
-                <EmptyState onQuickAdd={(sr) => addHolding(sr, { shares: 0, avgCost: 0 })} />
-              </>
-            ) : (
-              <div style={sectionGap}>
-                <PortfolioSummary />
+              </Reveal>
 
-                <Reveal blur={0} distance={16}>
-                  <AllocationDonut />
-                </Reveal>
+              <Reveal blur={0} distance={16}>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(0, 1fr)',
+                    gap: theme.space(5),
+                  }}
+                >
+                  <DividendPanel />
+                  <NewsPanel />
+                </div>
+              </Reveal>
+            </div>
+          )}
+        </ViewPane>
 
-                <Reveal blur={0} distance={16}>
-                  <AlertsPanel />
-                </Reveal>
+        <ViewPane active={view === 'plan'}>
+          {visited.plan ? <PlanView /> : null}
+        </ViewPane>
 
-                <Reveal blur={0} distance={16}>
-                  <InsightsPanel />
-                </Reveal>
-
-                <RevealGroup className="cards-grid" step={55} maxDelay={360} blur={4}>
-                  {holdings.map((h) => (
-                    <AssetCard key={h.id} holding={h} onOpen={() => openChart(h.symbol)} />
-                  ))}
-                </RevealGroup>
-
-                <Reveal blur={0} distance={16}>
-                  <TransactionsPanel />
-                </Reveal>
-
-                <Reveal blur={0} distance={16}>
-                  <RebalancePanel />
-                </Reveal>
-
-                <Reveal blur={0} distance={16}>
-                  <BenchmarkPanel />
-                </Reveal>
-
-                <Reveal blur={0} distance={16}>
-                  <FundsPanel />
-                </Reveal>
-
-                <Reveal blur={0} distance={16}>
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'minmax(0, 1fr)',
-                      gap: theme.space(5),
-                    }}
-                  >
-                    <DividendPanel />
-                    <NewsPanel />
-                  </div>
-                </Reveal>
-              </div>
-            )}
-          </>
-        )}
-        </div>
+        <ViewPane active={view === 'forecast'}>
+          {visited.forecast ? (
+            <Suspense
+              fallback={
+                <div style={{ padding: theme.space(8), textAlign: 'center', color: theme.colors.textDim, fontSize: 13 }}>
+                  Loading forecast lab…
+                </div>
+              }
+            >
+              <ForecastView />
+            </Suspense>
+          ) : null}
+        </ViewPane>
       </div>
 
       {selected ? <ChartModal symbol={selected} onClose={closeChart} /> : null}
+      <UndoRemoveBar />
+    </div>
+  );
+}
+
+/**
+ * Always-mounted view wrapper. Hides via inline display:'none' (NOT the
+ * `hidden` attribute — any inline display would override it) and replays the
+ * existing .view-anim entrance on activation by removing/re-adding the class
+ * around a forced reflow, so the tab-switch slide survives without a remount.
+ */
+function ViewPane({ active, children }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!active) return;
+    const el = ref.current;
+    if (!el || !motionEnabled()) return;
+    // Retrigger the .view-anim entrance without remounting children.
+    el.classList.remove('view-anim');
+    void el.offsetWidth; // force reflow so the animation restarts
+    el.classList.add('view-anim');
+  }, [active]);
+  return (
+    <div
+      ref={ref}
+      className="view-anim"
+      style={{
+        display: active ? 'flex' : 'none',
+        flexDirection: 'column',
+        gap: theme.space(5),
+      }}
+    >
+      {children}
     </div>
   );
 }

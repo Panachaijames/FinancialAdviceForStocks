@@ -17,6 +17,9 @@ export const useSettingsStore = create(
       // Glassmorphism: frosted translucent panels over the aurora. Stamped by
       // main.jsx onto <html data-glass>.
       glassMode: false,
+      // Holdings grid ordering. key: 'added'|'value'|'day'|'pl'|'symbol'; dir: 'asc'|'desc'.
+      // Default 'added'/'asc' reproduces the historical insertion order exactly.
+      holdingsSort: { key: 'added', dir: 'asc' },
 
       /**
        * Set the display currency ('USD' | 'THB').
@@ -67,19 +70,35 @@ export const useSettingsStore = create(
         const clamped = Math.max(1000, Math.min(60000, v));
         set({ refreshMs: clamped });
       },
+
+      /** Set holdings sort; validates key/dir and merges partial patches. */
+      setHoldingsSort(patch) {
+        const VALID = ['added', 'value', 'day', 'pl', 'symbol'];
+        const cur = get().holdingsSort || { key: 'added', dir: 'asc' };
+        const next = { ...cur, ...(patch || {}) };
+        if (!VALID.includes(next.key)) next.key = 'added';
+        next.dir = next.dir === 'desc' ? 'desc' : 'asc';
+        set({ holdingsSort: next });
+      },
     }),
     {
       name: 'pt-settings',
-      version: 2,
+      version: 3,
       // v1 -> v2: effects now default ON (the user wants animations even on
       // machines whose OS asks for reduced motion). Users who explicitly chose
       // 'off' keep it; everyone still on the old 'auto' default is upgraded.
+      // v2 -> v3: holdingsSort added with a safe default.
       // NOTE: never bump `version` without a migrate fn — persist would
       // otherwise DISCARD the saved state.
-      migrate(persisted) {
+      migrate(persisted, version) {
         const state = persisted || {};
-        if (state.fxMode !== 'off') state.fxMode = 'on';
-        if (typeof state.glassMode !== 'boolean') state.glassMode = false;
+        if (version < 2) {
+          if (state.fxMode !== 'off') state.fxMode = 'on';
+          if (typeof state.glassMode !== 'boolean') state.glassMode = false;
+        }
+        if (!state.holdingsSort || typeof state.holdingsSort !== 'object' || typeof state.holdingsSort.key !== 'string') {
+          state.holdingsSort = { key: 'added', dir: 'asc' };
+        }
         return state;
       },
     }

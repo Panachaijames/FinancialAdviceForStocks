@@ -20,8 +20,11 @@ class QuotesManager {
     this.refCounts = new Map(); // symbol -> number of mounted hooks wanting it
     this.listeners = new Set(); // React re-render callbacks
     this.pending = new Set(); // symbols awaiting the next coalesced fetch
+    this.settled = new Set(); // symbols whose batch completed (even with no quote back)
     this.timer = null;
     this.wsHooked = false;
+    this.retryCount = 0; // consecutive failed batch fetches
+    this.loadError = false; // true after a failed batch until a success
   }
 
   _hookWs() {
@@ -32,6 +35,7 @@ class QuotesManager {
       const existing = this.quotes[q.symbol];
       // Merge so partial ticks don't wipe fields.
       this.quotes = { ...this.quotes, [q.symbol]: existing ? { ...existing, ...q } : q };
+      this.settled.add(q.symbol); // a live tick settles the symbol too
       this._emit();
     });
   }
@@ -76,14 +80,32 @@ class QuotesManager {
       if (!syms.length) return;
       getQuotes(syms)
         .then((arr) => {
-          if (!Array.isArray(arr) || arr.length === 0) return;
-          const next = { ...this.quotes };
-          for (const q of arr) if (q && q.symbol) next[q.symbol] = q;
-          this.quotes = next;
-          this._emit();
+          this.retryCount = 0;
+          this.loadError = false;
+          // The batch COMPLETED: every requested symbol is settled, even ones
+          // the server had no quote for (delisted/bad symbol). Without this,
+          // `loading` would stay true forever and the UI would shimmer
+          // indefinitely instead of falling back honestly to cost basis.
+          for (const s of syms) this.settled.add(s);
+          if (Array.isArray(arr) && arr.length > 0) {
+            const next = { ...this.quotes };
+            for (const q of arr) if (q && q.symbol) next[q.symbol] = q;
+            this.quotes = next;
+          }
+          this._emit(); // settled/error state changed even if no data arrived
         })
         .catch(() => {
-          /* ignore — live WS updates may still arrive */
+          // Retry with backoff: 2s, 8s, 30s, then give up until a new subscribe.
+          this.loadError = true;
+          const delays = [2000, 8000, 30000];
+          const delay = delays[this.retryCount];
+          if (delay != null) {
+            this.retryCount += 1;
+            // Re-queue only symbols something still wants.
+            for (const s of syms) if (this.refCounts.has(s)) this.pending.add(s);
+            setTimeout(() => this._scheduleFetch(), delay);
+          }
+          this._emit(); // let hooks re-render into the error state
         });
     }, 60);
   }
@@ -108,7 +130,9 @@ const manager = new QuotesManager();
 
 /**
  * @param {string[]} symbols
- * @returns {{ quotes: Record<string, object>, loading: boolean }}
+ * @returns {{ quotes: Record<string, object>, loading: boolean, error: boolean }}
+ *   loading — some requested symbol has neither a quote nor a completed fetch
+ *   error   — the last batch fetch failed (cleared by the next success)
  */
 export function useQuotes(symbols) {
   const list = Array.isArray(symbols) ? symbols.filter(Boolean) : [];
@@ -129,8 +153,10 @@ export function useQuotes(symbols) {
   const syms = key ? key.split(',') : [];
   const quotes = {};
   for (const s of syms) if (manager.quotes[s]) quotes[s] = manager.quotes[s];
-  const loading = syms.length > 0 && syms.some((s) => !manager.quotes[s]);
-  return { quotes, loading };
+  const loading =
+    syms.length > 0 && syms.some((s) => !manager.quotes[s] && !manager.settled.has(s));
+  const error = manager.loadError;
+  return { quotes, loading, error };
 }
 
 export default useQuotes;

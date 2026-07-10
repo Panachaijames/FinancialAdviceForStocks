@@ -25,6 +25,7 @@ export const usePortfolioStore = create(
     (set, get) => ({
       holdings: [],
       transactions: [], // [{ id, symbol, side:'buy'|'sell', qty, price, fee, currency, at, realized?, costBasis?, prevShares, prevAvgCost }]
+      lastRemoved: null, // { holding, index, at } — most recent removeHolding, for undo (not persisted)
 
       /**
        * Add a holding from a search-result-like object.
@@ -88,12 +89,37 @@ export const usePortfolioStore = create(
 
       /**
        * Remove a holding by id (its ledger history is kept — realized P/L
-       * already banked should not vanish with the card).
+       * already banked should not vanish with the card). Stashes the removed
+       * holding in `lastRemoved` so the UI can offer a brief undo.
        */
       removeHolding(id) {
+        const idx = get().holdings.findIndex((h) => h.id === id);
+        if (idx === -1) return;
+        const holding = get().holdings[idx];
         set((state) => ({
           holdings: state.holdings.filter((h) => h.id !== id),
+          lastRemoved: { holding, index: idx, at: Date.now() },
         }));
+      },
+
+      /** Restore the last removed holding at its original position. */
+      restoreRemoved() {
+        const lr = get().lastRemoved;
+        if (!lr || !lr.holding) return;
+        set((state) => {
+          // Guard against double-restore or a re-added symbol in the meantime.
+          if (state.holdings.some((h) => h.id === lr.holding.id || h.symbol === lr.holding.symbol)) {
+            return { lastRemoved: null };
+          }
+          const next = state.holdings.slice();
+          next.splice(Math.min(lr.index, next.length), 0, lr.holding);
+          return { holdings: next, lastRemoved: null };
+        });
+      },
+
+      /** Dismiss the pending undo without restoring. */
+      clearRemoved() {
+        if (get().lastRemoved) set({ lastRemoved: null });
       },
 
       /**
@@ -220,6 +246,8 @@ export const usePortfolioStore = create(
     {
       name: 'pt-portfolio',
       version: 2,
+      // Only the real collections persist; transient undo state stays in memory.
+      partialize: (state) => ({ holdings: state.holdings, transactions: state.transactions }),
       // v1 -> v2: the trade ledger arrived; older snapshots just get an empty one.
       migrate(persisted) {
         const state = persisted || {};

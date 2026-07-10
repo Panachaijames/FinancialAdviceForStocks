@@ -12,6 +12,7 @@ class MarketSocket {
 
     this.quoteListeners = new Set();
     this.fxListeners = new Set();
+    this.statusListeners = new Set();
 
     this.reconnectAttempts = 0;
     this.reconnectTimer = null;
@@ -65,6 +66,7 @@ class MarketSocket {
       this.connecting = false;
       this.connected = true;
       this.reconnectAttempts = 0;
+      this._emitStatus();
       // Re-subscribe to all active symbols.
       const symbols = Array.from(this.subscriptions.keys());
       if (symbols.length) {
@@ -113,6 +115,7 @@ class MarketSocket {
       this.connecting = false;
       this.connected = false;
       this.ws = null;
+      this._emitStatus();
       if (this.shouldConnect) {
         this._scheduleReconnect();
       }
@@ -130,6 +133,16 @@ class MarketSocket {
       this.reconnectTimer = null;
       this._connect();
     }, delay);
+  }
+
+  _emitStatus() {
+    for (const cb of this.statusListeners) {
+      try {
+        cb(this.connected);
+      } catch {
+        /* listener errors must not break the loop */
+      }
+    }
   }
 
   _send(obj) {
@@ -208,6 +221,20 @@ class MarketSocket {
     this.ensureConnected();
     return () => {
       this.fxListeners.delete(cb);
+    };
+  }
+
+  /**
+   * Register a connection-status listener. Called with (connected:boolean)
+   * on every open/close. Returns an unsubscribe function.
+   * Seed initial state from the public `connected` field before subscribing.
+   * @param {(connected:boolean)=>void} cb
+   */
+  onStatus(cb) {
+    if (typeof cb !== 'function') return () => {};
+    this.statusListeners.add(cb);
+    return () => {
+      this.statusListeners.delete(cb);
     };
   }
 }

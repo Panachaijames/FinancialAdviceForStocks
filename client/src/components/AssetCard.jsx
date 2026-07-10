@@ -60,7 +60,7 @@ export default function AssetCard({ holding, onOpen }) {
   const native = holding.currency || (type === 'th_stock' ? 'THB' : 'USD');
   const meta = assetMeta(type);
 
-  const { quotes } = useQuotes([symbol]);
+  const { quotes, loading, error } = useQuotes([symbol]);
   const { convert } = useFx();
   const displayCurrency = useSettingsStore((s) => s.displayCurrency);
   const updateHolding = usePortfolioStore((s) => s.updateHolding);
@@ -76,6 +76,9 @@ export default function AssetCard({ holding, onOpen }) {
   const price = q && Number.isFinite(Number(q.price)) ? Number(q.price) : null;
   const changePct = q && Number.isFinite(Number(q.changePct)) ? Number(q.changePct) : null;
   const ext = extendedQuote(q);
+
+  const priceLoading = !q && loading && !error; // first batch still in flight
+  const priceMissing = !q && !priceLoading; // fetch failed / gave up — falling back to cost
 
   const effectivePrice = price != null ? price : Number(avgCost) || 0;
   const mvNative = (Number(shares) || 0) * effectivePrice;
@@ -147,8 +150,10 @@ export default function AssetCard({ holding, onOpen }) {
         className="panel"
         role="button"
         tabIndex={0}
+        aria-label={`Open ${symbol} chart`}
         onClick={() => onOpen && onOpen()}
         onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return; // let inner buttons handle their own keys
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
             onOpen && onOpen();
@@ -245,22 +250,32 @@ export default function AssetCard({ holding, onOpen }) {
 
         {/* Price + day change */}
         <div style={{ display: 'flex', alignItems: 'baseline', gap: theme.space(2) }}>
-          <span
-            key={priceFlashKey}
-            className={priceFlashClass}
-            style={{
-              fontSize: 20,
-              fontWeight: 800,
-              fontFamily: theme.mono,
-              color: theme.colors.text,
-              borderRadius: theme.radius.sm,
-            }}
-          >
-            {price != null ? fmtMoney(convert(price, native), displayCurrency) : '—'}
-          </span>
-          <span style={{ fontSize: 13, fontWeight: 700, color: priceColor }}>
-            {changePct != null ? fmtSignedPct(changePct) : '—'}
-          </span>
+          {priceLoading ? (
+            <span
+              className="skeleton"
+              style={{ display: 'inline-block', width: 90, height: 20 }}
+              aria-label="Loading price"
+            />
+          ) : (
+            <span
+              key={priceFlashKey}
+              className={priceFlashClass}
+              style={{
+                fontSize: 20,
+                fontWeight: 800,
+                fontFamily: theme.mono,
+                color: theme.colors.text,
+                borderRadius: theme.radius.sm,
+              }}
+            >
+              {price != null ? fmtMoney(convert(price, native), displayCurrency) : '—'}
+            </span>
+          )}
+          {priceLoading ? null : (
+            <span style={{ fontSize: 13, fontWeight: 700, color: priceColor }}>
+              {changePct != null ? fmtSignedPct(changePct) : '—'}
+            </span>
+          )}
         </div>
 
         {/* Pre-market / after-hours (when the asset is in an extended session) */}
@@ -302,6 +317,13 @@ export default function AssetCard({ holding, onOpen }) {
           <MiniChart symbol={symbol} range="5d" live height={64} />
         </div>
 
+        {/* Live-quote failure: values below fall back to cost basis */}
+        {priceMissing && (
+          <div style={{ fontSize: 11, color: theme.colors.textDim }}>
+            Live price unavailable — showing cost basis
+          </div>
+        )}
+
         {/* Holdings + market value + P/L */}
         <div
           style={{
@@ -332,7 +354,18 @@ export default function AssetCard({ holding, onOpen }) {
               Market Value
             </div>
             <div style={{ color: theme.colors.text, fontFamily: theme.mono, fontWeight: 700 }}>
-              <CountUp value={mvDisplay} format={(n) => fmtMoney(n, displayCurrency)} />
+              {priceLoading ? (
+                <div className="skeleton" style={{ width: 70, height: 15, marginLeft: 'auto' }} />
+              ) : priceMissing ? (
+                <div
+                  style={{ color: theme.colors.textDim }}
+                  title="No live price — valued at your cost"
+                >
+                  <CountUp value={mvDisplay} format={(n) => fmtMoney(n, displayCurrency)} />
+                </div>
+              ) : (
+                <CountUp value={mvDisplay} format={(n) => fmtMoney(n, displayCurrency)} />
+              )}
             </div>
           </div>
         </div>
@@ -356,9 +389,20 @@ export default function AssetCard({ holding, onOpen }) {
           >
             Total P/L
           </span>
-          <span style={{ fontSize: 13, fontWeight: 700, color: plColor, fontFamily: theme.mono }}>
-            {fmtMoney(plDisplay, displayCurrency)} ({fmtSignedPct(plPct)})
-          </span>
+          {priceLoading ? (
+            <span className="skeleton" style={{ display: 'inline-block', width: 70, height: 13 }} />
+          ) : (
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 700,
+                color: priceMissing ? theme.colors.textDim : plColor,
+                fontFamily: theme.mono,
+              }}
+            >
+              {fmtMoney(plDisplay, displayCurrency)} ({fmtSignedPct(plPct)})
+            </span>
+          )}
         </div>
 
         {/* Realized P/L banked from recorded sells */}
