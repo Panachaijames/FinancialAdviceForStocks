@@ -19,6 +19,9 @@ import BenchmarkPanel from './components/BenchmarkPanel.jsx';
 import PlanView from './components/plan/PlanView.jsx';
 import FundsPanel from './components/plan/FundsPanel.jsx';
 import IntroOverlay from './components/IntroOverlay.jsx';
+import Aurora from './components/fx/Aurora.jsx';
+import SlidingTabs from './components/fx/SlidingTabs.jsx';
+import Reveal, { RevealGroup } from './components/fx/Reveal.jsx';
 
 // Heavy page (TensorFlow.js etc.) — its chunk loads only when the tab opens.
 const ForecastView = React.lazy(() => import('./components/forecast/ForecastView.jsx'));
@@ -52,37 +55,23 @@ export default function App() {
 
   return (
     <div className="app-root">
+      <Aurora />
       <IntroOverlay />
       <Header />
 
       <div className="app-container">
         {/* View switch */}
-        <div className="segmented view-tabs" role="tablist" aria-label="View">
-          {[
-            ['portfolio', 'Portfolio'],
-            ['plan', 'Plan'],
-            ['forecast', 'Forecast'],
-          ].map(([key, label]) => {
-            const active = view === key;
-            return (
-              <button
-                key={key}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                className="segmented-item"
-                onClick={() => setView(key)}
-                style={{
-                  background: active ? theme.colors.accent : 'transparent',
-                  color: active ? '#fff' : theme.colors.textDim,
-                  fontWeight: active ? 700 : 600,
-                }}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
+        <SlidingTabs
+          className="view-tabs"
+          ariaLabel="View"
+          value={view}
+          onChange={setView}
+          items={[
+            { key: 'portfolio', label: 'Portfolio' },
+            { key: 'plan', label: 'Plan' },
+            { key: 'forecast', label: 'Forecast' },
+          ]}
+        />
 
         {view === 'plan' ? (
           <PlanView />
@@ -109,34 +98,48 @@ export default function App() {
               <div style={sectionGap}>
                 <PortfolioSummary />
 
-                <AlertsPanel />
+                <Reveal blur={0} distance={16}>
+                  <AlertsPanel />
+                </Reveal>
 
-                <InsightsPanel />
+                <Reveal blur={0} distance={16}>
+                  <InsightsPanel />
+                </Reveal>
 
-                <div className="cards-grid">
+                <RevealGroup className="cards-grid" step={55} maxDelay={360} blur={4}>
                   {holdings.map((h) => (
                     <AssetCard key={h.id} holding={h} onOpen={() => openChart(h.symbol)} />
                   ))}
-                </div>
+                </RevealGroup>
 
-                <TransactionsPanel />
+                <Reveal blur={0} distance={16}>
+                  <TransactionsPanel />
+                </Reveal>
 
-                <RebalancePanel />
+                <Reveal blur={0} distance={16}>
+                  <RebalancePanel />
+                </Reveal>
 
-                <BenchmarkPanel />
+                <Reveal blur={0} distance={16}>
+                  <BenchmarkPanel />
+                </Reveal>
 
-                <FundsPanel />
+                <Reveal blur={0} distance={16}>
+                  <FundsPanel />
+                </Reveal>
 
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'minmax(0, 1fr)',
-                    gap: theme.space(5),
-                  }}
-                >
-                  <DividendPanel />
-                  <NewsPanel />
-                </div>
+                <Reveal blur={0} distance={16}>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'minmax(0, 1fr)',
+                      gap: theme.space(5),
+                    }}
+                  >
+                    <DividendPanel />
+                    <NewsPanel />
+                  </div>
+                </Reveal>
               </div>
             )}
           </>

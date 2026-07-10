@@ -10,6 +10,9 @@ import useFunds from '../hooks/useFunds.js';
 import { getDividend } from '../api/client.js';
 import { computeDividendIncome } from '../lib/dividends.js';
 import { realizedByCurrency } from '../lib/trades.js';
+import CountUp from './fx/CountUp.jsx';
+import SpotlightCard from './fx/SpotlightCard.jsx';
+import Reveal from './fx/Reveal.jsx';
 
 const DIV_TYPES = new Set(['us_stock', 'etf', 'th_stock']);
 
@@ -141,12 +144,15 @@ export default function PortfolioSummary() {
 
   const cur = displayCurrency;
 
+  // `value` is the RAW number; CountUp tweens it and `format` renders currency.
+  const fmtCur = (n) => fmtMoney(n, cur);
   const cards = [
     {
       key: 'mv',
       label: 'Market Value',
       icon: <Wallet size={16} />,
-      value: fmtMoney(totals.marketValue, cur),
+      value: totals.marketValue,
+      format: fmtCur,
       sub: `Cost ${fmtMoney(totals.cost, cur)}`,
       color: theme.colors.text,
       accent: theme.colors.accent,
@@ -155,7 +161,8 @@ export default function PortfolioSummary() {
       key: 'pl',
       label: 'Total P/L',
       icon: totals.pl >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />,
-      value: fmtMoney(totals.pl, cur),
+      value: totals.pl,
+      format: fmtCur,
       sub: fmtSignedPct(totals.plPct),
       color: colorForChange(totals.pl),
       accent: colorForChange(totals.pl),
@@ -164,7 +171,8 @@ export default function PortfolioSummary() {
       key: 'today',
       label: "Today's Change",
       icon: <Activity size={16} />,
-      value: fmtMoney(totals.todayChange, cur),
+      value: totals.todayChange,
+      format: fmtCur,
       sub: fmtSignedPct(totals.todayPct),
       color: colorForChange(totals.todayChange),
       accent: colorForChange(totals.todayChange),
@@ -173,7 +181,8 @@ export default function PortfolioSummary() {
       key: 'div',
       label: 'Annual Dividends',
       icon: <Coins size={16} />,
-      value: fmtMoney(totals.annualDividend, cur),
+      value: totals.annualDividend,
+      format: fmtCur,
       sub: `${totals.yieldPct.toFixed(2)}% yield`,
       color: totals.annualDividend > 0 ? theme.colors.gold : theme.colors.textDim,
       accent: theme.colors.gold,
@@ -185,7 +194,8 @@ export default function PortfolioSummary() {
             key: 'realized',
             label: 'Realized P/L',
             icon: <BadgeDollarSign size={16} />,
-            value: fmtMoney(realized, cur),
+            value: realized,
+            format: fmtCur,
             sub: 'from recorded sells',
             color: colorForChange(realized),
             accent: colorForChange(realized),
@@ -202,46 +212,50 @@ export default function PortfolioSummary() {
         gap: theme.space(3),
       }}
     >
-      {cards.map((c) => (
-        <div
-          key={c.key}
-          className="panel"
-          style={{
-            padding: theme.space(3),
-            display: 'flex',
-            flexDirection: 'column',
-            gap: theme.space(1),
-            borderLeft: `3px solid ${c.accent}`,
-          }}
-        >
-          <div
+      {cards.map((c, i) => (
+        <Reveal key={c.key} delay={Math.min(i * 70, 350)} style={{ minWidth: 0 }}>
+          <SpotlightCard
+            className="panel"
+            glowColor={c.accent + '26'}
             style={{
+              height: '100%',
+              padding: theme.space(3),
               display: 'flex',
-              alignItems: 'center',
+              flexDirection: 'column',
               gap: theme.space(1),
-              color: theme.colors.textDim,
-              fontSize: 12,
-              fontWeight: 600,
-              textTransform: 'uppercase',
-              letterSpacing: 0.4,
+              borderLeft: `3px solid ${c.accent}`,
             }}
           >
-            <span style={{ color: c.accent, display: 'flex' }}>{c.icon}</span>
-            {c.label}
-          </div>
-          <div
-            style={{
-              fontSize: 24,
-              fontWeight: 800,
-              color: c.color,
-              fontFamily: theme.mono,
-              lineHeight: 1.1,
-            }}
-          >
-            {c.value}
-          </div>
-          <div style={{ fontSize: 13, color: c.color, fontWeight: 600 }}>{c.sub}</div>
-        </div>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: theme.space(1),
+                color: theme.colors.textDim,
+                fontSize: 12,
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: 0.4,
+              }}
+            >
+              <span style={{ color: c.accent, display: 'flex' }}>{c.icon}</span>
+              {c.label}
+            </div>
+            <CountUp
+              value={c.value}
+              format={c.format}
+              style={{
+                fontSize: 24,
+                fontWeight: 800,
+                color: c.color,
+                fontFamily: theme.mono,
+                lineHeight: 1.1,
+                display: 'block',
+              }}
+            />
+            <div style={{ fontSize: 13, color: c.color, fontWeight: 600 }}>{c.sub}</div>
+          </SpotlightCard>
+        </Reveal>
       ))}
     </div>
   );

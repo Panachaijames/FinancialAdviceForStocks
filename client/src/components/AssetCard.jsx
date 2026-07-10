@@ -5,11 +5,14 @@ import { fmtMoney, fmtNumber, fmtSignedPct, classForChange } from '../lib/format
 import { assetMeta } from '../lib/assetType.js';
 import useQuotes from '../hooks/useQuotes.js';
 import useFx from '../hooks/useFx.js';
+import usePriceFlash from '../hooks/usePriceFlash.js';
 import { usePortfolioStore } from '../store/portfolioStore.js';
 import { useSettingsStore } from '../store/settingsStore.js';
 import { getDividend } from '../api/client.js';
 import { computeDividendIncome } from '../lib/dividends.js';
 import MiniChart from './MiniChart.jsx';
+import SpotlightCard from './fx/SpotlightCard.jsx';
+import CountUp from './fx/CountUp.jsx';
 import HoldingEditor from './HoldingEditor.jsx';
 import TradeDialog from './TradeDialog.jsx';
 import AlertDialog from './AlertDialog.jsx';
@@ -132,12 +135,15 @@ export default function AssetCard({ holding, onOpen }) {
   const priceColor = colorForChange(changePct);
   const plColor = colorForChange(plNative);
 
+  // Trading-terminal tick flash on the live price number.
+  const { className: priceFlashClass, flashKey: priceFlashKey } = usePriceFlash(price);
+
   // Realized P/L already banked on this symbol (from recorded sells).
   const realized = realizedBySymbol(transactions)[symbol];
 
   return (
     <>
-      <div
+      <SpotlightCard
         className="panel"
         role="button"
         tabIndex={0}
@@ -240,11 +246,14 @@ export default function AssetCard({ holding, onOpen }) {
         {/* Price + day change */}
         <div style={{ display: 'flex', alignItems: 'baseline', gap: theme.space(2) }}>
           <span
+            key={priceFlashKey}
+            className={priceFlashClass}
             style={{
               fontSize: 20,
               fontWeight: 800,
               fontFamily: theme.mono,
               color: theme.colors.text,
+              borderRadius: theme.radius.sm,
             }}
           >
             {price != null ? fmtMoney(convert(price, native), displayCurrency) : '—'}
@@ -323,7 +332,7 @@ export default function AssetCard({ holding, onOpen }) {
               Market Value
             </div>
             <div style={{ color: theme.colors.text, fontFamily: theme.mono, fontWeight: 700 }}>
-              {fmtMoney(mvDisplay, displayCurrency)}
+              <CountUp value={mvDisplay} format={(n) => fmtMoney(n, displayCurrency)} />
             </div>
           </div>
         </div>
@@ -404,7 +413,7 @@ export default function AssetCard({ holding, onOpen }) {
             {fmtMoney(divLine.annual, displayCurrency)}/yr
           </div>
         )}
-      </div>
+      </SpotlightCard>
 
       {editing && (
         <HoldingEditor

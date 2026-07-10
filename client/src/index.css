@@ -725,3 +725,336 @@ ul {
 @keyframes introFade {
   to { opacity: 0; visibility: hidden; }
 }
+
+/* ============================================================================
+   FX SYSTEM — appended block. Aurora, Spotlight+Tilt, Gradient/Shiny text,
+   Reveal, Price-flash, Sliding tabs, Button sheen. Deduped; one reduced-motion
+   section at the end disables EVERY effect. Animates only transform / opacity /
+   filter / background-position / background-color / box-shadow (GPU-friendly,
+   no reflow). CountUp + Magnetic are JS-only (no CSS here).
+   ============================================================================ */
+
+/* Registered so the useSpotlight() glow alpha can transition (background-image
+   isn't transitionable, a registered <number> is). No-@property browsers snap. */
+@property --fx-glow-a {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
+/* ---------- Aurora: ambient animated-gradient background (fx/Aurora.jsx) ---- */
+.aurora {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  contain: strict;
+}
+.aurora-blob {
+  position: absolute;
+  width: 60vmax;
+  height: 60vmax;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.14;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+}
+.aurora-blob-1 {
+  top: -22vmax;
+  left: -18vmax;
+  background: radial-gradient(circle at center, var(--accent) 0%, rgba(59, 130, 246, 0) 68%);
+  opacity: 0.15;
+  animation: aurora-drift-1 24s ease-in-out infinite;
+}
+.aurora-blob-2 {
+  bottom: -26vmax;
+  right: -20vmax;
+  background: radial-gradient(circle at center, var(--up) 0%, rgba(34, 197, 94, 0) 68%);
+  opacity: 0.12;
+  animation: aurora-drift-2 29s ease-in-out infinite;
+}
+.aurora-blob-3 {
+  top: 18vmax;
+  left: 38vmax;
+  width: 48vmax;
+  height: 48vmax;
+  background: radial-gradient(circle at center, var(--crypto) 0%, rgba(167, 139, 250, 0) 66%);
+  opacity: 0.10;
+  animation: aurora-drift-3 33s ease-in-out infinite;
+}
+@keyframes aurora-drift-1 {
+  0%   { transform: translate3d(-6%, -4%, 0) scale(1); }
+  50%  { transform: translate3d(10%, 8%, 0) scale(1.18); }
+  100% { transform: translate3d(-6%, -4%, 0) scale(1); }
+}
+@keyframes aurora-drift-2 {
+  0%   { transform: translate3d(5%, 4%, 0) scale(1.05); }
+  50%  { transform: translate3d(-9%, -7%, 0) scale(1.2); }
+  100% { transform: translate3d(5%, 4%, 0) scale(1.05); }
+}
+@keyframes aurora-drift-3 {
+  0%   { transform: translate3d(-8%, 6%, 0) scale(1); }
+  50%  { transform: translate3d(8%, -8%, 0) scale(1.14); }
+  100% { transform: translate3d(-8%, 6%, 0) scale(1); }
+}
+
+/* ---------- Spotlight + tilt cards (fx/SpotlightCard.jsx, useSpotlight.js) --
+   NOTE ON TRANSFORM COMPOSITION: tilt/lift live on the CARD (.fx-spotlight or
+   the hook's element). The scroll Reveal transform lives on the OUTER .fx-reveal
+   wrapper. They are different DOM nodes, so they never clobber each other. */
+.fx-spotlight {
+  position: relative;
+  isolation: isolate;
+  transform: perspective(var(--fx-perspective, 800px)) rotateX(var(--fx-rx, 0deg))
+    rotateY(var(--fx-ry, 0deg)) translateY(var(--fx-lift, 0px));
+  transform-style: preserve-3d;
+  transition: transform 0.35s cubic-bezier(0.22, 0.61, 0.36, 1), box-shadow 0.35s ease;
+  will-change: transform;
+}
+.fx-spotlight-glow {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: var(--fx-glow-opacity, 0);
+  transition: opacity 0.35s ease;
+  background: radial-gradient(
+    var(--fx-glow-size, 280px) circle at var(--mx, 50%) var(--my, 50%),
+    var(--fx-glow-color, rgba(59, 130, 246, 0.16)) 0%,
+    transparent 70%
+  );
+}
+
+/* ---------- Shiny / Gradient text (fx/GradientText.jsx, fx/ShinyText.jsx) --- */
+.fx-gradient-text {
+  --fx-gt-duration: 7s;
+  background-image: var(
+    --fx-gt-gradient,
+    linear-gradient(90deg, var(--accent) 0%, var(--up) 30%, var(--crypto) 55%, var(--accent) 85%, var(--up) 100%)
+  );
+  background-size: 300% 100%;
+  background-position: 0% 50%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: fxGradientSweep var(--fx-gt-duration) linear infinite;
+  will-change: background-position;
+}
+@keyframes fxGradientSweep {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.fx-shiny-text {
+  --fx-st-base: var(--text);
+  --fx-st-sheen: rgba(255, 255, 255, 0.9);
+  --fx-st-duration: 6s;
+  background-image: linear-gradient(
+    110deg, var(--fx-st-base) 0%, var(--fx-st-base) 42%, var(--fx-st-sheen) 50%, var(--fx-st-base) 58%, var(--fx-st-base) 100%
+  );
+  background-size: 250% 100%;
+  background-position: 150% 0;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: var(--fx-st-base);
+  animation: fxShineSweep var(--fx-st-duration) ease-in-out infinite;
+  will-change: background-position;
+}
+@keyframes fxShineSweep {
+  0%   { background-position: 150% 0; }
+  22%  { background-position: -50% 0; }
+  100% { background-position: -50% 0; }
+}
+.app-brand-title[data-fx="gradient"] {
+  background-image: linear-gradient(
+    90deg, var(--accent) 0%, var(--up) 30%, var(--crypto) 55%, var(--accent) 85%, var(--up) 100%
+  );
+  background-size: 300% 100%;
+  background-position: 0% 50%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: fxGradientSweep 7s linear infinite;
+  will-change: background-position;
+}
+
+/* ---------- Reveal: staggered scroll-into-view (fx/Reveal.jsx) --------------
+   Transform lives on this OUTER wrapper; the card's tilt lives on the inner
+   .fx-spotlight — see composition note above. */
+.fx-reveal {
+  opacity: 0;
+  transform: translateY(var(--fx-reveal-y, 14px));
+  filter: blur(var(--fx-reveal-blur, 6px));
+  transition:
+    opacity 640ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    transform 640ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    filter 640ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  transition-delay: var(--fx-reveal-delay, 0ms);
+}
+.fx-reveal:not(.is-visible) {
+  will-change: opacity, transform, filter;
+}
+.fx-reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0);
+}
+/* A Reveal whose child component rendered null must not occupy a flex slot or
+   create a stray gap — collapse the empty wrapper entirely. */
+.fx-reveal:empty {
+  display: none;
+}
+
+/* ---------- Live price tick flash (hooks/usePriceFlash.js) ------------------ */
+.price-flash-up,
+.price-flash-down {
+  border-radius: var(--radius-sm);
+  animation-duration: 600ms;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+  will-change: background-color, color, box-shadow;
+}
+.price-flash-up { animation-name: priceFlashUp; }
+.price-flash-down { animation-name: priceFlashDown; }
+@keyframes priceFlashUp {
+  0%   { background-color: rgba(34, 197, 94, 0.28); color: var(--up); box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.20); }
+  55%  { background-color: rgba(34, 197, 94, 0.16); color: var(--up); box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.08); }
+  100% { background-color: rgba(34, 197, 94, 0);    color: inherit;  box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+}
+@keyframes priceFlashDown {
+  0%   { background-color: rgba(239, 68, 68, 0.28); color: var(--down); box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.20); }
+  55%  { background-color: rgba(239, 68, 68, 0.16); color: var(--down); box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.08); }
+  100% { background-color: rgba(239, 68, 68, 0);    color: inherit;    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+/* ---------- Sliding segmented tabs (fx/SlidingTabs.jsx) --------------------- */
+.sliding-tabs { position: relative; }
+.sliding-tabs .segmented-item {
+  position: relative;
+  z-index: 1;
+  background: transparent !important; /* beats .segmented-item[aria-selected] bg so only the pill shows accent */
+}
+.sliding-tabs .segmented-item[aria-selected='true'] {
+  color: #fff;
+  font-weight: 700;
+}
+.sliding-tabs__indicator {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 0;
+  border-radius: calc(var(--radius-md) - 3px);
+  background: var(--accent);
+  box-shadow: 0 2px 10px rgba(59, 130, 246, 0.35);
+  pointer-events: none;
+  will-change: transform, width;
+}
+.sliding-tabs__indicator--animate {
+  transition:
+    transform 0.28s cubic-bezier(0.4, 0.9, 0.25, 1),
+    width 0.28s cubic-bezier(0.4, 0.9, 0.25, 1);
+}
+
+/* ---------- Button sheen (hooks/useMagnetic.js pairs with this) ------------- */
+.btn-primary,
+.btn-shine {
+  position: relative;
+  overflow: hidden;
+}
+.btn-primary::after,
+.btn-shine::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 60%;
+  height: 100%;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(-180%) skewX(-20deg);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+}
+.btn-primary:hover::after,
+.btn-shine:hover::after {
+  animation: btnSheen 0.7s ease;
+}
+.btn-primary:disabled::after,
+.btn-shine:disabled::after {
+  animation: none;
+  opacity: 0;
+}
+@keyframes btnSheen {
+  0%   { transform: translateX(-180%) skewX(-20deg); opacity: 0; }
+  12%  { opacity: 1; }
+  100% { transform: translateX(240%) skewX(-20deg); opacity: 0; }
+}
+
+/* ============================================================================
+   CONSOLIDATED REDUCED-MOTION — disables every effect above in one place.
+   ============================================================================ */
+@media (prefers-reduced-motion: reduce) {
+  /* Aurora — freeze blobs at their resting (0%) pose */
+  .aurora-blob-1,
+  .aurora-blob-2,
+  .aurora-blob-3 { animation: none; }
+  .aurora-blob-1 { transform: translate3d(-6%, -4%, 0) scale(1); }
+  .aurora-blob-2 { transform: translate3d(5%, 4%, 0) scale(1.05); }
+  .aurora-blob-3 { transform: translate3d(-8%, 6%, 0) scale(1); }
+
+  /* Spotlight — no tilt/lift; glow may still appear but static */
+  .fx-spotlight {
+    transform: none !important;
+    transition: box-shadow 0.2s ease;
+    will-change: auto;
+  }
+  .fx-spotlight-glow { transition: opacity 0.2s ease; }
+
+  /* Gradient text — crisp static fill; shiny text — plain solid text */
+  .fx-gradient-text,
+  .app-brand-title[data-fx="gradient"] {
+    animation: none;
+    background-position: 0% 50%;
+  }
+  .fx-shiny-text {
+    animation: none;
+    background-image: none;
+    color: var(--fx-st-base);
+    -webkit-text-fill-color: var(--fx-st-base);
+  }
+
+  /* Reveal — render at resting state instantly (JS also inits visible=true) */
+  .fx-reveal {
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+    transition: none !important;
+    transition-delay: 0ms !important;
+    will-change: auto;
+  }
+
+  /* Price flash — number just updates, no wash/halo */
+  .price-flash-up,
+  .price-flash-down {
+    animation: none !important;
+    background-color: transparent !important;
+    box-shadow: none !important;
+  }
+
+  /* Sliding tabs — indicator jumps, no glide */
+  .sliding-tabs__indicator--animate { transition: none; }
+
+  /* Button sheen — no glare (magnetic drift is disabled in the hook's JS) */
+  .btn-primary::after,
+  .btn-shine::after { display: none; }
+  .btn-primary:hover::after,
+  .btn-shine:hover::after { animation: none; }
+}

@@ -7,6 +7,7 @@ import { usePlanStore } from '../store/planStore.js';
 import useQuotes from '../hooks/useQuotes.js';
 import useFx from '../hooks/useFx.js';
 import useFunds from '../hooks/useFunds.js';
+import useMagnetic from '../hooks/useMagnetic.js';
 import { getAnalysis } from '../api/client.js';
 import AiMarkdown from './AiMarkdown.jsx';
 
@@ -42,6 +43,8 @@ export default function InsightsPanel() {
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // Subtle "magnetic" pull on the Generate/Refresh button (fx).
+  const genMagnet = useMagnetic({ strength: 5 });
 
   useEffect(() => {
     let ok = true;
@@ -150,7 +153,10 @@ export default function InsightsPanel() {
         </div>
         <button
           type="button"
-          className="btn-ghost"
+          className="btn-ghost btn-shine"
+          ref={genMagnet.ref}
+          onPointerMove={genMagnet.onPointerMove}
+          onPointerLeave={genMagnet.onPointerLeave}
           onClick={run}
           disabled={loading}
           title="Generate an AI summary of your portfolio"

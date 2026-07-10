@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { TrendingUp } from 'lucide-react';
 import marketSocket from '../api/socket.js';
 import CurrencyToggle from './CurrencyToggle.jsx';
+import GradientText from './fx/GradientText.jsx';
 
 /**
  * App header: brand, live connection status, and currency toggle.
@@ -32,7 +33,7 @@ export default function Header() {
           <TrendingUp size={22} strokeWidth={2.5} />
         </div>
         <div className="app-brand-text">
-          <span className="app-brand-title">PT Financial Advisor</span>
+          <GradientText className="app-brand-title">PT Financial Advisor</GradientText>
           <span className="app-brand-sub">Multi-asset portfolio dashboard</span>
         </div>
       </div>
