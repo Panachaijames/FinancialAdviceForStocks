@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Wallet, TrendingUp, TrendingDown, Coins, Activity, BadgeDollarSign } from 'lucide-react';
 import { theme } from '../lib/theme.js';
-import { fmtMoney, fmtSignedPct, classForChange } from '../lib/format.js';
+import { fmtMoney, fmtSignedPct, classForChange, convert as convertCurrency } from '../lib/format.js';
 import { useSettingsStore } from '../store/settingsStore.js';
 import { usePortfolioStore } from '../store/portfolioStore.js';
 import useQuotes from '../hooks/useQuotes.js';
@@ -13,6 +13,9 @@ import { realizedByCurrency } from '../lib/trades.js';
 import CountUp from './fx/CountUp.jsx';
 import SpotlightCard from './fx/SpotlightCard.jsx';
 import Reveal from './fx/Reveal.jsx';
+import Odometer from './fx/Odometer.jsx';
+import CelebrationBurst from './fx/CelebrationBurst.jsx';
+import useAllTimeHigh from '../hooks/useAllTimeHigh.js';
 
 const DIV_TYPES = new Set(['us_stock', 'etf', 'th_stock']);
 
@@ -32,7 +35,7 @@ export default function PortfolioSummary() {
   const displayCurrency = useSettingsStore((s) => s.displayCurrency);
   const symbols = useMemo(() => holdings.map((h) => h.symbol), [holdings]);
   const { quotes } = useQuotes(symbols);
-  const { convert } = useFx();
+  const { convert, rate, fx } = useFx();
   const { funds: fundRows } = useFunds();
 
   // Lazily fetch dividends for dividend-paying holdings; cache by symbol.
@@ -140,6 +143,21 @@ export default function PortfolioSummary() {
   }, [transactions, convert]);
   const hasSells = useMemo(() => (transactions || []).some((t) => t && t.side === 'sell'), [transactions]);
 
+  // All-time-high tracking (currency-stable in USD). Guards: only once every
+  // holding has a LIVE quote AND the real FX rate has loaded — otherwise the
+  // avgCost/DEFAULT_RATE fallbacks could seed a bogus high-water mark.
+  const quotesReady =
+    holdings.length > 0 &&
+    holdings.every((h) => {
+      const q = quotes[h.symbol];
+      return q && Number.isFinite(Number(q.price));
+    });
+  const usdTotal = convertCurrency(totals.marketValue, displayCurrency, 'USD', rate);
+  const { celebrating, dismiss } = useAllTimeHigh({
+    usdValue: usdTotal,
+    ready: quotesReady && fx != null,
+  });
+
   if (holdings.length === 0) return null;
 
   const cur = displayCurrency;
@@ -205,6 +223,10 @@ export default function PortfolioSummary() {
   ];
 
   return (
+    <>
+      {celebrating && (
+        <CelebrationBurst value={totals.marketValue} currency={displayCurrency} onDone={dismiss} />
+      )}
     <div
       style={{
         display: 'grid',
@@ -241,22 +263,39 @@ export default function PortfolioSummary() {
               <span style={{ color: c.accent, display: 'flex' }}>{c.icon}</span>
               {c.label}
             </div>
-            <CountUp
-              value={c.value}
-              format={c.format}
-              style={{
-                fontSize: 24,
-                fontWeight: 800,
-                color: c.color,
-                fontFamily: theme.mono,
-                lineHeight: 1.1,
-                display: 'block',
-              }}
-            />
+            {c.key === 'mv' ? (
+              /* Market Value gets the mechanical rolling-digit odometer */
+              <Odometer
+                value={c.value}
+                format={c.format}
+                style={{
+                  fontSize: 24,
+                  fontWeight: 800,
+                  color: c.color,
+                  fontFamily: theme.mono,
+                  lineHeight: 1.1,
+                  display: 'block',
+                }}
+              />
+            ) : (
+              <CountUp
+                value={c.value}
+                format={c.format}
+                style={{
+                  fontSize: 24,
+                  fontWeight: 800,
+                  color: c.color,
+                  fontFamily: theme.mono,
+                  lineHeight: 1.1,
+                  display: 'block',
+                }}
+              />
+            )}
             <div style={{ fontSize: 13, color: c.color, fontWeight: 600 }}>{c.sub}</div>
           </SpotlightCard>
         </Reveal>
       ))}
     </div>
+    </>
   );
 }

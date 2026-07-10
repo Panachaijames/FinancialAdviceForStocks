@@ -9,10 +9,14 @@ export const useSettingsStore = create(
       refreshMs: 5000,
       analysisGoal: '', // user's stated objective for the AI Insights panel
       analysisAge: '', // optional age -> lets the AI reason about risk capacity / horizon
-      // UI effects: 'auto' follows the OS reduced-motion setting, 'on' forces
-      // animations (e.g. Windows boxes where IT disabled animation effects),
-      // 'off' disables them. Resolved by lib/motion.js onto <html data-motion>.
-      fxMode: 'auto',
+      // UI effects: 'on' (default) forces animations even where the OS asks for
+      // reduced motion (e.g. Windows boxes where IT disabled animation effects),
+      // 'auto' follows the OS setting, 'off' disables them. Resolved by
+      // lib/motion.js onto <html data-motion>.
+      fxMode: 'on',
+      // Glassmorphism: frosted translucent panels over the aurora. Stamped by
+      // main.jsx onto <html data-glass>.
+      glassMode: false,
 
       /**
        * Set the display currency ('USD' | 'THB').
@@ -46,6 +50,14 @@ export const useSettingsStore = create(
         set({ fxMode: m === 'on' || m === 'off' ? m : 'auto' });
       },
 
+      /** Toggle / set glassmorphism panels. */
+      setGlassMode(v) {
+        set({ glassMode: !!v });
+      },
+      toggleGlassMode() {
+        set({ glassMode: !get().glassMode });
+      },
+
       /**
        * Set the refresh interval in milliseconds (clamped to a sane range).
        */
@@ -58,7 +70,18 @@ export const useSettingsStore = create(
     }),
     {
       name: 'pt-settings',
-      version: 1,
+      version: 2,
+      // v1 -> v2: effects now default ON (the user wants animations even on
+      // machines whose OS asks for reduced motion). Users who explicitly chose
+      // 'off' keep it; everyone still on the old 'auto' default is upgraded.
+      // NOTE: never bump `version` without a migrate fn — persist would
+      // otherwise DISCARD the saved state.
+      migrate(persisted) {
+        const state = persisted || {};
+        if (state.fxMode !== 'off') state.fxMode = 'on';
+        if (typeof state.glassMode !== 'boolean') state.glassMode = false;
+        return state;
+      },
     }
   )
 );

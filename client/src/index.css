@@ -1401,3 +1401,408 @@ ul {
 :root[data-motion='reduce'] .fx-border-beam::after {
   animation: none;
 }
+
+/* ============================================================================
+   FX v3 MASTER BLOCK — Chart draw-on wipe, Allocation donut, ATH celebration,
+   Rolling-digit odometer, Ticker sparklines, Glass mode.
+   Append at the VERY END of client/src/index.css (after the CONSOLIDATED
+   MOTION CONTRACT section, line 1403). No existing rules are edited.
+   New names verified against the reserved inventory AND between modules:
+   keyframes fxChartWipeCover, fxChartWipeEdge, athBurst, athToastIn;
+   classes .fx-chart-wipe*, .alloc-donut-seg, .alloc-legend-row, .ath-*,
+   .fx-odometer*, .ticker-spark. No new @property registrations.
+   Every animation/transition below has a :root[data-motion='reduce'] disable
+   rule (no @media prefers-reduced-motion anywhere); ALL glass styling keys
+   off :root[data-glass='1'] inside one @supports backdrop-filter guard.
+   ============================================================================ */
+
+/* ---------- Chart draw-on wipe (fx/ChartWipe.jsx) ---------- */
+/* Overlay dropped inside a position:relative chart container. Decorative:
+   never intercepts pointer events; clips the leading edge as it exits. */
+.fx-chart-wipe {
+  position: absolute;
+  inset: 0;
+  z-index: 6; /* above FullChart's loading overlay (4) and crosshair legend (5) */
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Panel-colored cover that uncovers the chart left-to-right. var(--panel)
+   matches the .modal-card background, so the covered state is seamless. */
+.fx-chart-wipe-cover {
+  position: absolute;
+  inset: 0;
+  background: var(--panel);
+  transform-origin: right center;
+  will-change: transform;
+  animation: fxChartWipeCover 900ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Full-size carrier for the leading edge. Translating this layer 0 -> 100%
+   with the SAME duration/curve as the cover's scaleX 1 -> 0 keeps its left
+   edge (the 2px line) exactly on the wipe front for the whole animation. */
+.fx-chart-wipe-edge {
+  position: absolute;
+  inset: 0;
+  will-change: transform, opacity;
+  animation: fxChartWipeEdge 900ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* The visible 2px "pen" line: vertical accent gradient with a soft glow. */
+.fx-chart-wipe-edge::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  background: linear-gradient(
+    180deg,
+    rgba(59, 130, 246, 0) 0%,
+    rgba(59, 130, 246, 0.85) 18%,
+    #9ec5ff 50%,
+    rgba(59, 130, 246, 0.85) 82%,
+    rgba(59, 130, 246, 0) 100%
+  );
+  box-shadow:
+    0 0 8px rgba(59, 130, 246, 0.55),
+    0 0 20px rgba(59, 130, 246, 0.28);
+}
+
+@keyframes fxChartWipeCover {
+  from { transform: scaleX(1); }
+  to   { transform: scaleX(0); }
+}
+
+@keyframes fxChartWipeEdge {
+  0%   { transform: translateX(0); opacity: 1; }
+  92%  { opacity: 1; }
+  100% { transform: translateX(100%); opacity: 0; }
+}
+
+/* ---------- Allocation donut (AllocationDonut.jsx) ---------- */
+/* Legend rows are real buttons (keyboard-focusable highlight targets). */
+.alloc-legend-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+.alloc-legend-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ---------- All-time-high celebration (fx/CelebrationBurst.jsx) ---------- */
+/* Full-viewport overlay: never intercepts input, never shifts layout.
+   LAYERING DECISION: 1200 — ABOVE .modal-backdrop (1000), below the intro
+   (9999). Below the backdrop the toast would render dimmed behind
+   rgba(4,6,11,.7)+blur and be unclickable (the backdrop intercepts pointer
+   events) — a transient toast conventionally owns the layer above modals. */
+.ath-celebration {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  pointer-events: none;
+}
+
+/* Particle origin: bottom-center of the viewport. */
+.ath-burst {
+  position: absolute;
+  left: 50%;
+  bottom: -4px;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.ath-particle {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: athBurst var(--dur, 1100ms) cubic-bezier(0.16, 0.6, 0.35, 1)
+    var(--delay, 0ms) both;
+}
+
+/* Fountain arc: launch up-and-out, hang at 60%, then fall back and fade.
+   transform + opacity only — fully composited. */
+@keyframes athBurst {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(0.6);
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  60% {
+    transform: translate3d(var(--tx), var(--ty), 0) rotate(var(--rot)) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(calc(var(--tx) * 1.12), calc(var(--ty) * 0.55), 0)
+      rotate(calc(var(--rot) * 1.3)) scale(0.55);
+    opacity: 0;
+  }
+}
+
+/* Toast pill: top-center, slides down in. Clickable to dismiss early. */
+.ath-toast {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translate(-50%, 0);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  background: var(--panel-elev);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(245, 158, 11, 0.14);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: auto;
+  cursor: pointer;
+  animation: athToastIn 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.08) both;
+}
+
+.ath-toast-value {
+  color: var(--gold);
+  font-weight: 800;
+}
+
+@keyframes athToastIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -18px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+/* ---------- Odometer — rolling-digit (split-flap) display (fx/Odometer.jsx) -- */
+.fx-odometer {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* Visually-hidden real text: screen readers announce ONE plain number while
+   the sighted view is the aria-hidden column stack (role="text" is
+   non-standard ARIA, so the hidden-text pattern is used instead). */
+.fx-odometer-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+/* Digit cells and static cells share identical box metrics (1em tall,
+   overflow hidden) so every character sits on the same baseline. */
+.fx-odometer-cell,
+.fx-odometer-static {
+  display: inline-block;
+  height: 1em;
+  line-height: 1;
+  overflow: hidden;
+  text-align: center;
+}
+.fx-odometer-cell {
+  width: 1ch;
+}
+.fx-odometer-strip {
+  display: block;
+  transition-property: transform; /* transform-only: compositor, no layout */
+  transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1); /* fast spin, mechanical settle */
+  will-change: transform;
+}
+.fx-odometer-digit {
+  display: block;
+  height: 1em;
+  line-height: 1;
+}
+
+/* ── Ticker sparklines (tiny 1-day intraday SVGs inside .ticker-item) ──── */
+/* Static decorative SVGs: no animation, no transitions — nothing to disable
+   under :root[data-motion='reduce']; the existing reduce rules (frozen track,
+   manual overflow-x scroll, hidden duplicate half) already cover the tape. */
+.ticker-spark {
+  display: block;
+  flex: none;
+  vertical-align: middle;
+}
+
+/* ============================================================================
+   FX v3 MOTION CONTRACT — :root[data-motion='reduce'] disables every
+   animation/transition introduced above (JS gates already prevent most of
+   this DOM from mounting; these are the mid-session-toggle belt-and-braces).
+   ============================================================================ */
+
+/* Chart wipe — kills fxChartWipeCover + fxChartWipeEdge in one shot; the
+   chart simply appears instantly. */
+:root[data-motion='reduce'] .fx-chart-wipe {
+  display: none;
+}
+
+/* Allocation donut — no sweep-in; hover stroke-width/opacity snap instantly
+   (beats the inline per-segment transition string). */
+:root[data-motion='reduce'] .alloc-donut-seg {
+  transition: none !important;
+}
+
+/* ATH celebration — the hook never mounts it under reduced motion
+   (motionEnabled() gate); if it ever renders, keep it inert + invisible. */
+:root[data-motion='reduce'] .ath-particle {
+  animation: none;
+  display: none;
+}
+:root[data-motion='reduce'] .ath-toast {
+  animation: none;
+}
+
+/* Odometer — strips snap instantly (JS gate already renders a plain string;
+   this covers a live FX-toggle flip before React re-renders). */
+:root[data-motion='reduce'] .fx-odometer-strip {
+  transition: none !important;
+  will-change: auto;
+}
+
+/* ============================================================================
+   GLASS MODE — frosted surfaces over the aurora. Activated by main.jsx
+   stamping <html data-glass='1'> from the settings store's glassMode toggle.
+   Every rule keys off :root[data-glass='1'] ONLY and lives inside this
+   @supports guard, so browsers without backdrop-filter get ZERO change —
+   they keep the solid --panel surfaces exactly as today.
+   STATIC styling only — no keyframes, no transitions — so there is nothing
+   for :root[data-motion='reduce'] to disable; glass composes freely with any
+   data-motion state (with motion reduced the aurora is frozen and the
+   frosted panels simply refract a static backdrop).
+   CONTRAST: .panel alpha 0.55 keeps the effective surface dark even over the
+   hottest boosted aurora blob: 0.55·#141925 over ~rgb(23,44,79) composites to
+   ~rgb(21,34,56) — --text ≈ 12.9:1, --text-dim ≈ 6.3:1 (>= 4.5:1). Inputs use
+   a darker 0.72 alpha for form readability.
+   ============================================================================ */
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  /* ---- Panels: the core glass surface ---- */
+  :root[data-glass='1'] .panel {
+    background: rgba(20, 25, 37, 0.55);
+    -webkit-backdrop-filter: blur(14px) saturate(1.3);
+    backdrop-filter: blur(14px) saturate(1.3);
+    border-color: rgba(255, 255, 255, 0.09);
+  }
+
+  /* ---- App header: sticky over scrolling content — slightly more opaque
+     and a touch more blur than panels to keep brand/controls readable ---- */
+  :root[data-glass='1'] .app-header {
+    background: rgba(20, 25, 37, 0.66);
+    -webkit-backdrop-filter: blur(16px) saturate(1.3);
+    backdrop-filter: blur(16px) saturate(1.3);
+    border-bottom-color: rgba(255, 255, 255, 0.08);
+  }
+
+  /* ---- Ticker tape strip (sits right under the header) ---- */
+  :root[data-glass='1'] .ticker {
+    background: rgba(20, 25, 37, 0.55);
+    -webkit-backdrop-filter: blur(12px) saturate(1.25);
+    backdrop-filter: blur(12px) saturate(1.25);
+    border-bottom-color: rgba(255, 255, 255, 0.08);
+  }
+
+  /* ---- Modal: heavier frost + hairline top highlight; the backdrop gets a
+     stronger blur + slightly lighter dim ---- */
+  :root[data-glass='1'] .modal-card {
+    background: rgba(20, 25, 37, 0.62);
+    -webkit-backdrop-filter: blur(18px) saturate(1.3);
+    backdrop-filter: blur(18px) saturate(1.3);
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+  :root[data-glass='1'] .modal-backdrop {
+    background: rgba(4, 6, 11, 0.6);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+  }
+
+  /* ---- Segmented control track (active accent pill stays solid) ---- */
+  :root[data-glass='1'] .segmented {
+    background: rgba(15, 19, 32, 0.5);
+    -webkit-backdrop-filter: blur(10px) saturate(1.2);
+    backdrop-filter: blur(10px) saturate(1.2);
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  /* ---- Form controls: MORE opaque than panels (0.72) — users read and type
+     here, so the backdrop must not fight the text ---- */
+  :root[data-glass='1'] .input,
+  :root[data-glass='1'] .select-input {
+    background-color: rgba(15, 19, 32, 0.72);
+    -webkit-backdrop-filter: blur(10px) saturate(1.2);
+    backdrop-filter: blur(10px) saturate(1.2);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  /* ---- Chips ---- */
+  :root[data-glass='1'] .chip {
+    background: rgba(26, 32, 48, 0.5);
+    -webkit-backdrop-filter: blur(10px) saturate(1.2);
+    backdrop-filter: blur(10px) saturate(1.2);
+    border-color: rgba(255, 255, 255, 0.09);
+  }
+  :root[data-glass='1'] .chip:hover {
+    background: rgba(34, 42, 60, 0.7);
+    border-color: rgba(255, 255, 255, 0.16);
+  }
+
+  /* ---- Buttons: surface tint on the default variant only. .btn-primary
+     stays solid --accent and .btn-ghost stays transparent — both excluded
+     because this selector's (0,3,0) specificity would beat their
+     single-class rules. ---- */
+  :root[data-glass='1'] .btn:not(.btn-primary):not(.btn-ghost) {
+    background: rgba(26, 32, 48, 0.55);
+    -webkit-backdrop-filter: blur(10px) saturate(1.2);
+    backdrop-filter: blur(10px) saturate(1.2);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+  :root[data-glass='1'] .btn:not(.btn-primary):not(.btn-ghost):hover {
+    background: rgba(34, 42, 60, 0.7);
+    border-color: rgba(255, 255, 255, 0.16);
+  }
+
+  /* ---- ATH toast: frosted like other floating surfaces (moved inside this
+     guard from the celebration module so no-backdrop-filter browsers keep
+     the solid --panel-elev pill instead of a translucent one). ---- */
+  :root[data-glass='1'] .ath-toast {
+    background: rgba(26, 32, 48, 0.72);
+    -webkit-backdrop-filter: blur(14px) saturate(1.3);
+    backdrop-filter: blur(14px) saturate(1.3);
+  }
+
+  /* ---- Aurora: +0.07 on each blob so the frost has visible color to
+     refract (base values 0.19 / 0.16 / 0.13). The frozen data-motion=reduce
+     transforms are separate rules and unaffected (they never touch opacity). */
+  :root[data-glass='1'] .aurora-blob-1 { opacity: 0.26; }
+  :root[data-glass='1'] .aurora-blob-2 { opacity: 0.23; }
+  :root[data-glass='1'] .aurora-blob-3 { opacity: 0.2; }
+
+  /* ---- Spotlight glow lifts a touch on frosted surfaces. filter (not a
+     --fx-glow-color override) because SpotlightCard.jsx sets that var inline.
+     Static filter on a pointer-events:none decorative layer. ---- */
+  :root[data-glass='1'] .fx-spotlight-glow {
+    filter: brightness(1.3) saturate(1.25);
+  }
+}

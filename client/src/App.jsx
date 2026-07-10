@@ -7,6 +7,7 @@ import marketSocket from './api/socket.js';
 import Header from './components/Header.jsx';
 import AddAssetBar from './components/AddAssetBar.jsx';
 import PortfolioSummary from './components/PortfolioSummary.jsx';
+import AllocationDonut from './components/AllocationDonut.jsx';
 import AssetCard from './components/AssetCard.jsx';
 import DividendPanel from './components/DividendPanel.jsx';
 import NewsPanel from './components/NewsPanel.jsx';
@@ -102,6 +103,10 @@ export default function App() {
             ) : (
               <div style={sectionGap}>
                 <PortfolioSummary />
+
+                <Reveal blur={0} distance={16}>
+                  <AllocationDonut />
+                </Reveal>
 
                 <Reveal blur={0} distance={16}>
                   <AlertsPanel />

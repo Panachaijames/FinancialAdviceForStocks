@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { TrendingUp, Sparkles } from 'lucide-react';
+import { TrendingUp, Sparkles, Layers } from 'lucide-react';
 import marketSocket from '../api/socket.js';
 import { useSettingsStore } from '../store/settingsStore.js';
 import CurrencyToggle from './CurrencyToggle.jsx';
@@ -22,6 +22,8 @@ export default function Header() {
   const [connected, setConnected] = useState(false);
   const fxMode = useSettingsStore((s) => s.fxMode);
   const setFxMode = useSettingsStore((s) => s.setFxMode);
+  const glassMode = useSettingsStore((s) => s.glassMode);
+  const toggleGlassMode = useSettingsStore((s) => s.toggleGlassMode);
 
   useEffect(() => {
     marketSocket.ensureConnected();
@@ -62,6 +64,25 @@ export default function Header() {
         >
           <Sparkles size={13} aria-hidden="true" />
           FX {FX_LABEL[fxMode] || 'Auto'}
+        </button>
+        <button
+          type="button"
+          className="chip"
+          onClick={toggleGlassMode}
+          aria-pressed={glassMode}
+          title={
+            glassMode
+              ? 'Glass mode: On — frosted translucent panels over the aurora. Click to turn off.'
+              : 'Glass mode: Off — solid panels. Click for frosted-glass panels over the aurora.'
+          }
+          style={{
+            color: glassMode ? '#fff' : undefined,
+            background: glassMode ? 'var(--accent)' : undefined,
+            borderColor: glassMode ? 'var(--accent)' : undefined,
+          }}
+        >
+          <Layers size={13} aria-hidden="true" />
+          Glass
         </button>
         <div
           className="app-conn"

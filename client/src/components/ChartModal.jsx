@@ -7,6 +7,7 @@ import useFx from '../hooks/useFx.js';
 import { useSettingsStore } from '../store/settingsStore.js';
 import { fmtMoney, fmtSignedPct, classForChange } from '../lib/format.js';
 import FullChart from './FullChart.jsx';
+import ChartWipe from './fx/ChartWipe.jsx';
 import IndicatorControls, { DEFAULT_INDICATOR_CONFIG } from './IndicatorControls.jsx';
 import TradeScout from './TradeScout.jsx';
 
@@ -229,15 +230,19 @@ export default function ChartModal({ symbol, name, type, onClose }) {
           }}
         >
           <div style={{ display: 'flex', gap: theme.space(3), alignItems: 'flex-start', width: '100%' }}>
-            <FullChart
-              key={`${symbol}:${range}`}
-              symbol={symbol}
-              range={range}
-              interval="auto"
-              chartType={chartType}
-              logScale={logScale}
-              indicators={indicators}
-            />
+            {/* position:relative wrapper hosts the draw-on wipe over the chart */}
+            <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+              <FullChart
+                key={`${symbol}:${range}`}
+                symbol={symbol}
+                range={range}
+                interval="auto"
+                chartType={chartType}
+                logScale={logScale}
+                indicators={indicators}
+              />
+              <ChartWipe resetKey={`${symbol}:${range}`} />
+            </div>
             <IndicatorControls config={indicators} onChange={setIndicators} />
           </div>
           <TradeScout symbol={symbol} />
