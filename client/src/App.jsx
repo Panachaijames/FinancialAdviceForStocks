@@ -21,6 +21,7 @@ import FundsPanel from './components/plan/FundsPanel.jsx';
 import IntroOverlay from './components/IntroOverlay.jsx';
 import Aurora from './components/fx/Aurora.jsx';
 import SlidingTabs from './components/fx/SlidingTabs.jsx';
+import TickerTape from './components/fx/TickerTape.jsx';
 import Reveal, { RevealGroup } from './components/fx/Reveal.jsx';
 
 // Heavy page (TensorFlow.js etc.) — its chunk loads only when the tab opens.
@@ -58,6 +59,7 @@ export default function App() {
       <Aurora />
       <IntroOverlay />
       <Header />
+      <TickerTape />
 
       <div className="app-container">
         {/* View switch */}
@@ -73,6 +75,9 @@ export default function App() {
           ]}
         />
 
+        {/* Animated view container — the key remounts it on tab switch so the
+            new view fades/slides in (.view-anim; disabled under data-motion). */}
+        <div key={view} className="view-anim" style={sectionGap}>
         {view === 'plan' ? (
           <PlanView />
         ) : view === 'forecast' ? (
@@ -144,6 +149,7 @@ export default function App() {
             )}
           </>
         )}
+        </div>
       </div>
 
       {selected ? <ChartModal symbol={selected} onClose={closeChart} /> : null}

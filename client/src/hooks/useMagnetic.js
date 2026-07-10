@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useRef } from 'react';
+import { motionEnabled } from '../lib/motion.js';
 
 /**
  * useMagnetic — subtle "magnetic" pull toward the cursor (React Bits "Magnet").
@@ -13,8 +14,8 @@ import { useCallback, useEffect, useRef } from 'react';
  *   <button ref={mag.ref} onPointerMove={mag.onPointerMove}
  *           onPointerLeave={mag.onPointerLeave}>…</button>
  *
- * Respects prefers-reduced-motion: reduce — the handlers become no-ops and the
- * element stays at its resting position.
+ * Motion-gated via motionEnabled() (FX toggle + OS reduced motion): when
+ * disabled the move handler is a no-op and the element stays at rest.
  *
  * @param {object}  [opts]
  * @param {number}  [opts.strength=6]  Max travel in px toward the cursor.
@@ -25,33 +26,11 @@ import { useCallback, useEffect, useRef } from 'react';
 export default function useMagnetic(opts = {}) {
   const { strength = 6, padding = 0 } = opts;
   const ref = useRef(null);
-  const reduceRef = useRef(false);
-
-  // Track the reduced-motion preference (guarded for SSR / older browsers).
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return undefined;
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const apply = () => {
-      reduceRef.current = mq.matches;
-      // If the user flips to "reduce" mid-hover, snap back immediately.
-      if (mq.matches && ref.current) {
-        ref.current.style.transform = '';
-        ref.current.style.transition = '';
-      }
-    };
-    apply();
-    if (mq.addEventListener) mq.addEventListener('change', apply);
-    else if (mq.addListener) mq.addListener(apply);
-    return () => {
-      if (mq.removeEventListener) mq.removeEventListener('change', apply);
-      else if (mq.removeListener) mq.removeListener(apply);
-    };
-  }, []);
 
   const onPointerMove = useCallback(
     (e) => {
       const el = ref.current;
-      if (!el || reduceRef.current) return;
+      if (!el || !motionEnabled()) return;
       // Only react to a real cursor (mouse/pen); coarse touch pointers skip it.
       if (e.pointerType === 'touch') return;
 

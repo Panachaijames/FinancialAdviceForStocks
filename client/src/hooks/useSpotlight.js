@@ -1,15 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-
-/**
- * True when the user asked the OS to reduce motion. Guarded for non-browser envs.
- */
-function prefersReducedMotion() {
-  return (
-    typeof window !== 'undefined' &&
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  );
-}
+import { motionEnabled } from '../lib/motion.js';
 
 /**
  * useSpotlight — the wrapper-free variant of <SpotlightCard/>.
@@ -61,12 +51,13 @@ export default function useSpotlight(options = {}) {
   const ref = useRef(null);
   const raf = useRef(0);
 
-  const write = useCallback((el, { mx, my, rx, ry, liftPx, a }) => {
+  const write = useCallback((el, { mx, my, rx, ry, liftPx, sc, a }) => {
     el.style.setProperty('--mx', `${mx}px`);
     el.style.setProperty('--my', `${my}px`);
     el.style.setProperty('--fx-rx', `${rx}deg`);
     el.style.setProperty('--fx-ry', `${ry}deg`);
     el.style.setProperty('--fx-lift', `${liftPx}px`);
+    el.style.setProperty('--fx-sc', String(sc != null ? sc : 1));
     el.style.setProperty('--fx-glow-a', String(a));
     el.style.boxShadow = a > 0
       ? '0 12px 34px rgba(0,0,0,0.5), 0 0 0 1px rgba(59,130,246,0.10)'
@@ -80,7 +71,7 @@ export default function useSpotlight(options = {}) {
       const rect = el.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
-      const reduced = prefersReducedMotion();
+      const reduced = !motionEnabled();
       const nx = rect.width ? x / rect.width - 0.5 : 0;
       const ny = rect.height ? y / rect.height - 0.5 : 0;
       const doTilt = tilt && !reduced;
@@ -94,7 +85,8 @@ export default function useSpotlight(options = {}) {
             my: y,
             rx: doTilt ? -ny * maxTilt * 2 : 0,
             ry: doTilt ? nx * maxTilt * 2 : 0,
-            liftPx: doLift ? -2 : 0,
+            liftPx: doLift ? -3 : 0,
+            sc: doLift ? 1.015 : 1,
             a: alpha,
           });
         }
@@ -113,6 +105,7 @@ export default function useSpotlight(options = {}) {
       rx: 0,
       ry: 0,
       liftPx: 0,
+      sc: 1,
       a: 0,
     });
   }, [write]);
@@ -127,7 +120,7 @@ export default function useSpotlight(options = {}) {
   const style = {
     position: 'relative',
     transform:
-      'perspective(var(--fx-perspective, 800px)) rotateX(var(--fx-rx, 0deg)) rotateY(var(--fx-ry, 0deg)) translateY(var(--fx-lift, 0px))',
+      'perspective(var(--fx-perspective, 800px)) rotateX(var(--fx-rx, 0deg)) rotateY(var(--fx-ry, 0deg)) translateY(var(--fx-lift, 0px)) scale(var(--fx-sc, 1))',
     transformStyle: 'preserve-3d',
     transition:
       'transform 0.35s cubic-bezier(0.22, 0.61, 0.36, 1), box-shadow 0.35s ease, --fx-glow-a 0.35s ease',

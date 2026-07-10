@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { motionEnabled } from '../../lib/motion.js';
 
 /**
  * Reveal — staggered scroll-into-view reveal.
@@ -36,11 +37,6 @@ import React, { useEffect, useRef, useState } from 'react';
  *   style/className/…rest forwarded to the rendered element.
  */
 
-const REDUCED_MOTION =
-  typeof window !== 'undefined' &&
-  typeof window.matchMedia === 'function' &&
-  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
 const HAS_IO = typeof window !== 'undefined' && 'IntersectionObserver' in window;
 
 export default function Reveal({
@@ -56,12 +52,12 @@ export default function Reveal({
   children,
   ...rest
 }) {
-  // No observer available or motion is reduced => start at the resting state.
-  const [visible, setVisible] = useState(REDUCED_MOTION || !HAS_IO);
+  // No observer available or motion is disabled => start at the resting state.
+  const [visible, setVisible] = useState(() => !motionEnabled() || !HAS_IO);
   const ref = useRef(null);
 
   useEffect(() => {
-    if (REDUCED_MOTION || !HAS_IO) return undefined;
+    if (!motionEnabled() || !HAS_IO) return undefined;
     const el = ref.current;
     if (!el) return undefined;
 

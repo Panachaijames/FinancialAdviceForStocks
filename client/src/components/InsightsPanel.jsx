@@ -115,7 +115,7 @@ export default function InsightsPanel() {
 
   return (
     <div
-      className="panel"
+      className="panel fx-border-beam"
       style={{
         padding: theme.space(3),
         display: 'flex',

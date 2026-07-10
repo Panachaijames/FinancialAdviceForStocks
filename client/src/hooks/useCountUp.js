@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { motionEnabled } from '../lib/motion.js';
 
 /**
  * Cubic ease-out — fast start, gentle settle. Matches React Bits "CountUp".
@@ -7,16 +8,6 @@ import { useEffect, useRef, useState } from 'react';
 function easeOutCubic(t) {
   const clamped = t < 0 ? 0 : t > 1 ? 1 : t;
   return 1 - Math.pow(1 - clamped, 3);
-}
-
-/**
- * Detect the user's reduced-motion preference (SSR/JSDOM-safe).
- */
-function prefersReducedMotion() {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-    return false;
-  }
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
 /**
@@ -51,8 +42,8 @@ export default function useCountUp(value, { durationMs = 650 } = {}) {
       return undefined;
     }
 
-    // Reduced motion: snap to the final value.
-    if (prefersReducedMotion()) {
+    // Effects disabled (FX toggle off / OS reduced motion): snap to the value.
+    if (!motionEnabled()) {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       currentRef.current = target;
       setDisplay(target);

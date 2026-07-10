@@ -1,16 +1,5 @@
 import React, { useCallback, useEffect, useRef } from 'react';
-
-/**
- * True when the user asked the OS to reduce motion. Guarded so it is safe to
- * call during SSR / non-browser environments.
- */
-function prefersReducedMotion() {
-  return (
-    typeof window !== 'undefined' &&
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  );
-}
+import { motionEnabled } from '../../lib/motion.js';
 
 /**
  * SpotlightCard
@@ -49,9 +38,9 @@ export default function SpotlightCard({
   className = '',
   style,
   children,
-  glowColor = 'rgba(59, 130, 246, 0.16)', // accent (#3b82f6) at low alpha
-  glowSize = 280,
-  maxTilt = 5,
+  glowColor = 'rgba(59, 130, 246, 0.22)', // accent (#3b82f6) at low alpha
+  glowSize = 300,
+  maxTilt = 6,
   tilt = true,
   lift = true,
   onPointerMove,
@@ -62,12 +51,13 @@ export default function SpotlightCard({
   const ref = useRef(null);
   const raf = useRef(0);
 
-  const writeVars = useCallback((el, { mx, my, rx, ry, liftPx, glow }) => {
+  const writeVars = useCallback((el, { mx, my, rx, ry, liftPx, sc, glow }) => {
     el.style.setProperty('--mx', `${mx}px`);
     el.style.setProperty('--my', `${my}px`);
     el.style.setProperty('--fx-rx', `${rx}deg`);
     el.style.setProperty('--fx-ry', `${ry}deg`);
     el.style.setProperty('--fx-lift', `${liftPx}px`);
+    el.style.setProperty('--fx-sc', String(sc));
     el.style.setProperty('--fx-glow-opacity', String(glow));
     // Lift the card off the page with a slightly stronger, faintly accent-tinted
     // shadow while hovered; cleared on leave so it eases back to the flat panel.
@@ -83,7 +73,7 @@ export default function SpotlightCard({
         const rect = el.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
-        const reduced = prefersReducedMotion();
+        const reduced = !motionEnabled();
         const nx = rect.width ? x / rect.width - 0.5 : 0; // -0.5 .. 0.5
         const ny = rect.height ? y / rect.height - 0.5 : 0;
         const doTilt = tilt && !reduced;
@@ -94,7 +84,15 @@ export default function SpotlightCard({
         raf.current = requestAnimationFrame(() => {
           const node = ref.current;
           if (node) {
-            writeVars(node, { mx: x, my: y, rx, ry, liftPx: doLift ? -2 : 0, glow: 1 });
+            writeVars(node, {
+              mx: x,
+              my: y,
+              rx,
+              ry,
+              liftPx: doLift ? -3 : 0,
+              sc: doLift ? 1.015 : 1,
+              glow: 1,
+            });
           }
         });
       }
@@ -123,6 +121,7 @@ export default function SpotlightCard({
           rx: 0,
           ry: 0,
           liftPx: 0,
+          sc: 1,
           glow: 0,
         });
       }

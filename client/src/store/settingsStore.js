@@ -9,6 +9,10 @@ export const useSettingsStore = create(
       refreshMs: 5000,
       analysisGoal: '', // user's stated objective for the AI Insights panel
       analysisAge: '', // optional age -> lets the AI reason about risk capacity / horizon
+      // UI effects: 'auto' follows the OS reduced-motion setting, 'on' forces
+      // animations (e.g. Windows boxes where IT disabled animation effects),
+      // 'off' disables them. Resolved by lib/motion.js onto <html data-motion>.
+      fxMode: 'auto',
 
       /**
        * Set the display currency ('USD' | 'THB').
@@ -35,6 +39,11 @@ export const useSettingsStore = create(
       /** Set the user's age for risk-capacity reasoning (kept as a raw string). */
       setAnalysisAge(v) {
         set({ analysisAge: typeof v === 'string' ? v.replace(/[^0-9]/g, '').slice(0, 3) : '' });
+      },
+
+      /** Set the UI effects mode: 'auto' | 'on' | 'off'. */
+      setFxMode(m) {
+        set({ fxMode: m === 'on' || m === 'off' ? m : 'auto' });
       },
 
       /**
