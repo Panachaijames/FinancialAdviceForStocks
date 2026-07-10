@@ -36,26 +36,43 @@ const SYSTEM = [
 ].join(' ');
 
 /**
- * When the user states a goal, tailor the whole analysis to it: add a
- * "Goal Fit" section and make the plan serve that objective specifically.
+ * Tailor the analysis to the user's goal and/or age. A goal adds a "Goal Fit"
+ * section and re-orients the plan; an age lets the model reason about risk
+ * capacity and time horizon (younger = longer horizon, more room for volatility;
+ * closer to retirement = capital preservation).
  */
-function systemFor(goal) {
-  if (!goal) return SYSTEM;
-  return [
-    SYSTEM,
-    '',
-    `IMPORTANT — THE USER'S STATED GOAL FOR THIS PORTFOLIO: "${goal}".`,
-    'Tailor the ENTIRE analysis to this goal — interpret every section through it,',
-    'not as a generic summary. Insert a "## Goal Fit" section right after Overview',
-    'that judges, specifically and honestly, how well the current holdings serve',
-    'the goal: what already aligns, what gaps or conflicts exist, and how far off',
-    'the portfolio is. Then make "## Suggested Plan" a prioritized set of ideas',
-    'that move the portfolio toward THIS goal (and rename mentally toward it),',
-    'each with one line of reasoning tied back to the goal. If the goal is vague,',
-    'risky, or unrealistic given the holdings, say so plainly. Keep all the',
-    'guardrails above (general strategies only, no buy/sell-now calls or price',
-    'targets). You may extend to ~500 words to cover the goal properly.',
-  ].join(' ');
+function systemFor(goal, age) {
+  if (!goal && !age) return SYSTEM;
+  const extra = [SYSTEM, ''];
+  if (age) {
+    extra.push(
+      `THE INVESTOR IS ${age} YEARS OLD.`,
+      'Factor age into RISK CAPACITY and TIME HORIZON throughout — a younger',
+      'investor has decades to recover and can generally tolerate more volatility',
+      '/ a higher equity weight, while someone near or in retirement should lean',
+      'toward capital preservation, income, and lower drawdown. Reflect this in',
+      'the Risks and Suggested Plan sections (e.g. how aggressive the mix should',
+      'be), but frame it as general age-appropriate guidance, not a directive.',
+    );
+  }
+  if (goal) {
+    extra.push(
+      `IMPORTANT — THE USER'S STATED GOAL FOR THIS PORTFOLIO: "${goal}".`,
+      'Tailor the ENTIRE analysis to this goal — interpret every section through it,',
+      'not as a generic summary. Insert a "## Goal Fit" section right after Overview',
+      'that judges, specifically and honestly, how well the current holdings serve',
+      'the goal: what already aligns, what gaps or conflicts exist, and how far off',
+      'the portfolio is. Then make "## Suggested Plan" a prioritized set of ideas',
+      'that move the portfolio toward THIS goal, each with one line of reasoning',
+      'tied back to the goal. If the goal is vague, risky, or unrealistic given the',
+      'holdings, say so plainly.',
+    );
+  }
+  extra.push(
+    'Keep all the guardrails above (general strategies only, no buy/sell-now calls',
+    'or price targets). You may extend to ~500 words to cover this properly.',
+  );
+  return extra.join(' ');
 }
 
 /**
@@ -63,7 +80,7 @@ function systemFor(goal) {
  * @param {{ holdings: Array, news?: Array, displayCurrency?: string, goal?: string }} ctx
  * @returns {Promise<string>} the insight text
  */
-export async function generateInsights({ holdings = [], news = [], displayCurrency = 'USD', goal = '' } = {}) {
+export async function generateInsights({ holdings = [], news = [], displayCurrency = 'USD', goal = '', age = null } = {}) {
   if (!KEY) throw new Error('Gemini API key not configured');
   if (!Array.isArray(holdings) || holdings.length === 0) {
     throw new Error('No holdings to analyze');
@@ -98,9 +115,11 @@ export async function generateInsights({ holdings = [], news = [], displayCurren
     .map((n) => `- ${n.title}${n.relatedSymbols && n.relatedSymbols.length ? ` [${n.relatedSymbols.join(',')}]` : ''}`);
 
   const cleanGoal = typeof goal === 'string' ? goal.trim().slice(0, 500) : '';
+  const cleanAge = Number.isFinite(Number(age)) && Number(age) > 0 && Number(age) < 120 ? Math.round(Number(age)) : null;
 
   const prompt = [
     `Display currency: ${displayCurrency}.`,
+    cleanAge ? `Investor age: ${cleanAge}.` : '',
     cleanGoal ? `The user's goal for this portfolio: "${cleanGoal}".` : '',
     `Total portfolio value: ${Math.round(total)} ${displayCurrency}.`,
     `Allocation by type: ${allocation || 'n/a'}.`,
@@ -115,7 +134,7 @@ export async function generateInsights({ holdings = [], news = [], displayCurren
 
   const url = `${BASE}/models/${encodeURIComponent(MODEL)}:generateContent?key=${encodeURIComponent(KEY)}`;
   const body = {
-    systemInstruction: { parts: [{ text: systemFor(cleanGoal) }] },
+    systemInstruction: { parts: [{ text: systemFor(cleanGoal, cleanAge) }] },
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
     generationConfig: {
       temperature: 0.5,

@@ -8,6 +8,7 @@ export const useSettingsStore = create(
       displayCurrency: 'USD',
       refreshMs: 5000,
       analysisGoal: '', // user's stated objective for the AI Insights panel
+      analysisAge: '', // optional age -> lets the AI reason about risk capacity / horizon
 
       /**
        * Set the display currency ('USD' | 'THB').
@@ -29,6 +30,11 @@ export const useSettingsStore = create(
        */
       setAnalysisGoal(v) {
         set({ analysisGoal: typeof v === 'string' ? v.slice(0, 500) : '' });
+      },
+
+      /** Set the user's age for risk-capacity reasoning (kept as a raw string). */
+      setAnalysisAge(v) {
+        set({ analysisAge: typeof v === 'string' ? v.replace(/[^0-9]/g, '').slice(0, 3) : '' });
       },
 
       /**

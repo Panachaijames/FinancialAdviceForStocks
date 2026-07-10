@@ -328,9 +328,12 @@ function quoteFromChartJSON(symbol, result) {
   const change = price - prevClose;
   const changePct = prevClose ? (change / prevClose) * 100 : 0;
 
-  // Pre-market is quoted vs the previous regular close; after-hours vs today's close.
+  // Both pre- and after-hours are quoted vs the MOST RECENT regular close, which
+  // in the chart meta is `regularMarketPrice` (= yesterday's close during pre-
+  // market, today's close during after-hours) — NOT `chartPreviousClose`, which
+  // is the close before that and gave a wrong pre-market % on big-move days.
   const preMarketChangePct =
-    lastPre != null && prevClose ? ((lastPre - prevClose) / prevClose) * 100 : null;
+    lastPre != null && price ? ((lastPre - price) / price) * 100 : null;
   const postMarketChangePct =
     lastPost != null && price ? ((lastPost - price) / price) * 100 : null;
 

@@ -3,6 +3,7 @@ import { Sparkles, RefreshCw, Loader2 } from 'lucide-react';
 import { theme } from '../lib/theme.js';
 import { usePortfolioStore } from '../store/portfolioStore.js';
 import { useSettingsStore } from '../store/settingsStore.js';
+import { usePlanStore } from '../store/planStore.js';
 import useQuotes from '../hooks/useQuotes.js';
 import useFx from '../hooks/useFx.js';
 import useFunds from '../hooks/useFunds.js';
@@ -27,6 +28,11 @@ export default function InsightsPanel() {
   const displayCurrency = useSettingsStore((s) => s.displayCurrency);
   const analysisGoal = useSettingsStore((s) => s.analysisGoal);
   const setAnalysisGoal = useSettingsStore((s) => s.setAnalysisGoal);
+  const analysisAge = useSettingsStore((s) => s.analysisAge);
+  const setAnalysisAge = useSettingsStore((s) => s.setAnalysisAge);
+  // Fall back to the age already entered in the retirement planner, if any.
+  const planAge = usePlanStore((s) => s.currentAge);
+  const effectiveAge = (analysisAge || '').trim() || (planAge || '').trim();
   const symbols = useMemo(() => holdings.map((h) => h.symbol), [holdings]);
   const { quotes } = useQuotes(symbols);
   const { convert } = useFx();
@@ -86,9 +92,11 @@ export default function InsightsPanel() {
         marketValue: convert(f.valueThb != null ? f.valueThb : f.costThb, 'THB'),
         plPct: f.plPct != null ? Number(f.plPct) : null,
       }));
+      const ageNum = Number(effectiveAge);
       const payload = {
         displayCurrency,
         goal: (analysisGoal || '').trim(),
+        age: Number.isFinite(ageNum) && ageNum > 0 && ageNum < 120 ? Math.round(ageNum) : undefined,
         holdings: [...stockEntries, ...fundEntries],
       };
       const res = await getAnalysis(payload);
@@ -178,7 +186,7 @@ export default function InsightsPanel() {
           rows={2}
           style={{ width: '100%', resize: 'vertical', fontSize: 13, lineHeight: 1.5 }}
         />
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
           {GOAL_EXAMPLES.map((g) => (
             <button
               key={g}
@@ -195,6 +203,22 @@ export default function InsightsPanel() {
               Clear
             </button>
           ) : null}
+          {/* Age — lets the AI reason about risk capacity & time horizon. */}
+          <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: theme.colors.textDim }}>
+            Your age
+            <input
+              type="number"
+              inputMode="numeric"
+              min="1"
+              max="119"
+              value={analysisAge}
+              onChange={(e) => setAnalysisAge(e.target.value)}
+              placeholder={planAge && !analysisAge ? `${planAge}*` : 'e.g. 30'}
+              title={planAge && !analysisAge ? `Using ${planAge} from your retirement plan — type to override` : 'Optional — the AI factors risk capacity by age'}
+              className="input"
+              style={{ width: 68, padding: '4px 8px', fontSize: 12 }}
+            />
+          </span>
         </div>
       </div>
 
