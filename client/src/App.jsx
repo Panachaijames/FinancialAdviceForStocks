@@ -19,6 +19,7 @@ import AlertsPanel from './components/AlertsPanel.jsx';
 import RebalancePanel from './components/RebalancePanel.jsx';
 import BenchmarkPanel from './components/BenchmarkPanel.jsx';
 import UndoRemoveBar from './components/UndoRemoveBar.jsx';
+import ErrorBoundary from './components/ErrorBoundary.jsx';
 import PlanView from './components/plan/PlanView.jsx';
 import FundsPanel from './components/plan/FundsPanel.jsx';
 import Aurora from './components/fx/Aurora.jsx';
@@ -155,15 +156,42 @@ export default function App() {
 
         <ViewPane active={view === 'forecast'}>
           {visited.forecast ? (
-            <Suspense
-              fallback={
+            <ErrorBoundary
+              fallback={(error, reset) => (
                 <div style={{ padding: theme.space(8), textAlign: 'center', color: theme.colors.textDim, fontSize: 13 }}>
-                  Loading forecast lab…
+                  <div style={{ marginBottom: theme.space(3) }}>
+                    The forecast lab failed to load
+                    {/* A stale chunk after a redeploy needs a full reload; other errors can retry in place. */}
+                    {' — '}
+                    {String((error && error.message) || 'unexpected error')}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => window.location.reload()}
+                    style={{ padding: `${theme.space(2)}px ${theme.space(4)}px`, marginRight: theme.space(2), fontSize: 13, fontWeight: 600, color: '#fff', background: theme.colors.accent, border: 'none', borderRadius: 8, cursor: 'pointer' }}
+                  >
+                    Reload
+                  </button>
+                  <button
+                    type="button"
+                    onClick={reset}
+                    style={{ padding: `${theme.space(2)}px ${theme.space(4)}px`, fontSize: 13, fontWeight: 600, color: theme.colors.text, background: 'transparent', border: `1px solid ${theme.colors.accent}`, borderRadius: 8, cursor: 'pointer' }}
+                  >
+                    Try again
+                  </button>
                 </div>
-              }
+              )}
             >
-              <ForecastView />
-            </Suspense>
+              <Suspense
+                fallback={
+                  <div style={{ padding: theme.space(8), textAlign: 'center', color: theme.colors.textDim, fontSize: 13 }}>
+                    Loading forecast lab…
+                  </div>
+                }
+              >
+                <ForecastView />
+              </Suspense>
+            </ErrorBoundary>
           ) : null}
         </ViewPane>
       </div>
