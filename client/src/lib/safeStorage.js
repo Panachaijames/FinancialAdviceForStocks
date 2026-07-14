@@ -54,7 +54,19 @@ export function createSafeStorage(backend) {
       } catch {
         /* backup is best-effort; never block the real write */
       }
-      store.setItem(name, value);
+      try {
+        store.setItem(name, value);
+      } catch {
+        // Out of quota: the .bak we just wrote doubles this key's footprint, so
+        // drop it to reclaim space and retry once — the newest state matters more
+        // than the one-deep backup. If it still fails, there's nothing safe to do.
+        try {
+          store.removeItem(`${name}.bak`);
+          store.setItem(name, value);
+        } catch {
+          /* give up quietly rather than throw out of persist's write path */
+        }
+      }
     },
 
     removeItem(name) {

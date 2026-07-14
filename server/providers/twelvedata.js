@@ -91,25 +91,43 @@ async function fetchJson(url, tries = 2) {
   let lastErr;
   for (let i = 0; i < tries; i += 1) {
     try {
-      callsToday += 1;
-      const res = await tdLimit(() => fetch(url, { headers: { accept: 'application/json' } }));
-      const data = await res.json();
-      // TD signals quota errors as HTTP-200 bodies as well as 429s — detect both
-      // so exhaustion trips the cooldown instead of masquerading as "no data".
-      if (isQuotaError(res, data)) {
-        cooldownUntil = Date.now() + QUOTA_COOLDOWN_MS;
-        log.warn('twelvedata quota hit — pausing 1h', {
-          callsToday,
-          status: res.status,
-          message: data && data.message,
-        });
-        throw new Error('Twelve Data: out of quota');
-      }
-      if (!res.ok) {
-        lastErr = new Error(`Twelve Data HTTP ${res.status}`);
-        await new Promise((r) => setTimeout(r, 300 * (i + 1)));
-        continue;
-      }
+      const data = await tdLimit(async () => {
+        // Re-check the cooldown INSIDE the concurrency slot. getQuotes fires a
+        // whole batch through Promise.all, so every call clears the entry guard
+        // before the first one resolves; without this re-check, one exhausted
+        // response wouldn't stop the rest of the batch each spending a credit.
+        if (Date.now() < cooldownUntil) throw new Error('Twelve Data: quota cooldown active');
+        callsToday += 1;
+        const res = await fetch(url, { headers: { accept: 'application/json' } });
+        // Decide on HTTP status BEFORE parsing: a real HTTP-429 (from TD or an
+        // intervening proxy/gateway) often carries a non-JSON body that would
+        // throw in res.json() and skip quota detection entirely.
+        if (res.status === 429) {
+          cooldownUntil = Date.now() + QUOTA_COOLDOWN_MS;
+          log.warn('twelvedata quota hit (HTTP 429) — pausing 1h', { callsToday });
+          throw new Error('Twelve Data: out of quota');
+        }
+        let body = null;
+        try {
+          body = await res.json();
+        } catch {
+          body = null; // non-JSON error page — treat as a failed request below
+        }
+        // TD also signals quota as an HTTP-200 body ({ code:429, message:... }).
+        if (isQuotaError(res, body)) {
+          cooldownUntil = Date.now() + QUOTA_COOLDOWN_MS;
+          log.warn('twelvedata quota hit — pausing 1h', {
+            callsToday,
+            status: res.status,
+            message: body && body.message,
+          });
+          throw new Error('Twelve Data: out of quota');
+        }
+        if (!res.ok || body == null) {
+          throw new Error(`Twelve Data HTTP ${res.status}`);
+        }
+        return body;
+      });
       return data;
     } catch (e) {
       lastErr = e;
