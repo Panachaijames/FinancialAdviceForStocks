@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Pencil, Trash2, Bell } from 'lucide-react';
 import { theme } from '../lib/theme.js';
 import { fmtMoney, fmtNumber, fmtSignedPct, classForChange } from '../lib/format.js';
@@ -74,9 +74,19 @@ export default function AssetCard({ holding, onOpen }) {
   const [alerting, setAlerting] = useState(false);
   const [dividend, setDividend] = useState(undefined); // undefined = not fetched, null = none, DIVIDEND_ERROR = failed
   const [divRetry, setDivRetry] = useState(0);
-  // Retry the dividend fetch when the live socket (re)connects, so a failed
-  // startup fetch recovers instead of showing nothing for the whole session.
-  useEffect(() => marketSocket.onStatus((on) => { if (on) setDivRetry((n) => n + 1); }), []);
+  const dividendRef = useRef(dividend);
+  dividendRef.current = dividend;
+  // Retry the dividend fetch on reconnect ONLY when the current value is the
+  // error sentinel. Never refetch a good or confirmed-null dividend: a transient
+  // reconnect failure would otherwise wipe a valid line and re-hammer the
+  // rate-limited endpoint this sentinel exists to shield.
+  useEffect(
+    () =>
+      marketSocket.onStatus((on) => {
+        if (on && isDividendError(dividendRef.current)) setDivRetry((n) => n + 1);
+      }),
+    []
+  );
 
   const q = quotes[symbol];
   const price = q && Number(q.price) > 0 ? Number(q.price) : null;

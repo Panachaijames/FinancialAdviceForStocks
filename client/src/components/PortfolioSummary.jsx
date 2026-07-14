@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Wallet, TrendingUp, TrendingDown, Coins, Activity, BadgeDollarSign } from 'lucide-react';
 import { theme } from '../lib/theme.js';
 import { fmtMoney, fmtSignedPct, classForChange, convert as convertCurrency } from '../lib/format.js';
@@ -43,10 +43,18 @@ export default function PortfolioSummary() {
   // Lazily fetch dividends for dividend-paying holdings; cache by symbol.
   const [divs, setDivs] = useState({}); // symbol -> Dividend | null (none) | DIVIDEND_ERROR (fetch failed)
   const [divRetry, setDivRetry] = useState(0);
-  // Recovery trigger: when the live socket (re)connects, bump a tick so the
-  // fetch effect retries any dividends whose last fetch failed — a startup 429
-  // no longer pins a confident "0.00" for the rest of the session.
-  useEffect(() => marketSocket.onStatus((on) => { if (on) setDivRetry((n) => n + 1); }), []);
+  const divsRef = useRef(divs);
+  divsRef.current = divs;
+  // Recovery trigger: on (re)connect, retry the fetch effect ONLY when some
+  // dividend actually failed — so a startup 429 no longer pins a confident
+  // "0.00", without a startup double-fetch or re-requesting resolved dividends.
+  useEffect(
+    () =>
+      marketSocket.onStatus((on) => {
+        if (on && Object.values(divsRef.current).some(isDividendError)) setDivRetry((n) => n + 1);
+      }),
+    []
+  );
   useEffect(() => {
     let cancelled = false;
     const wanted = holdings

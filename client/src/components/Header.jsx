@@ -45,6 +45,7 @@ export default function Header() {
     // won't connect and getHealth() is slow (~30s). If neither has come back
     // within 3s, tell the user it's waking up instead of the alarming "Offline".
     let done = false;
+    let hideTimer = null;
     getHealth()
       .then(() => {
         done = true;
@@ -54,11 +55,18 @@ export default function Header() {
         /* still unreachable; the WS-connect handler clears waking when it lands */
       });
     const t = setTimeout(() => {
-      if (!done && !marketSocket.connected) setWaking(true);
+      if (!done && !marketSocket.connected) {
+        setWaking(true);
+        // If it's STILL not up well past a normal cold start, it isn't "waking",
+        // it's down — stop implying data is ~30s away and let the honest Offline
+        // badge stand. A later recovery still clears via the WS-connect handler.
+        hideTimer = setTimeout(() => setWaking(false), 40000);
+      }
     }, 3000);
 
     return () => {
       clearTimeout(t);
+      if (hideTimer) clearTimeout(hideTimer);
       off();
     };
   }, []);
@@ -68,7 +76,7 @@ export default function Header() {
 
   return (
     <>
-      {waking && !connected ? (
+      {waking && !connected && !everConnected ? (
         <div
           role="status"
           style={{
