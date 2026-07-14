@@ -42,6 +42,11 @@ export function clear() {
   inflight.clear();
 }
 
+/** Current number of cached entries (surfaced in /api/health). */
+export function size() {
+  return store.size;
+}
+
 /**
  * Memoize an async function result for ttlMs, de-duplicating concurrent calls.
  * @template T
@@ -75,4 +80,4 @@ export async function wrap(key, ttlMs, asyncFn) {
   return promise;
 }
 
-export default { get, set, del, clear, wrap };
+export default { get, set, del, clear, wrap, size };

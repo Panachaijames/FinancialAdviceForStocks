@@ -11,6 +11,7 @@
 import { config } from '../config.js';
 import { classify } from '../util/assetType.js';
 import { createLimiter } from '../util/limit.js';
+import { log } from '../util/log.js';
 
 const BASE = 'https://api.twelvedata.com';
 const KEY = config.keys.twelveData;
@@ -19,6 +20,47 @@ const KEY = config.keys.twelveData;
 // burst of fallback lookups (Yahoo misses on app reopen) doesn't fire them all
 // at once and get rate-limited. All TD requests flow through fetchJson.
 const tdLimit = createLimiter(2);
+
+// ── Quota guard (5.3) ──────────────────────────────────────────────────────
+// The free plan allows ~800 credits/day. fetchJson previously never checked
+// res.ok and TD's quota errors arrive as HTTP-200 bodies ({ code: 429, ... }),
+// so exhaustion was indistinguishable from "no data" — one bad Yahoo day could
+// burn all 800 credits by morning. We count calls per UTC day and, the moment a
+// quota error is seen, stop calling TD for a cooldown so it can't be hammered.
+const QUOTA_COOLDOWN_MS = 60 * 60 * 1000; // pause 1h after a quota error
+let dayKey = '';
+let callsToday = 0;
+let cooldownUntil = 0;
+
+function utcDay() {
+  return new Date().toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
+}
+
+function ensureDay() {
+  const d = utcDay();
+  if (d !== dayKey) {
+    dayKey = d;
+    callsToday = 0;
+    cooldownUntil = 0; // fresh daily quota
+  }
+}
+
+/** Detect a Twelve Data quota/credit error, whether by HTTP status or body. */
+function isQuotaError(res, data) {
+  const code = data && Number(data.code);
+  const msg = String((data && data.message) || '');
+  return (
+    res.status === 429 ||
+    code === 429 ||
+    /run out of api credits|api credits|too many requests|upgrade your plan/i.test(msg)
+  );
+}
+
+/** Health/telemetry snapshot for /api/health. */
+export function getStats() {
+  ensureDay();
+  return { callsToday, day: dayKey, cooling: Date.now() < cooldownUntil };
+}
 
 export function hasKey() {
   return !!KEY;
@@ -40,14 +82,39 @@ function toTd(symbol) {
 }
 
 async function fetchJson(url, tries = 2) {
+  ensureDay();
+  // Quota short-circuit: once we've seen exhaustion, don't spend more calls
+  // until the cooldown passes (or the daily counter resets).
+  if (Date.now() < cooldownUntil) {
+    throw new Error('Twelve Data: quota cooldown active');
+  }
   let lastErr;
   for (let i = 0; i < tries; i += 1) {
     try {
+      callsToday += 1;
       const res = await tdLimit(() => fetch(url, { headers: { accept: 'application/json' } }));
       const data = await res.json();
+      // TD signals quota errors as HTTP-200 bodies as well as 429s — detect both
+      // so exhaustion trips the cooldown instead of masquerading as "no data".
+      if (isQuotaError(res, data)) {
+        cooldownUntil = Date.now() + QUOTA_COOLDOWN_MS;
+        log.warn('twelvedata quota hit — pausing 1h', {
+          callsToday,
+          status: res.status,
+          message: data && data.message,
+        });
+        throw new Error('Twelve Data: out of quota');
+      }
+      if (!res.ok) {
+        lastErr = new Error(`Twelve Data HTTP ${res.status}`);
+        await new Promise((r) => setTimeout(r, 300 * (i + 1)));
+        continue;
+      }
       return data;
     } catch (e) {
       lastErr = e;
+      // A quota error is terminal for this window — don't retry into the wall.
+      if (Date.now() < cooldownUntil) throw e;
       await new Promise((r) => setTimeout(r, 300 * (i + 1)));
     }
   }
@@ -95,6 +162,7 @@ export async function getQuotes(symbols) {
   if (!KEY) return [];
   const list = (symbols || []).filter(Boolean);
   if (list.length === 0) return [];
+  log.info('twelvedata fallback: quote lookup', { count: list.length });
   const results = await Promise.all(
     list.map(async (sym) => {
       try {
