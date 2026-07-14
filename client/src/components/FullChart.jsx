@@ -420,7 +420,13 @@ export default function FullChart({
     }
 
     main.timeScale().fitContent();
-  }, [candles, chartType]);
+    // showRsi/showMacd/showStoch are deps because the construction effect
+    // recreates the main + volume series when an oscillator is toggled. Without
+    // them, this effect wouldn't re-run after that rebuild and the freshly
+    // created (empty) main series would leave the price chart blank — the exact
+    // "toggle RSI/MACD/Stoch → whole graph goes blank" bug. (chartType is here
+    // for the same reason.)
+  }, [candles, chartType, showRsi, showMacd, showStoch]);
 
   // -------------------------------------------------------------------------
   // Overlays: compute and set data (or clear) per config.
@@ -453,8 +459,11 @@ export default function FullChart({
     }
 
     setOverlay('vwap', cfg.vwap?.on ? vwap(candles) : null);
+    // chartType + showRsi/showMacd/showStoch: the construction effect recreates
+    // the overlay series on any of these, so this effect must re-run to refill
+    // them (otherwise overlays blank out on an oscillator or chart-type toggle).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [candles, closes, cfg.sma?.on, cfg.sma?.period, cfg.ema?.on, cfg.ema?.period, cfg.wma?.on, cfg.wma?.period, cfg.bollinger?.on, cfg.bollinger?.period, cfg.bollinger?.mult, cfg.vwap?.on]);
+  }, [candles, closes, chartType, showRsi, showMacd, showStoch, cfg.sma?.on, cfg.sma?.period, cfg.ema?.on, cfg.ema?.period, cfg.wma?.on, cfg.wma?.period, cfg.bollinger?.on, cfg.bollinger?.period, cfg.bollinger?.mult, cfg.vwap?.on]);
 
   // -------------------------------------------------------------------------
   // Volume visibility toggle (series exists; just clear/restore).
