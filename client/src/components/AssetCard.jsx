@@ -10,6 +10,8 @@ import { usePortfolioStore } from '../store/portfolioStore.js';
 import { useSettingsStore } from '../store/settingsStore.js';
 import { getDividend } from '../api/client.js';
 import { computeDividendIncome } from '../lib/dividends.js';
+import { DIVIDEND_ERROR, isDividendError } from '../lib/dividendState.js';
+import marketSocket from '../api/socket.js';
 import MiniChart from './MiniChart.jsx';
 import SpotlightCard from './fx/SpotlightCard.jsx';
 import CountUp from './fx/CountUp.jsx';
@@ -70,7 +72,11 @@ export default function AssetCard({ holding, onOpen }) {
   const [editing, setEditing] = useState(false);
   const [trading, setTrading] = useState(null); // null | 'buy' | 'sell'
   const [alerting, setAlerting] = useState(false);
-  const [dividend, setDividend] = useState(undefined); // undefined = not fetched, null = none
+  const [dividend, setDividend] = useState(undefined); // undefined = not fetched, null = none, DIVIDEND_ERROR = failed
+  const [divRetry, setDivRetry] = useState(0);
+  // Retry the dividend fetch when the live socket (re)connects, so a failed
+  // startup fetch recovers instead of showing nothing for the whole session.
+  useEffect(() => marketSocket.onStatus((on) => { if (on) setDivRetry((n) => n + 1); }), []);
 
   const q = quotes[symbol];
   const price = q && Number(q.price) > 0 ? Number(q.price) : null;
@@ -101,16 +107,17 @@ export default function AssetCard({ holding, onOpen }) {
         const d = await getDividend(symbol);
         if (!cancelled) setDividend(d || null);
       } catch {
-        if (!cancelled) setDividend(null);
+        // Error sentinel, not null: retried on reconnect, shown as unknown.
+        if (!cancelled) setDividend(DIVIDEND_ERROR);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [symbol, type]);
+  }, [symbol, type, divRetry]);
 
   let divLine = null;
-  if (dividend && DIV_TYPES.has(type)) {
+  if (dividend && !isDividendError(dividend) && DIV_TYPES.has(type)) {
     const income = computeDividendIncome({
       shares: Number(shares) || 0,
       dividend,

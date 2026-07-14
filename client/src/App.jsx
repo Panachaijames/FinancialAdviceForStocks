@@ -20,6 +20,7 @@ import RebalancePanel from './components/RebalancePanel.jsx';
 import BenchmarkPanel from './components/BenchmarkPanel.jsx';
 import UndoRemoveBar from './components/UndoRemoveBar.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
+import HoldingEditor from './components/HoldingEditor.jsx';
 import PlanView from './components/plan/PlanView.jsx';
 import FundsPanel from './components/plan/FundsPanel.jsx';
 import Aurora from './components/fx/Aurora.jsx';
@@ -45,6 +46,7 @@ export default function App() {
   const holdings = usePortfolioStore((s) => s.holdings);
   const addHolding = usePortfolioStore((s) => s.addHolding);
   const [selected, setSelected] = useState(null);
+  const [pending, setPending] = useState(null); // quick-add asset awaiting shares/cost in the editor
   const [view, setView] = useState('portfolio'); // 'portfolio' | 'plan' | 'forecast'
 
   // Lazy-first-visit gate: a pane's children mount only once its tab has been
@@ -98,7 +100,7 @@ export default function App() {
           {holdings.length === 0 ? (
             <>
               <FundsPanel />
-              <EmptyState onQuickAdd={(sr) => addHolding(sr, { shares: 0, avgCost: 0 })} />
+              <EmptyState onQuickAdd={(sr) => setPending(sr)} />
             </>
           ) : (
             <div style={sectionGap}>
@@ -197,6 +199,17 @@ export default function App() {
       </div>
 
       {selected ? <ChartModal symbol={selected} onClose={closeChart} /> : null}
+      {pending ? (
+        <HoldingEditor
+          asset={pending}
+          mode="add"
+          onSave={({ shares, avgCost }) => {
+            addHolding(pending, { shares, avgCost });
+            setPending(null);
+          }}
+          onCancel={() => setPending(null)}
+        />
+      ) : null}
       <UndoRemoveBar />
     </div>
   );

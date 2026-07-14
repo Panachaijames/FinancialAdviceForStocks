@@ -9,6 +9,8 @@ import useFx from '../hooks/useFx.js';
 import useFunds from '../hooks/useFunds.js';
 import { getDividend } from '../api/client.js';
 import { computeDividendIncome } from '../lib/dividends.js';
+import { DIVIDEND_ERROR, isDividendError } from '../lib/dividendState.js';
+import marketSocket from '../api/socket.js';
 import { realizedByCurrency } from '../lib/trades.js';
 import CountUp from './fx/CountUp.jsx';
 import SpotlightCard from './fx/SpotlightCard.jsx';
@@ -39,13 +41,19 @@ export default function PortfolioSummary() {
   const { funds: fundRows } = useFunds();
 
   // Lazily fetch dividends for dividend-paying holdings; cache by symbol.
-  const [divs, setDivs] = useState({}); // symbol -> Dividend
+  const [divs, setDivs] = useState({}); // symbol -> Dividend | null (none) | DIVIDEND_ERROR (fetch failed)
+  const [divRetry, setDivRetry] = useState(0);
+  // Recovery trigger: when the live socket (re)connects, bump a tick so the
+  // fetch effect retries any dividends whose last fetch failed — a startup 429
+  // no longer pins a confident "0.00" for the rest of the session.
+  useEffect(() => marketSocket.onStatus((on) => { if (on) setDivRetry((n) => n + 1); }), []);
   useEffect(() => {
     let cancelled = false;
     const wanted = holdings
       .filter((h) => DIV_TYPES.has(h.type))
       .map((h) => h.symbol)
-      .filter((sym) => !(sym in divs));
+      // not yet fetched, OR the last fetch failed (retry on this recovery tick)
+      .filter((sym) => !(sym in divs) || isDividendError(divs[sym]));
     if (wanted.length === 0) return undefined;
 
     (async () => {
@@ -56,7 +64,9 @@ export default function PortfolioSummary() {
           setDivs((prev) => ({ ...prev, [sym]: d }));
         } catch {
           if (cancelled) return;
-          setDivs((prev) => ({ ...prev, [sym]: null }));
+          // Error sentinel (NOT null): retried on recovery, rendered as unknown
+          // rather than a confident zero.
+          setDivs((prev) => ({ ...prev, [sym]: DIVIDEND_ERROR }));
         }
       }
     })();
@@ -65,7 +75,7 @@ export default function PortfolioSummary() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [holdings]);
+  }, [holdings, divRetry]);
 
   const totals = useMemo(() => {
     let marketValue = 0;
@@ -94,9 +104,10 @@ export default function PortfolioSummary() {
       const prevMvNative = shares * prevClose;
       prevMarketValue += convert(prevMvNative, native);
 
-      // Dividend income.
+      // Dividend income. Skip the error sentinel — an unknown dividend must not
+      // be counted as zero income.
       const d = divs[h.symbol];
-      if (d) {
+      if (d && !isDividendError(d)) {
         const income = computeDividendIncome({
           shares,
           dividend: d,
