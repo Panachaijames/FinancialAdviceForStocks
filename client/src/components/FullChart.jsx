@@ -475,8 +475,16 @@ export default function FullChart({
   }, [cfg.volume?.on]);
 
   // -------------------------------------------------------------------------
-  // RSI sub-chart data
+  // Oscillator sub-chart data (RSI, MACD, Stochastic).
+  //
+  // Each effect below depends on chartType + ALL of showRsi/showMacd/showStoch,
+  // not just its own toggle. The construction effect recreates EVERY sub-series
+  // whenever any of those change, so each data effect must re-run to refill its
+  // freshly-created (empty) series. Without the sibling deps, turning on a
+  // second oscillator would blank the first (its series got recreated but its
+  // data effect didn't re-run). Same reasoning as the main-price/overlay effects.
   // -------------------------------------------------------------------------
+  // RSI
   useEffect(() => {
     if (!showRsi || !subSeries.current.rsi) return;
     if (!candles.length) {
@@ -485,7 +493,7 @@ export default function FullChart({
     }
     const r = rsi(closes, cfg.rsi?.period || 14);
     subSeries.current.rsi.setData(toLineData(candles, r));
-  }, [candles, closes, showRsi, cfg.rsi?.period]);
+  }, [candles, closes, chartType, showRsi, showMacd, showStoch, cfg.rsi?.period]);
 
   // -------------------------------------------------------------------------
   // MACD sub-chart data
@@ -507,7 +515,7 @@ export default function FullChart({
       color: p.value >= 0 ? 'rgba(34,197,94,0.6)' : 'rgba(239,68,68,0.6)',
     }));
     subSeries.current.macdHist.setData(hist);
-  }, [candles, closes, showMacd, cfg.macd?.fast, cfg.macd?.slow, cfg.macd?.signal]);
+  }, [candles, closes, chartType, showRsi, showMacd, showStoch, cfg.macd?.fast, cfg.macd?.slow, cfg.macd?.signal]);
 
   // -------------------------------------------------------------------------
   // Stochastic sub-chart data
@@ -522,7 +530,7 @@ export default function FullChart({
     const st = stochastic(highs, lows, closes, cfg.stochastic?.kPeriod || 14, cfg.stochastic?.dPeriod || 3);
     subSeries.current.stochK.setData(toLineData(candles, st.k));
     subSeries.current.stochD.setData(toLineData(candles, st.d));
-  }, [candles, highs, lows, closes, showStoch, cfg.stochastic?.kPeriod, cfg.stochastic?.dPeriod]);
+  }, [candles, highs, lows, closes, chartType, showRsi, showMacd, showStoch, cfg.stochastic?.kPeriod, cfg.stochastic?.dPeriod]);
 
   // -------------------------------------------------------------------------
   // Render
