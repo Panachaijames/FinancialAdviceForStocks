@@ -68,7 +68,7 @@ export default function InsightsPanel() {
       const stockEntries = holdings.map((h) => {
         const q = quotes[h.symbol];
         const native = h.currency || (h.type === 'th_stock' ? 'THB' : 'USD');
-        const price = q && Number.isFinite(Number(q.price)) ? Number(q.price) : Number(h.avgCost) || 0;
+        const price = q && Number(q.price) > 0 ? Number(q.price) : Number(h.avgCost) || 0;
         const shares = Number(h.shares) || 0;
         const mvNative = shares * price;
         const costNative = shares * (Number(h.avgCost) || 0);

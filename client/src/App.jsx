@@ -19,15 +19,18 @@ import AlertsPanel from './components/AlertsPanel.jsx';
 import RebalancePanel from './components/RebalancePanel.jsx';
 import BenchmarkPanel from './components/BenchmarkPanel.jsx';
 import UndoRemoveBar from './components/UndoRemoveBar.jsx';
-import PlanView from './components/plan/PlanView.jsx';
+import ErrorBoundary from './components/ErrorBoundary.jsx';
+import HoldingEditor from './components/HoldingEditor.jsx';
 import FundsPanel from './components/plan/FundsPanel.jsx';
 import Aurora from './components/fx/Aurora.jsx';
 import SlidingTabs from './components/fx/SlidingTabs.jsx';
 import TickerTape from './components/fx/TickerTape.jsx';
 import Reveal from './components/fx/Reveal.jsx';
 
-// Heavy page (TensorFlow.js etc.) — its chunk loads only when the tab opens.
+// Heavy pages — their chunks load only when the tab is first opened (the
+// visited-gate guarantees the first mount happens while visible).
 const ForecastView = React.lazy(() => import('./components/forecast/ForecastView.jsx'));
+const PlanView = React.lazy(() => import('./components/plan/PlanView.jsx'));
 
 const QUICK_ADD = [
   { symbol: 'AAPL', name: 'Apple Inc.', type: 'us_stock', currency: 'USD', exchange: 'NASDAQ' },
@@ -44,6 +47,7 @@ export default function App() {
   const holdings = usePortfolioStore((s) => s.holdings);
   const addHolding = usePortfolioStore((s) => s.addHolding);
   const [selected, setSelected] = useState(null);
+  const [pending, setPending] = useState(null); // quick-add asset awaiting shares/cost in the editor
   const [view, setView] = useState('portfolio'); // 'portfolio' | 'plan' | 'forecast'
 
   // Lazy-first-visit gate: a pane's children mount only once its tab has been
@@ -97,7 +101,7 @@ export default function App() {
           {holdings.length === 0 ? (
             <>
               <FundsPanel />
-              <EmptyState onQuickAdd={(sr) => addHolding(sr, { shares: 0, avgCost: 0 })} />
+              <EmptyState onQuickAdd={(sr) => setPending(sr)} />
             </>
           ) : (
             <div style={sectionGap}>
@@ -150,25 +154,98 @@ export default function App() {
         </ViewPane>
 
         <ViewPane active={view === 'plan'}>
-          {visited.plan ? <PlanView /> : null}
+          {visited.plan ? (
+            <ErrorBoundary
+              fallback={(error, reset) => (
+                <div style={{ padding: theme.space(8), textAlign: 'center', color: theme.colors.textDim, fontSize: 13 }}>
+                  <div style={{ marginBottom: theme.space(3) }}>
+                    The planner failed to load{' — '}
+                    {String((error && error.message) || 'unexpected error')}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => window.location.reload()}
+                    style={{ padding: `${theme.space(2)}px ${theme.space(4)}px`, marginRight: theme.space(2), fontSize: 13, fontWeight: 600, color: '#fff', background: theme.colors.accent, border: 'none', borderRadius: 8, cursor: 'pointer' }}
+                  >
+                    Reload
+                  </button>
+                  <button
+                    type="button"
+                    onClick={reset}
+                    style={{ padding: `${theme.space(2)}px ${theme.space(4)}px`, fontSize: 13, fontWeight: 600, color: theme.colors.text, background: 'transparent', border: `1px solid ${theme.colors.accent}`, borderRadius: 8, cursor: 'pointer' }}
+                  >
+                    Try again
+                  </button>
+                </div>
+              )}
+            >
+              <Suspense
+                fallback={
+                  <div style={{ padding: theme.space(8), textAlign: 'center', color: theme.colors.textDim, fontSize: 13 }}>
+                    Loading planner…
+                  </div>
+                }
+              >
+                <PlanView />
+              </Suspense>
+            </ErrorBoundary>
+          ) : null}
         </ViewPane>
 
         <ViewPane active={view === 'forecast'}>
           {visited.forecast ? (
-            <Suspense
-              fallback={
+            <ErrorBoundary
+              fallback={(error, reset) => (
                 <div style={{ padding: theme.space(8), textAlign: 'center', color: theme.colors.textDim, fontSize: 13 }}>
-                  Loading forecast lab…
+                  <div style={{ marginBottom: theme.space(3) }}>
+                    The forecast lab failed to load
+                    {/* A stale chunk after a redeploy needs a full reload; other errors can retry in place. */}
+                    {' — '}
+                    {String((error && error.message) || 'unexpected error')}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => window.location.reload()}
+                    style={{ padding: `${theme.space(2)}px ${theme.space(4)}px`, marginRight: theme.space(2), fontSize: 13, fontWeight: 600, color: '#fff', background: theme.colors.accent, border: 'none', borderRadius: 8, cursor: 'pointer' }}
+                  >
+                    Reload
+                  </button>
+                  <button
+                    type="button"
+                    onClick={reset}
+                    style={{ padding: `${theme.space(2)}px ${theme.space(4)}px`, fontSize: 13, fontWeight: 600, color: theme.colors.text, background: 'transparent', border: `1px solid ${theme.colors.accent}`, borderRadius: 8, cursor: 'pointer' }}
+                  >
+                    Try again
+                  </button>
                 </div>
-              }
+              )}
             >
-              <ForecastView />
-            </Suspense>
+              <Suspense
+                fallback={
+                  <div style={{ padding: theme.space(8), textAlign: 'center', color: theme.colors.textDim, fontSize: 13 }}>
+                    Loading forecast lab…
+                  </div>
+                }
+              >
+                <ForecastView />
+              </Suspense>
+            </ErrorBoundary>
           ) : null}
         </ViewPane>
       </div>
 
       {selected ? <ChartModal symbol={selected} onClose={closeChart} /> : null}
+      {pending ? (
+        <HoldingEditor
+          asset={pending}
+          mode="add"
+          onSave={({ shares, avgCost }) => {
+            addHolding(pending, { shares, avgCost });
+            setPending(null);
+          }}
+          onCancel={() => setPending(null)}
+        />
+      ) : null}
       <UndoRemoveBar />
     </div>
   );

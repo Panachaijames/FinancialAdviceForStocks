@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Wallet, TrendingUp, TrendingDown, Coins, Activity, BadgeDollarSign } from 'lucide-react';
 import { theme } from '../lib/theme.js';
 import { fmtMoney, fmtSignedPct, classForChange, convert as convertCurrency } from '../lib/format.js';
@@ -9,6 +9,8 @@ import useFx from '../hooks/useFx.js';
 import useFunds from '../hooks/useFunds.js';
 import { getDividend } from '../api/client.js';
 import { computeDividendIncome } from '../lib/dividends.js';
+import { DIVIDEND_ERROR, isDividendError } from '../lib/dividendState.js';
+import marketSocket from '../api/socket.js';
 import { realizedByCurrency } from '../lib/trades.js';
 import CountUp from './fx/CountUp.jsx';
 import SpotlightCard from './fx/SpotlightCard.jsx';
@@ -39,13 +41,27 @@ export default function PortfolioSummary() {
   const { funds: fundRows } = useFunds();
 
   // Lazily fetch dividends for dividend-paying holdings; cache by symbol.
-  const [divs, setDivs] = useState({}); // symbol -> Dividend
+  const [divs, setDivs] = useState({}); // symbol -> Dividend | null (none) | DIVIDEND_ERROR (fetch failed)
+  const [divRetry, setDivRetry] = useState(0);
+  const divsRef = useRef(divs);
+  divsRef.current = divs;
+  // Recovery trigger: on (re)connect, retry the fetch effect ONLY when some
+  // dividend actually failed — so a startup 429 no longer pins a confident
+  // "0.00", without a startup double-fetch or re-requesting resolved dividends.
+  useEffect(
+    () =>
+      marketSocket.onStatus((on) => {
+        if (on && Object.values(divsRef.current).some(isDividendError)) setDivRetry((n) => n + 1);
+      }),
+    []
+  );
   useEffect(() => {
     let cancelled = false;
     const wanted = holdings
       .filter((h) => DIV_TYPES.has(h.type))
       .map((h) => h.symbol)
-      .filter((sym) => !(sym in divs));
+      // not yet fetched, OR the last fetch failed (retry on this recovery tick)
+      .filter((sym) => !(sym in divs) || isDividendError(divs[sym]));
     if (wanted.length === 0) return undefined;
 
     (async () => {
@@ -56,7 +72,9 @@ export default function PortfolioSummary() {
           setDivs((prev) => ({ ...prev, [sym]: d }));
         } catch {
           if (cancelled) return;
-          setDivs((prev) => ({ ...prev, [sym]: null }));
+          // Error sentinel (NOT null): retried on recovery, rendered as unknown
+          // rather than a confident zero.
+          setDivs((prev) => ({ ...prev, [sym]: DIVIDEND_ERROR }));
         }
       }
     })();
@@ -65,7 +83,7 @@ export default function PortfolioSummary() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [holdings]);
+  }, [holdings, divRetry]);
 
   const totals = useMemo(() => {
     let marketValue = 0;
@@ -77,7 +95,7 @@ export default function PortfolioSummary() {
     for (const h of holdings) {
       const q = quotes[h.symbol];
       const native = h.currency || (h.type === 'th_stock' ? 'THB' : 'USD');
-      const price = q && Number.isFinite(Number(q.price)) ? Number(q.price) : h.avgCost;
+      const price = q && Number(q.price) > 0 ? Number(q.price) : h.avgCost;
       const shares = Number(h.shares) || 0;
 
       const mvNative = shares * price;
@@ -90,13 +108,14 @@ export default function PortfolioSummary() {
 
       // Today's change from prevClose.
       const prevClose =
-        q && Number.isFinite(Number(q.prevClose)) ? Number(q.prevClose) : price;
+        q && Number(q.prevClose) > 0 ? Number(q.prevClose) : price;
       const prevMvNative = shares * prevClose;
       prevMarketValue += convert(prevMvNative, native);
 
-      // Dividend income.
+      // Dividend income. Skip the error sentinel — an unknown dividend must not
+      // be counted as zero income.
       const d = divs[h.symbol];
-      if (d) {
+      if (d && !isDividendError(d)) {
         const income = computeDividendIncome({
           shares,
           dividend: d,
@@ -150,12 +169,14 @@ export default function PortfolioSummary() {
     holdings.length > 0 &&
     holdings.every((h) => {
       const q = quotes[h.symbol];
-      return q && Number.isFinite(Number(q.price));
+      return q && Number(q.price) > 0;
     });
   const usdTotal = convertCurrency(totals.marketValue, displayCurrency, 'USD', rate);
   const { celebrating, dismiss } = useAllTimeHigh({
     usdValue: usdTotal,
-    ready: quotesReady && fx != null,
+    // Gate the ATH ledger on a REAL fx rate: source 'default' is the hardcoded
+    // 36 fallback, which could otherwise immortalize a bogus all-time-high.
+    ready: quotesReady && fx != null && fx.source !== 'default',
   });
 
   // Honest number states: skeleton while the first batch is in flight; once
@@ -163,7 +184,7 @@ export default function PortfolioSummary() {
   const showSkeleton = loading && !error && !quotesReady; // first load in flight
   const quotedCount = holdings.filter((h) => {
     const q = quotes[h.symbol];
-    return q && Number.isFinite(Number(q.price));
+    return q && Number(q.price) > 0;
   }).length;
   const partial = !showSkeleton && quotedCount < holdings.length; // settled (or gave up) with gaps
 

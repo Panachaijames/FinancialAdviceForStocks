@@ -15,6 +15,12 @@ services:
     buildCommand: npm install --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
+    # Deploy from a stable `release` branch, not master — so an experimental push
+    # to master no longer instantly becomes the app every installed shell loads.
+    # Promote by fast-forwarding `release` to master once CI is green. NOTE: also
+    # set the deploy branch to `release` in the Render dashboard for the existing
+    # service (render.yaml's branch only auto-applies on a fresh Blueprint sync).
+    branch: release
     autoDeploy: true
     envVars:
       - key: NODE_VERSION

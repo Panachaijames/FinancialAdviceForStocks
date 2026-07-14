@@ -163,8 +163,9 @@ export default function ChartModal({ symbol, name, type, onClose }) {
             flex: '0 0 auto',
           }}
         >
-          {/* Range selector */}
-          <div className="segmented" role="group" aria-label="Range">
+          {/* Range selector — scrolls horizontally on narrow phones instead of
+              clipping the later ranges (2y/5y/max) off-screen. */}
+          <div className="segmented" role="group" aria-label="Range" style={{ maxWidth: '100%', overflowX: 'auto' }}>
             {RANGES.map((r) => (
               <button
                 key={r}
@@ -229,7 +230,7 @@ export default function ChartModal({ symbol, name, type, onClose }) {
             overflow: 'auto',
           }}
         >
-          <div style={{ display: 'flex', gap: theme.space(3), alignItems: 'flex-start', width: '100%' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: theme.space(3), alignItems: 'flex-start', width: '100%' }}>
             {/* position:relative wrapper hosts the draw-on wipe over the chart */}
             <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
               <FullChart

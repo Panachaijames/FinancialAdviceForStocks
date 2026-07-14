@@ -9,6 +9,23 @@ export default defineConfig({
   // (served at the origin root) keep absolute '/'.
   base: process.env.CAP_BUILD ? './' : '/',
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        // Split rarely-changing vendor code into its own chunks so an app edit
+        // doesn't invalidate the cached React / charting bytes. (tfjs is left
+        // alone — it's already dynamically imported into the Forecast chunk.)
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          if (id.includes('react-dom') || id.includes('/react/') || id.includes('scheduler')) {
+            return 'react-vendor';
+          }
+          if (id.includes('lightweight-charts')) return 'charts-vendor';
+          return undefined;
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: {

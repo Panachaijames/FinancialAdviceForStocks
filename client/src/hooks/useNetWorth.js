@@ -22,7 +22,7 @@ export function useNetWorth() {
   for (const h of holdings) {
     const q = quotes[h.symbol];
     const native = h.currency || (h.type === 'th_stock' ? 'THB' : 'USD');
-    const price = q && Number.isFinite(Number(q.price)) ? Number(q.price) : Number(h.avgCost) || 0;
+    const price = q && Number(q.price) > 0 ? Number(q.price) : Number(h.avgCost) || 0;
     const mv = convert((Number(h.shares) || 0) * price, native);
     investments += mv;
     byType[h.type] = (byType[h.type] || 0) + mv;

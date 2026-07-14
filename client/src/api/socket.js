@@ -1,5 +1,12 @@
 // Singleton market WebSocket client with auto-reconnect, resubscribe, and ref-counting.
 
+// After laptop sleep or a network blip the socket can sit half-open: the "Live"
+// badge stays on while prices silently freeze. A healthy socket sees a message
+// at least every ~15s (the hub broadcasts FX on that cadence), so this long
+// without any message means the connection is dead — force a reconnect (5.1).
+const STALE_MS = 45000;
+const HEARTBEAT_CHECK_MS = 15000;
+
 class MarketSocket {
   constructor() {
     this.ws = null;
@@ -17,6 +24,7 @@ class MarketSocket {
     this.reconnectAttempts = 0;
     this.reconnectTimer = null;
     this.heartbeatTimer = null;
+    this.lastMessageAt = 0;
   }
 
   _url() {
@@ -66,6 +74,8 @@ class MarketSocket {
       this.connecting = false;
       this.connected = true;
       this.reconnectAttempts = 0;
+      this.lastMessageAt = Date.now();
+      this._startHeartbeat();
       this._emitStatus();
       // Re-subscribe to all active symbols.
       const symbols = Array.from(this.subscriptions.keys());
@@ -75,6 +85,7 @@ class MarketSocket {
     };
 
     ws.onmessage = (event) => {
+      this.lastMessageAt = Date.now(); // any message = the socket is alive
       let msg;
       try {
         msg = JSON.parse(event.data);
@@ -115,11 +126,36 @@ class MarketSocket {
       this.connecting = false;
       this.connected = false;
       this.ws = null;
+      this._stopHeartbeat();
       this._emitStatus();
       if (this.shouldConnect) {
         this._scheduleReconnect();
       }
     };
+  }
+
+  // Force a reconnect if the socket goes silent past STALE_MS (half-open after
+  // sleep/network loss). Closing triggers onclose -> _scheduleReconnect, and the
+  // badge flips to offline instead of falsely showing "Live".
+  _startHeartbeat() {
+    this._stopHeartbeat();
+    this.heartbeatTimer = setInterval(() => {
+      if (!this.connected) return;
+      if (Date.now() - this.lastMessageAt > STALE_MS) {
+        try {
+          if (this.ws) this.ws.close();
+        } catch {
+          /* ignore — onclose will reconnect */
+        }
+      }
+    }, HEARTBEAT_CHECK_MS);
+  }
+
+  _stopHeartbeat() {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
   }
 
   _scheduleReconnect() {

@@ -55,7 +55,7 @@ export default function HoldingsSection({ onOpenChart }) {
       if (key === 'added') return h.addedAt || '';
       const q = quotes[h.symbol];
       const native = h.currency || (h.type === 'th_stock' ? 'THB' : 'USD');
-      const price = q && Number.isFinite(Number(q.price)) ? Number(q.price) : null;
+      const price = q && Number(q.price) > 0 ? Number(q.price) : null;
       const shares = Number(h.shares) || 0;
       if (key === 'value') {
         return price != null ? convert(shares * price, native) : null;

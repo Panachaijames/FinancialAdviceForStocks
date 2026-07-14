@@ -5,6 +5,21 @@ import { getQuotes } from '../providers/yahoo.js';
 import { getFx } from '../providers/fx.js';
 import { attachOvernight } from '../providers/pyth.js';
 import createBinanceFeed from '../providers/binanceWs.js';
+import { log } from '../util/log.js';
+
+// WS subscription hardening (0.2): reject garbage symbols and bound how many a
+// single client — and the whole hub — can push into the Yahoo poll, so a
+// stranger can't drive a self-inflicted 429 storm with junk subscriptions.
+const SYMBOL_RE = /^[A-Za-z0-9.^=-]{1,20}$/;
+const MAX_SYMBOLS_PER_CLIENT = 100;
+const MAX_SYMBOLS_GLOBAL = 500;
+
+// Heartbeat sweep interval (5.1): terminate half-open sockets (slept phones,
+// dead laptops) so their leaked refCounts stop driving the Yahoo poll forever.
+const HEARTBEAT_MS = 30000;
+
+/** Live counters surfaced in /api/health (5.2). */
+export const hubStats = { clients: 0, symbols: 0 };
 
 /**
  * Attach the realtime WebSocket hub to an existing HTTP server.
@@ -129,6 +144,7 @@ export function attach(httpServer) {
   function incRef(symbol) {
     const prev = refCounts.get(symbol) || 0;
     refCounts.set(symbol, prev + 1);
+    hubStats.symbols = refCounts.size;
     return prev === 0; // became newly active
   }
 
@@ -136,6 +152,7 @@ export function attach(httpServer) {
     const prev = refCounts.get(symbol) || 0;
     if (prev <= 1) {
       refCounts.delete(symbol);
+      hubStats.symbols = refCounts.size;
       return true; // became inactive
     }
     refCounts.set(symbol, prev - 1);
@@ -149,7 +166,12 @@ export function attach(httpServer) {
     for (const raw of symbols) {
       const symbol = String(raw || '').trim();
       if (!symbol) continue;
+      if (!SYMBOL_RE.test(symbol)) continue; // reject junk symbols (0.2)
       if (own.has(symbol)) continue; // already subscribed by this client
+      if (own.size >= MAX_SYMBOLS_PER_CLIENT) break; // per-client cap (0.2)
+      // Global cap: still allow subscribing to an already-tracked symbol, but
+      // block brand-new ones once the hub is at capacity (0.2).
+      if (!refCounts.has(symbol) && refCounts.size >= MAX_SYMBOLS_GLOBAL) continue;
       own.add(symbol);
       const newlyActive = incRef(symbol);
       if (newlyActive && isCrypto(symbol)) cryptoChanged = true;
@@ -252,10 +274,38 @@ export function attach(httpServer) {
   // Prime FX shortly after startup so clients get a value quickly.
   pollFxOnce();
 
+  // Heartbeat sweep (5.1): ping every client each interval and terminate any
+  // that didn't pong since the previous sweep. terminate() fires 'close', which
+  // runs the existing refCount cleanup — so a slept phone stops driving the poll.
+  const heartbeat = setInterval(() => {
+    for (const ws of clientSymbols.keys()) {
+      if (ws.isAlive === false) {
+        try {
+          ws.terminate();
+        } catch {
+          // ignore
+        }
+        continue;
+      }
+      ws.isAlive = false;
+      try {
+        ws.ping();
+      } catch {
+        // ignore
+      }
+    }
+  }, HEARTBEAT_MS);
+
   // ---- Connection handling --------------------------------------------------
 
   wss.on('connection', (ws) => {
     clientSymbols.set(ws, new Set());
+    hubStats.clients = clientSymbols.size;
+    ws.isAlive = true;
+    ws.on('pong', () => {
+      ws.isAlive = true;
+    });
+    log.info('ws connect', { clients: hubStats.clients });
     safeSend(ws, { type: 'hello' });
     if (lastFx) safeSend(ws, { type: 'fx', data: lastFx });
 
@@ -289,6 +339,9 @@ export function attach(httpServer) {
         if (cryptoChanged) recomputeCryptoFeed();
       }
       clientSymbols.delete(ws);
+      hubStats.clients = clientSymbols.size;
+      hubStats.symbols = refCounts.size;
+      log.info('ws disconnect', { clients: hubStats.clients });
     });
 
     ws.on('error', () => {
@@ -299,6 +352,7 @@ export function attach(httpServer) {
   wss.on('close', () => {
     clearInterval(quotePoll);
     clearInterval(fxPoll);
+    clearInterval(heartbeat);
     try {
       binanceFeed.close();
     } catch {

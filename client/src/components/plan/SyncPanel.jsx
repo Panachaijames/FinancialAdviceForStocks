@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { ArrowLeftRight, Copy, Check, Download, Send } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { ArrowLeftRight, Copy, Check, Download, Send, Upload, Save } from 'lucide-react';
 import { theme } from '../../lib/theme.js';
 import { getHealth } from '../../api/client.js';
-import { sendTransfer, receiveTransfer } from '../../lib/sync.js';
+import { sendTransfer, receiveTransfer, snapshot, applySnapshot, counts } from '../../lib/sync.js';
+import { backupFilename, serializeBackup, parseBackup, downloadTextFile } from '../../lib/backup.js';
 import { PanelHeader } from './SavingsPanel.jsx';
 
 /**
@@ -18,6 +19,8 @@ export default function SyncPanel() {
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [msg, setMsg] = useState(null); // { ok, text }
+  const [restoreMsg, setRestoreMsg] = useState(null); // { ok, text }
+  const fileRef = useRef(null);
 
   useEffect(() => {
     let ok = true;
@@ -66,11 +69,72 @@ export default function SyncPanel() {
     }
   }
 
+  function downloadBackup() {
+    try {
+      downloadTextFile(backupFilename(), serializeBackup(snapshot(), new Date().toISOString()));
+      setRestoreMsg({ ok: true, text: 'Backup downloaded. Keep it somewhere safe.' });
+    } catch {
+      setRestoreMsg({ ok: false, text: 'Could not create the backup file.' });
+    }
+  }
+
+  function onRestoreFile(e) {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = ''; // allow picking the same file again
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const snap = parseBackup(String(reader.result || ''));
+        applySnapshot(snap);
+        const c = counts(snap);
+        setRestoreMsg({
+          ok: true,
+          text: `Restored ${c.holdings} holdings, ${c.funds} funds, ${c.savings} cash entries.`,
+        });
+      } catch (err) {
+        setRestoreMsg({ ok: false, text: err && err.message ? err.message : 'Could not read that backup.' });
+      }
+    };
+    reader.onerror = () => setRestoreMsg({ ok: false, text: 'Could not read that file.' });
+    reader.readAsText(file);
+  }
+
   const label = { fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4, color: theme.colors.textDim, fontWeight: 600 };
 
   return (
     <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: theme.space(3) }}>
       <PanelHeader icon={<ArrowLeftRight size={16} />} title="Move data to another device" />
+
+      {/* Local backup — always available; needs no server (your data is on-device). */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: theme.space(2), padding: theme.space(2), background: theme.colors.bgElev, borderRadius: theme.radius.md }}>
+        <div style={label}>Backup on this device</div>
+        <div style={{ fontSize: 13, color: theme.colors.textDim }}>
+          Your holdings, trades, cash &amp; funds live only in this browser. Download a <b>.json</b> backup you can
+          keep or move by hand — and restore it here anytime.
+        </div>
+        <div style={{ display: 'flex', gap: theme.space(2), flexWrap: 'wrap' }}>
+          <button type="button" className="btn" onClick={downloadBackup}>
+            <Save size={15} /> Download backup (.json)
+          </button>
+          <button type="button" className="btn" onClick={() => fileRef.current && fileRef.current.click()}>
+            <Upload size={15} /> Restore from file
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/json,.json"
+            onChange={onRestoreFile}
+            style={{ display: 'none' }}
+          />
+        </div>
+        <div style={{ fontSize: 11, color: theme.colors.textFaint }}>
+          ⚠️ Restoring <b>replaces</b> this device's current holdings, trades, cash &amp; funds with the file's contents.
+        </div>
+        {restoreMsg ? (
+          <div style={{ fontSize: 12.5, color: restoreMsg.ok ? theme.colors.up : theme.colors.down }}>{restoreMsg.text}</div>
+        ) : null}
+      </div>
 
       {serverReady === false ? (
         <div style={{ fontSize: 12.5, color: theme.colors.textDim, lineHeight: 1.6, background: theme.colors.bgElev, borderRadius: theme.radius.sm, padding: theme.space(2), borderLeft: `3px solid ${theme.colors.warn}` }}>

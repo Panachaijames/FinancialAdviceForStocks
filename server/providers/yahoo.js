@@ -1,6 +1,7 @@
 import yahooFinance from 'yahoo-finance2';
 import { classify } from '../util/assetType.js';
 import { createLimiter } from '../util/limit.js';
+import { log } from '../util/log.js';
 
 // Cap concurrent upstream Yahoo calls. Opening the app with many holdings fans
 // out into one quote + candles + dividend fetch per card all at once; that
@@ -37,7 +38,9 @@ async function withRetry(fn, tries = 3, baseMs = 600) {
       const msg = String((e && e.message) || e);
       const isRateLimited = msg.includes('Too Many Requests') || msg.includes('429');
       if (!isRateLimited || i === tries - 1) throw e;
-      await sleep(baseMs * 2 ** i + Math.floor(Math.random() * 250));
+      const delayMs = baseMs * 2 ** i + Math.floor(Math.random() * 250);
+      log.warn('yahoo rate-limited, backing off', { attempt: i + 1, tries, delayMs });
+      await sleep(delayMs);
     }
   }
   throw lastErr;
@@ -82,13 +85,20 @@ function mapQuote(q) {
   if (changePct == null && change != null && prevClose) {
     changePct = (change / prevClose) * 100;
   }
+  // Honest state: a missing or non-positive price is "no data", not "$0.00".
+  // Returning null lets getQuotes fall back to the chart endpoint; if that also
+  // has no price the symbol is simply absent and the client shows cost basis —
+  // never a fake $0 that reads as −100% P/L and is counted as "priced live".
+  if (price == null || !(price > 0)) return null;
   return {
     symbol,
     type: refineType(symbol, q.quoteType),
     name: q.shortName || q.longName || q.displayName || symbol,
     currency: q.currency || 'USD',
-    price: price ?? 0,
-    prevClose: prevClose ?? 0,
+    price,
+    // Keep prevClose null (not 0) when unknown: a 0 makes today's change equal
+    // the holding's whole value. Null → the client renders "—" for change.
+    prevClose: prevClose ?? null,
     change: change ?? 0,
     changePct: changePct ?? 0,
     dayHigh: num(q.regularMarketDayHigh) ?? 0,

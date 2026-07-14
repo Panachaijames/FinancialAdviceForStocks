@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { TrendingUp, Sparkles, Layers } from 'lucide-react';
 import marketSocket from '../api/socket.js';
+import { getHealth } from '../api/client.js';
 import { useSettingsStore } from '../store/settingsStore.js';
 import CurrencyToggle from './CurrencyToggle.jsx';
 import GradientText from './fx/GradientText.jsx';
@@ -21,6 +22,7 @@ const FX_TITLE = {
 export default function Header() {
   const [connected, setConnected] = useState(false);
   const [everConnected, setEverConnected] = useState(false);
+  const [waking, setWaking] = useState(false);
   const fxMode = useSettingsStore((s) => s.fxMode);
   const setFxMode = useSettingsStore((s) => s.setFxMode);
   const glassMode = useSettingsStore((s) => s.glassMode);
@@ -33,17 +35,70 @@ export default function Header() {
     if (marketSocket.connected) setEverConnected(true);
     const off = marketSocket.onStatus((on) => {
       setConnected(on);
-      if (on) setEverConnected(true);
+      if (on) {
+        setEverConnected(true);
+        setWaking(false); // live data arrived — dismiss the waking notice
+      }
     });
-    return off;
+
+    // Cold-start detection: on the free dyno the server may be asleep, so the WS
+    // won't connect and getHealth() is slow (~30s). If neither has come back
+    // within 3s, tell the user it's waking up instead of the alarming "Offline".
+    let done = false;
+    let hideTimer = null;
+    getHealth()
+      .then(() => {
+        done = true;
+        setWaking(false); // server responded — it's awake
+      })
+      .catch(() => {
+        /* still unreachable; the WS-connect handler clears waking when it lands */
+      });
+    const t = setTimeout(() => {
+      if (!done && !marketSocket.connected) {
+        setWaking(true);
+        // If it's STILL not up well past a normal cold start, it isn't "waking",
+        // it's down — stop implying data is ~30s away and let the honest Offline
+        // badge stand. A later recovery still clears via the WS-connect handler.
+        hideTimer = setTimeout(() => setWaking(false), 40000);
+      }
+    }, 3000);
+
+    return () => {
+      clearTimeout(t);
+      if (hideTimer) clearTimeout(hideTimer);
+      off();
+    };
   }, []);
 
   const cycleFx = () =>
     setFxMode(fxMode === 'auto' ? 'on' : fxMode === 'on' ? 'off' : 'auto');
 
   return (
-    <header className="app-header">
-      <div className="app-brand">
+    <>
+      {waking && !connected && !everConnected ? (
+        <div
+          role="status"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            padding: '6px 14px',
+            fontSize: 12.5,
+            fontWeight: 600,
+            textAlign: 'center',
+            color: 'var(--text)',
+            background: 'rgba(59, 130, 246, 0.12)',
+            borderBottom: '1px solid var(--accent)',
+          }}
+        >
+          <span className="conn-dot-off" aria-hidden="true" />
+          Free server is waking up — live data in ~30s…
+        </div>
+      ) : null}
+      <header className="app-header">
+        <div className="app-brand">
         <div className="app-brand-logo" aria-hidden="true">
           <TrendingUp size={22} strokeWidth={2.5} />
         </div>
@@ -105,6 +160,7 @@ export default function Header() {
         </div>
         <CurrencyToggle />
       </div>
-    </header>
+      </header>
+    </>
   );
 }

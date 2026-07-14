@@ -140,4 +140,40 @@ export function parseTradesCsv(text) {
   return { trades, errors, mapped };
 }
 
-export default { parseCsv, parseTradesCsv };
+/** Escape one CSV field — quote it if it contains a comma, quote, or newline. */
+function csvField(v) {
+  const s = String(v ?? '');
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+const EXPORT_HEADERS = ['date', 'side', 'symbol', 'qty', 'price', 'fee'];
+
+/**
+ * Serialize recorded transactions to a broker-style CSV that parseTradesCsv can
+ * re-import — round-trips date/side/symbol/qty/price/fee, oldest first. This is
+ * the inverse of parseTradesCsv (the pair is covered by a round-trip test).
+ * @param {{at?:string, date?:string, side:string, symbol:string, qty:number, price:number, fee?:number}[]} transactions
+ * @returns {string}
+ */
+export function tradesToCsv(transactions) {
+  const rows = (Array.isArray(transactions) ? transactions : [])
+    .filter((t) => t && t.symbol && (t.side === 'buy' || t.side === 'sell'))
+    .slice()
+    .sort((a, b) => (String(a.at || a.date) < String(b.at || b.date) ? -1 : 1));
+  const lines = [EXPORT_HEADERS.join(',')];
+  for (const t of rows) {
+    lines.push(
+      [
+        csvField(t.at || t.date || ''),
+        csvField(t.side),
+        csvField(t.symbol),
+        csvField(Number(t.qty) || 0),
+        csvField(Number(t.price) || 0),
+        csvField(Number(t.fee) || 0),
+      ].join(',')
+    );
+  }
+  return `${lines.join('\r\n')}\r\n`;
+}
+
+export default { parseCsv, parseTradesCsv, tradesToCsv };

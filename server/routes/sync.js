@@ -9,7 +9,10 @@ import { isConfigured, kvGet, kvSet, kvDel } from '../providers/kv.js';
 
 const router = express.Router();
 
-const CODE_RE = /^[A-Za-z0-9-]{6,40}$/;
+// Match exactly the PT-XXXX-XXXX transfer code the client generates (0.2) —
+// far tighter than the old any-6-to-40-chars rule, so the anonymous KV keyspace
+// a stranger can write to shrinks from "arbitrary string" to this one shape.
+const CODE_RE = /^PT-[A-Z2-9]{4}-[A-Z2-9]{4}$/;
 const MAX_BYTES = 256 * 1024;
 const TTL_SECONDS = 60 * 60 * 24; // 24h — a receive deletes it sooner; this is just the abandon fallback
 

@@ -31,7 +31,7 @@ export default function AlertsPanel() {
         if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
           // eslint-disable-next-line no-new
           new Notification(`📈 ${describeAlert(a)}`, {
-            body: q && Number.isFinite(Number(q.price)) ? `${a.symbol} now at ${q.price}` : a.symbol,
+            body: q && Number(q.price) > 0 ? `${a.symbol} now at ${q.price}` : a.symbol,
           });
         }
       } catch {
