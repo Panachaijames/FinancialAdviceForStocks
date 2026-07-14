@@ -7,7 +7,8 @@
 // (lib/trades.js) and appends a ledger entry that snapshots the prior position
 // so the latest trade per symbol can be undone safely.
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import { createSafeStorage } from '../lib/safeStorage.js';
 import { classify } from '../lib/assetType.js';
 import { applyBuy, applySell } from '../lib/trades.js';
 
@@ -246,6 +247,10 @@ export const usePortfolioStore = create(
     {
       name: 'pt-portfolio',
       version: 2,
+      // Corruption-safe storage: quarantines unparseable JSON to pt-portfolio.corrupt
+      // and keeps a one-deep pt-portfolio.bak, so a bad write can't silently wipe
+      // the only copy of the user's holdings/ledger.
+      storage: createJSONStorage(() => createSafeStorage()),
       // Only the real collections persist; transient undo state stays in memory.
       partialize: (state) => ({ holdings: state.holdings, transactions: state.transactions }),
       // v1 -> v2: the trade ledger arrived; older snapshots just get an empty one.

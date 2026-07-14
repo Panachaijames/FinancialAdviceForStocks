@@ -1,11 +1,13 @@
 import React, { useMemo, useState } from 'react';
-import { History, Undo2, ChevronDown, ChevronUp, Upload } from 'lucide-react';
+import { History, Undo2, ChevronDown, ChevronUp, Upload, Download } from 'lucide-react';
 import { theme } from '../lib/theme.js';
 import { fmtMoney, fmtNumber, classForChange } from '../lib/format.js';
 import { usePortfolioStore } from '../store/portfolioStore.js';
 import { useSettingsStore } from '../store/settingsStore.js';
 import useFx from '../hooks/useFx.js';
 import { realizedByCurrency } from '../lib/trades.js';
+import { tradesToCsv } from '../lib/csvImport.js';
+import { downloadTextFile } from '../lib/backup.js';
 import CsvImportDialog from './CsvImportDialog.jsx';
 
 const SHOW_COLLAPSED = 8;
@@ -75,6 +77,17 @@ export default function TransactionsPanel() {
           >
             <Upload size={14} /> Import CSV
           </button>
+          {rows.length > 0 && (
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => downloadTextFile('pt-trades.csv', tradesToCsv(transactions), 'text/csv')}
+              title="Export your trades as a CSV (re-importable)"
+              style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: theme.colors.accent }}
+            >
+              <Download size={14} /> Export CSV
+            </button>
+          )}
           {rows.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'baseline', gap: theme.space(1) }}>
               <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4, color: theme.colors.textDim }}>
