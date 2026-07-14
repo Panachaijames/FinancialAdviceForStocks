@@ -77,7 +77,7 @@ export default function PortfolioSummary() {
     for (const h of holdings) {
       const q = quotes[h.symbol];
       const native = h.currency || (h.type === 'th_stock' ? 'THB' : 'USD');
-      const price = q && Number.isFinite(Number(q.price)) ? Number(q.price) : h.avgCost;
+      const price = q && Number(q.price) > 0 ? Number(q.price) : h.avgCost;
       const shares = Number(h.shares) || 0;
 
       const mvNative = shares * price;
@@ -90,7 +90,7 @@ export default function PortfolioSummary() {
 
       // Today's change from prevClose.
       const prevClose =
-        q && Number.isFinite(Number(q.prevClose)) ? Number(q.prevClose) : price;
+        q && Number(q.prevClose) > 0 ? Number(q.prevClose) : price;
       const prevMvNative = shares * prevClose;
       prevMarketValue += convert(prevMvNative, native);
 
@@ -150,12 +150,14 @@ export default function PortfolioSummary() {
     holdings.length > 0 &&
     holdings.every((h) => {
       const q = quotes[h.symbol];
-      return q && Number.isFinite(Number(q.price));
+      return q && Number(q.price) > 0;
     });
   const usdTotal = convertCurrency(totals.marketValue, displayCurrency, 'USD', rate);
   const { celebrating, dismiss } = useAllTimeHigh({
     usdValue: usdTotal,
-    ready: quotesReady && fx != null,
+    // Gate the ATH ledger on a REAL fx rate: source 'default' is the hardcoded
+    // 36 fallback, which could otherwise immortalize a bogus all-time-high.
+    ready: quotesReady && fx != null && fx.source !== 'default',
   });
 
   // Honest number states: skeleton while the first batch is in flight; once
@@ -163,7 +165,7 @@ export default function PortfolioSummary() {
   const showSkeleton = loading && !error && !quotesReady; // first load in flight
   const quotedCount = holdings.filter((h) => {
     const q = quotes[h.symbol];
-    return q && Number.isFinite(Number(q.price));
+    return q && Number(q.price) > 0;
   }).length;
   const partial = !showSkeleton && quotedCount < holdings.length; // settled (or gave up) with gaps
 

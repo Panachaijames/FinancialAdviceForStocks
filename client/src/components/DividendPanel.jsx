@@ -121,7 +121,7 @@ export default function DividendPanel() {
         continue;
       }
       const quote = quotes[h.symbol];
-      const price = quote && Number.isFinite(quote.price) ? quote.price : null;
+      const price = quote && Number(quote.price) > 0 ? quote.price : null;
       const income = computeDividendIncome({
         shares: h.shares,
         dividend,

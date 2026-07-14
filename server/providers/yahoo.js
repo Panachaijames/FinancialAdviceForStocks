@@ -82,13 +82,20 @@ function mapQuote(q) {
   if (changePct == null && change != null && prevClose) {
     changePct = (change / prevClose) * 100;
   }
+  // Honest state: a missing or non-positive price is "no data", not "$0.00".
+  // Returning null lets getQuotes fall back to the chart endpoint; if that also
+  // has no price the symbol is simply absent and the client shows cost basis —
+  // never a fake $0 that reads as −100% P/L and is counted as "priced live".
+  if (price == null || !(price > 0)) return null;
   return {
     symbol,
     type: refineType(symbol, q.quoteType),
     name: q.shortName || q.longName || q.displayName || symbol,
     currency: q.currency || 'USD',
-    price: price ?? 0,
-    prevClose: prevClose ?? 0,
+    price,
+    // Keep prevClose null (not 0) when unknown: a 0 makes today's change equal
+    // the holding's whole value. Null → the client renders "—" for change.
+    prevClose: prevClose ?? null,
     change: change ?? 0,
     changePct: changePct ?? 0,
     dayHigh: num(q.regularMarketDayHigh) ?? 0,

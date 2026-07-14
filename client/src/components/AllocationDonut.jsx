@@ -90,7 +90,7 @@ export default function AllocationDonut() {
       const q = quotes[h.symbol];
       const native = h.currency || (h.type === 'th_stock' ? 'THB' : 'USD');
       const price =
-        q && Number.isFinite(Number(q.price)) ? Number(q.price) : Number(h.avgCost) || 0;
+        q && Number(q.price) > 0 ? Number(q.price) : Number(h.avgCost) || 0;
       const mv = convert((Number(h.shares) || 0) * price, native);
       if (Number.isFinite(mv) && mv > 0) byType[h.type] = (byType[h.type] || 0) + mv;
     }

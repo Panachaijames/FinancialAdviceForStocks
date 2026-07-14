@@ -141,7 +141,7 @@ export default function MiniChart({ symbol, range = '5d', live = true, height = 
     if (!live) return;
     if (!seriesRef.current || lastTimeRef.current == null) return;
     const q = quotes[symbol];
-    if (!q || !Number.isFinite(Number(q.price))) return;
+    if (!q || !(Number(q.price) > 0)) return;
     seriesRef.current.update({ time: lastTimeRef.current, value: Number(q.price) });
   }, [quotes, symbol, live]);
 

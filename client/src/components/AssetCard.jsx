@@ -73,7 +73,7 @@ export default function AssetCard({ holding, onOpen }) {
   const [dividend, setDividend] = useState(undefined); // undefined = not fetched, null = none
 
   const q = quotes[symbol];
-  const price = q && Number.isFinite(Number(q.price)) ? Number(q.price) : null;
+  const price = q && Number(q.price) > 0 ? Number(q.price) : null;
   const changePct = q && Number.isFinite(Number(q.changePct)) ? Number(q.changePct) : null;
   const ext = extendedQuote(q);
 
