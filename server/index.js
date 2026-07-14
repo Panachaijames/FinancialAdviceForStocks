@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import express from 'express';
 import cors from 'cors';
+import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import yahooFinance from 'yahoo-finance2';
 
@@ -41,6 +42,10 @@ const app = express();
 // one hop so express-rate-limit keys off the real client IP rather than lumping
 // every client under the proxy's address (which would throttle everyone as one).
 app.set('trust proxy', 1);
+
+// gzip all responses — candles/news/the whole Vite bundle previously shipped
+// uncompressed from the free dyno.
+app.use(compression());
 
 app.use(cors());
 app.use(express.json());
@@ -118,12 +123,24 @@ const clientDist = process.env.CLIENT_DIST
   ? path.resolve(process.env.CLIENT_DIST)
   : path.resolve(__dirname, '../client/dist');
 if (fs.existsSync(clientDist)) {
-  app.use(express.static(clientDist));
+  // Vite content-hashes asset filenames, so hashed assets are safe to cache
+  // forever. index.html must NOT be (it references those hashed names), or a
+  // redeploy would never reach an already-open browser.
+  app.use(
+    express.static(clientDist, {
+      maxAge: '1y',
+      immutable: true,
+      setHeaders(res, filePath) {
+        if (filePath.endsWith('index.html')) res.setHeader('Cache-Control', 'no-cache');
+      },
+    })
+  );
   // SPA fallback for non-API GET routes.
   app.get(/^(?!\/api\/|\/ws).*/, (req, res, next) => {
     if (req.method !== 'GET') return next();
     const indexHtml = path.join(clientDist, 'index.html');
     if (fs.existsSync(indexHtml)) {
+      res.setHeader('Cache-Control', 'no-cache'); // always revalidate the shell
       return res.sendFile(indexHtml);
     }
     return next();

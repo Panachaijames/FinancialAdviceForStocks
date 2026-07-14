@@ -106,9 +106,11 @@ If you want to keep your Vercel frontend:
 
 These envs default to empty → relative URLs, which is exactly what Option A and local dev (Vite proxy) need, so nothing else changes.
 
-## Desktop App (Windows) — full features, no API keys
+## Desktop App (Windows) — thin cloud shell
 
-Yahoo Finance works on home/residential networks (it only blocks cloud datacenter IPs), so running the app **locally** gives every user the *complete* feature set — **Thai SET stocks, dividends, real-time, and news** — with **no API keys at all**. The project packages into a standalone Windows desktop app (Electron bundles its own Node runtime + browser, so users install nothing).
+The Windows app is a **thin Electron shell**: it opens a desktop window that loads the hosted app straight from the cloud (the Render deployment). So it always has the **latest features** with no re-shipping, bundles **no API keys** (they live server-side), and is safe to hand to anyone. Because it loads the hosted backend, data coverage matches the web app — in particular **Thai SET stocks depend on the server's data plan** (Yahoo blocks cloud datacenter IPs, so SET needs the paid Twelve Data plan). It does **not** run a local server or use your home IP. (How it works: [`electron/main.cjs`](electron/main.cjs) points a `BrowserWindow` at `CLOUD_URL`.)
+
+> **Want the full free feature set — including Thai SET — via your own residential IP?** Run the app locally instead: `npm start`, then open `http://localhost:8787`. Yahoo works from a home network with no keys. (The Electron shell can also be flipped back to this local-server mode — the legacy `startServer` / local-port path is still present in `electron/main.cjs`.)
 
 ### Build the app
 
@@ -117,11 +119,11 @@ npm install
 npm run pack:win
 ```
 
-Output: `release/pt-financial-advisor-win32-x64/` containing **`PT Financial Advisor.exe`**. Double-click it — it starts the bundled server on a free local port and opens the dashboard in a desktop window. (How it works: [`electron/main.cjs`](electron/main.cjs) launches [`server/index.js`](server/index.js) in-process and points a window at it.)
+Output: `release/pt-financial-advisor-win32-x64/` containing **`PT Financial Advisor.exe`**. Double-click it — it opens a window that loads the hosted dashboard (a brief splash covers the cloud connect, including a free-tier cold start). No local server is started.
 
 ### Share it with other people
 
-Send them the zip produced alongside the build, `release/PT-Financial-Advisor-Windows-x64.zip` (or zip the `pt-financial-advisor-win32-x64` folder yourself). They **extract it and run `PT Financial Advisor.exe`** — no Node, no install, no keys, full features on their own network.
+Send them the zip produced alongside the build, `release/PT-Financial-Advisor-Windows-x64.zip` (or zip the `pt-financial-advisor-win32-x64` folder yourself). They **extract it and run `PT Financial Advisor.exe`** — no Node, no install, no keys; it loads the hosted dashboard.
 
 > **SmartScreen warning:** the build is unsigned, so Windows may show *"Windows protected your PC."* Click **More info → Run anyway**. To remove it permanently, sign the app with a code-signing certificate.
 
