@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createChart, ColorType, CrosshairMode, LineStyle } from 'lightweight-charts';
 import theme from '../lib/theme.js';
+import { getChartColors, INDICATOR_COLORS as OVERLAY_COLORS, rgba } from '../lib/chartTheme.js';
 import useCandles from '../hooks/useCandles.js';
 import {
   sma,
@@ -15,45 +16,38 @@ import {
 } from '../lib/indicators.js';
 import { fmtNumber } from '../lib/format.js';
 
-const OVERLAY_COLORS = {
-  sma: '#3b82f6',
-  ema: '#f59e0b',
-  wma: '#a855f7',
-  bbUpper: '#64748b',
-  bbMiddle: '#94a3b8',
-  bbLower: '#64748b',
-  vwap: '#22d3ee',
-};
+// OVERLAY_COLORS + rgba now come from lib/chartTheme.js (the one palette source).
 
 const MAIN_HEIGHT = 360;
 const SUB_HEIGHT = 130;
 
-/** Shared base chart options derived from the theme. */
+/** Shared base chart options derived from the theme (resolved to literals). */
 function baseChartOptions(width, height) {
+  const c = getChartColors();
   return {
     width,
     height,
     layout: {
       background: { type: ColorType.Solid, color: 'transparent' },
-      textColor: theme.colors.textDim,
+      textColor: c.text,
       fontSize: 11,
       fontFamily: theme.font,
     },
     grid: {
-      vertLines: { color: theme.colors.border },
-      horzLines: { color: theme.colors.border },
+      vertLines: { color: c.border },
+      horzLines: { color: c.border },
     },
     crosshair: {
       mode: CrosshairMode.Normal,
-      vertLine: { color: theme.colors.textFaint, width: 1, style: LineStyle.Dashed, labelBackgroundColor: theme.colors.panelElev },
-      horzLine: { color: theme.colors.textFaint, width: 1, style: LineStyle.Dashed, labelBackgroundColor: theme.colors.panelElev },
+      vertLine: { color: c.faint, width: 1, style: LineStyle.Dashed, labelBackgroundColor: c.panelElev },
+      horzLine: { color: c.faint, width: 1, style: LineStyle.Dashed, labelBackgroundColor: c.panelElev },
     },
     rightPriceScale: {
-      borderColor: theme.colors.border,
+      borderColor: c.border,
       scaleMargins: { top: 0.1, bottom: 0.1 },
     },
     timeScale: {
-      borderColor: theme.colors.border,
+      borderColor: c.border,
       timeVisible: true,
       secondsVisible: false,
     },
@@ -64,12 +58,14 @@ function baseChartOptions(width, height) {
 
 /** Compute volume histogram data colored by candle direction. */
 function volumeData(candles) {
+  const upFill = rgba(theme.colors.up, 0.45);
+  const downFill = rgba(theme.colors.down, 0.45);
   return candles
     .filter((c) => c && Number.isFinite(c.volume))
     .map((c) => ({
       time: c.time,
       value: c.volume,
-      color: c.close >= c.open ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)',
+      color: c.close >= c.open ? upFill : downFill,
     }));
 }
 

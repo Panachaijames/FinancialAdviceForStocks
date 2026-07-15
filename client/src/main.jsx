@@ -4,7 +4,13 @@ import App from './App.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 import { useSettingsStore } from './store/settingsStore.js';
 import { applyMotionAttr } from './lib/motion.js';
+import { applyThemeVars } from './lib/theme.js';
 import './index.css';
+
+// theme.js is the single source of truth for the palette: stamp its tokens onto
+// :root before first paint, overriding index.css's fallback copy. Changing the
+// palette (or adding a light theme) is now one edit in theme.js.
+applyThemeVars();
 
 // Stamp <html data-motion="ok|reduce"> and <html data-glass="0|1"> BEFORE first
 // render (components read them during mount) and keep them current when the FX

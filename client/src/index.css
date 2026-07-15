@@ -1,8 +1,12 @@
 /* ============================================================
    PT Financial Advisor — global stylesheet
-   Dark fintech palette (mirrors client/src/lib/theme.js)
    ============================================================ */
 
+/* SINGLE SOURCE OF TRUTH: client/src/lib/theme.js. applyThemeVars() (called from
+   main.jsx before render) stamps these same custom properties onto :root from
+   theme.js and OVERRIDES the values below. The declarations here exist only as a
+   pre-JS fallback so the very first paint isn't unstyled — edit theme.js, not
+   these. Keep them roughly in sync as a courtesy; theme.js always wins at runtime. */
 :root {
   --bg: #0b0e14;
   --bg-elev: #0f1320;
