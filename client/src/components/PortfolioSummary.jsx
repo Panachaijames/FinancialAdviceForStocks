@@ -11,7 +11,7 @@ import { getDividend } from '../api/client.js';
 import { computeDividendIncome } from '../lib/dividends.js';
 import { DIVIDEND_ERROR, isDividendError } from '../lib/dividendState.js';
 import marketSocket from '../api/socket.js';
-import { realizedByCurrency } from '../lib/trades.js';
+import { realizedByCurrency, dividendsByCurrency } from '../lib/trades.js';
 import CountUp from './fx/CountUp.jsx';
 import SpotlightCard from './fx/SpotlightCard.jsx';
 import Reveal from './fx/Reveal.jsx';
@@ -162,6 +162,17 @@ export default function PortfolioSummary() {
   }, [transactions, convert]);
   const hasSells = useMemo(() => (transactions || []).some((t) => t && t.side === 'sell'), [transactions]);
 
+  // Dividends actually RECEIVED (net of withholding), from the ledger — distinct
+  // from the PROJECTED "Annual Dividends" card above.
+  const dividendsReceived = useMemo(() => {
+    const byCur = dividendsByCurrency(transactions);
+    return Object.entries(byCur).reduce((sum, [c, v]) => sum + convert(v, c), 0);
+  }, [transactions, convert]);
+  const hasDividends = useMemo(
+    () => (transactions || []).some((t) => t && t.side === 'dividend'),
+    [transactions]
+  );
+
   // All-time-high tracking (currency-stable in USD). Guards: only once every
   // holding has a LIVE quote AND the real FX rate has loaded — otherwise the
   // avgCost/DEFAULT_RATE fallbacks could seed a bogus high-water mark.
@@ -255,6 +266,21 @@ export default function PortfolioSummary() {
           },
         ]
       : []),
+    // Only once a dividend has been logged.
+    ...(hasDividends
+      ? [
+          {
+            key: 'dividends-received',
+            label: 'Dividends Received',
+            icon: <Coins size={16} />,
+            value: dividendsReceived,
+            format: fmtCur,
+            sub: 'logged, net of withholding',
+            color: theme.colors.gold,
+            accent: theme.colors.gold,
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -270,8 +296,8 @@ export default function PortfolioSummary() {
       }}
     >
       {cards.map((c, i) => {
-        // Realized P/L derives from recorded transactions, not quotes — no skeleton.
-        const skel = showSkeleton && c.key !== 'realized';
+        // Realized P/L and dividends derive from recorded transactions, not quotes — no skeleton.
+        const skel = showSkeleton && c.key !== 'realized' && c.key !== 'dividends-received';
         return (
         <Reveal key={c.key} delay={Math.min(i * 70, 350)} style={{ minWidth: 0 }}>
           <SpotlightCard

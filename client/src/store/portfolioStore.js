@@ -25,7 +25,8 @@ export const usePortfolioStore = create(
   persist(
     (set, get) => ({
       holdings: [],
-      transactions: [], // [{ id, symbol, side:'buy'|'sell', qty, price, fee, currency, at, realized?, costBasis?, prevShares, prevAvgCost }]
+      transactions: [], // trade: { id, symbol, side:'buy'|'sell', qty, price, fee, currency, at, realized?, costBasis?, prevShares, prevAvgCost }
+                        // dividend: { id, symbol, side:'dividend', amount, wht, currency, at, prevShares, prevAvgCost }
       lastRemoved: null, // { holding, index, at } — most recent removeHolding, for undo (not persisted)
 
       /**
@@ -172,6 +173,42 @@ export const usePortfolioStore = create(
           ),
           transactions: [...state.transactions, tx],
         }));
+        return tx;
+      },
+
+      /**
+       * Record a dividend the user RECEIVED for a holding (income, not a trade).
+       * It never moves the position, so the snapshot equals the current position
+       * — undoTransaction then restores a safe no-op. Returns the ledger entry,
+       * or null if invalid (unknown holding, amount <= 0, negative withholding).
+       * @param {string} holdingId
+       * @param {{ amount:number, wht?:number, at?:string }} d  amounts in native currency
+       */
+      recordDividend(holdingId, d = {}) {
+        const h = get().holdings.find((x) => x.id === holdingId);
+        if (!h) return null;
+        const amount = Number(d.amount) || 0;
+        const whtRaw = Number(d.wht) || 0;
+        if (amount <= 0 || whtRaw < 0) return null;
+        const wht = Math.min(whtRaw, amount); // withholding can't exceed the gross dividend
+
+        const prev = { shares: Number(h.shares) || 0, avgCost: Number(h.avgCost) || 0 };
+        const tx = {
+          id: `tx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          symbol: h.symbol,
+          type: h.type, // asset class — the tax report groups dividends by it
+          side: 'dividend',
+          qty: 0,
+          price: 0,
+          fee: 0,
+          amount, // gross dividend received
+          wht, // withholding tax deducted
+          currency: h.currency || nativeCurrencyForType(h.type),
+          at: d.at || new Date().toISOString(),
+          prevShares: prev.shares, // dividends don't change the position; snapshot
+          prevAvgCost: prev.avgCost, // = current so undo is a safe no-op
+        };
+        set((state) => ({ transactions: [...state.transactions, tx] }));
         return tx;
       },
 
