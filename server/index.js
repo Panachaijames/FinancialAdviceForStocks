@@ -131,7 +131,19 @@ if (fs.existsSync(clientDist)) {
       maxAge: '1y',
       immutable: true,
       setHeaders(res, filePath) {
-        if (filePath.endsWith('index.html')) res.setHeader('Cache-Control', 'no-cache');
+        // Fixed-name files (not content-hashed) must revalidate, or a PWA update
+        // could never reach an already-installed client: index.html references
+        // the hashed bundles, and sw.js / manifest.webmanifest / registerSW.js
+        // drive the service-worker update. Everything else is hashed -> immutable.
+        const base = path.basename(filePath);
+        if (
+          base === 'index.html' ||
+          base === 'sw.js' ||
+          base === 'manifest.webmanifest' ||
+          base === 'registerSW.js'
+        ) {
+          res.setHeader('Cache-Control', 'no-cache');
+        }
       },
     })
   );
