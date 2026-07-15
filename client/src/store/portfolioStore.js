@@ -25,11 +25,18 @@ function nativeCurrencyForType(type) {
  */
 function replayInto(transactions, holdings, symbol) {
   const symTxs = transactions.filter((t) => t && t.symbol === symbol);
+  // Only the ledger's buy/sell entries define a position. If a symbol has none
+  // (e.g. a holding entered manually via "Add asset", or one that only has a
+  // logged dividend), its position is NOT ledger-derived — leave the holding's
+  // shares/avgCost untouched so a replay can't wipe manually-entered shares.
+  const hasTrades = symTxs.some((t) => t.side === 'buy' || t.side === 'sell');
   const { shares, avgCost, transactions: replayed } = replayPosition(symTxs);
   const byId = new Map(replayed.map((t) => [t.id, t]));
   return {
     transactions: transactions.map((t) => (t && t.symbol === symbol ? byId.get(t.id) || t : t)),
-    holdings: holdings.map((h) => (h.symbol === symbol ? { ...h, shares, avgCost } : h)),
+    holdings: hasTrades
+      ? holdings.map((h) => (h.symbol === symbol ? { ...h, shares, avgCost } : h))
+      : holdings,
   };
 }
 
@@ -165,6 +172,40 @@ export const usePortfolioStore = create(
         const fee = Number(t.fee) || 0;
         if (qty <= 0 || price <= 0 || fee < 0) return null;
 
+        const currency = h.currency || nativeCurrencyForType(h.type);
+        const at = t.at || new Date().toISOString();
+        const txs = get().transactions;
+        const symTxs = txs.filter((x) => x.symbol === h.symbol);
+        const hasTrades = symTxs.some((x) => x.side === 'buy' || x.side === 'sell');
+
+        // Preserve a manually-entered base position (added via "Add asset", not the
+        // ledger) as an OPENING lot the first time a trade is recorded — otherwise
+        // the replay (which knows only the ledger) would discard those shares.
+        const additions = [];
+        const heldShares = Number(h.shares) || 0;
+        if (!hasTrades && heldShares > 0) {
+          const newMs = Date.parse(at) || Date.now();
+          const addedMs = Date.parse(h.addedAt);
+          const openMs = Math.min(Number.isFinite(addedMs) ? addedMs : newMs - 1000, newMs - 1000);
+          additions.push({
+            id: `tx-open-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            symbol: h.symbol,
+            type: h.type,
+            side: 'buy',
+            qty: heldShares,
+            price: Number(h.avgCost) || 0,
+            fee: 0,
+            currency,
+            at: new Date(openMs).toISOString(),
+            opening: true, // synthetic opening balance for a manually-entered position
+          });
+        }
+
+        // A sell records nothing if there's nothing held once the opening lot is
+        // accounted for — return null so callers (import) skip/report it rather
+        // than persisting a phantom qty-0 row.
+        if (side === 'sell' && replayPosition([...symTxs, ...additions]).shares <= 0) return null;
+
         const tx = {
           id: `tx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           symbol: h.symbol,
@@ -173,14 +214,14 @@ export const usePortfolioStore = create(
           qty,
           price,
           fee,
-          currency: h.currency || nativeCurrencyForType(h.type),
-          at: t.at || new Date().toISOString(),
+          currency,
+          at,
         };
+        additions.push(tx);
 
         // Append, then replay the symbol chronologically — so a BACKDATED `at`
         // blends into avg cost / realizes at the right point, not "as of now".
-        const nextTxs = [...get().transactions, tx];
-        const replayed = replayInto(nextTxs, get().holdings, h.symbol);
+        const replayed = replayInto([...txs, ...additions], get().holdings, h.symbol);
         set(replayed);
         return replayed.transactions.find((x) => x.id === tx.id) || tx;
       },
@@ -191,22 +232,23 @@ export const usePortfolioStore = create(
        * recomputed — fixing an old typo without undoing everything after it.
        * @param {string} txId
        * @param {{ qty?:number, price?:number, fee?:number, at?:string, side?:'buy'|'sell' }} patch
-       * @returns {boolean}
+       * @returns {object|null} the replayed (possibly clamped) entry, or null if invalid
        */
       editTransaction(txId, patch = {}) {
         const txs = get().transactions;
         const tx = txs.find((x) => x.id === txId);
-        if (!tx || (tx.side !== 'buy' && tx.side !== 'sell')) return false;
+        if (!tx || (tx.side !== 'buy' && tx.side !== 'sell')) return null;
         const clean = {};
         if ('qty' in patch) clean.qty = Number(patch.qty) || 0;
         if ('price' in patch) clean.price = Number(patch.price) || 0;
         if ('fee' in patch) clean.fee = Math.max(0, Number(patch.fee) || 0);
         if ('at' in patch && patch.at) clean.at = patch.at;
         if ('side' in patch && (patch.side === 'buy' || patch.side === 'sell')) clean.side = patch.side;
-        if ((clean.qty != null && clean.qty <= 0) || (clean.price != null && clean.price <= 0)) return false;
+        if ((clean.qty != null && clean.qty <= 0) || (clean.price != null && clean.price <= 0)) return null;
         const nextTxs = txs.map((x) => (x.id === txId ? { ...x, ...clean } : x));
-        set(replayInto(nextTxs, get().holdings, tx.symbol));
-        return true;
+        const replayed = replayInto(nextTxs, get().holdings, tx.symbol);
+        set(replayed);
+        return replayed.transactions.find((x) => x.id === txId) || null;
       },
 
       /**

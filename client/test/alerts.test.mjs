@@ -24,17 +24,17 @@ test('describeAlert renders each kind', () => {
   assert.equal(describeAlert({ symbol: 'BTC-USD', kind: 'move', value: 5 }), 'BTC-USD moves ±5% in a day');
 });
 
-test('reconcileFired keeps fired only for triggered alerts; re-arm clears it', () => {
-  // a1 already triggered (client fired it), a2 active -> only a1 stays "fired"
-  // (watcher skips it); a2 is watchable.
-  const fired = reconcileFired({ a1: 111, a2: 222 }, [
-    { id: 'a1', triggeredAt: '2026-07-15T00:00:00.000Z' },
-    { id: 'a2' },
+test('reconcileFired: fired flag survives a plain reopen but clears on re-arm', () => {
+  // a1 fired in-app (triggeredAt) -> kept; a2 active, fired against arm 100 and
+  // re-PUT with the SAME arm (a plain app reopen) -> kept, so no duplicate push.
+  const fired = reconcileFired({ a1: 40, a2: 100 }, [
+    { id: 'a1', armedAt: 40, triggeredAt: '2026-07-15T00:00:00.000Z' },
+    { id: 'a2', armedAt: 100 },
   ]);
   assert.ok(fired.a1, 'triggered alert keeps a fired flag');
-  assert.equal(fired.a2, undefined, 're-armed/active alert has no fired flag');
-  // a still-triggered alert preserves its prior timestamp (no re-fire churn)
-  assert.equal(reconcileFired({ a1: 999 }, [{ id: 'a1', triggeredAt: '2026-07-15T00:00:00.000Z' }]).a1, 999);
-  // a re-armed alert (was fired, now active) is cleared so it can fire again
-  assert.deepEqual(reconcileFired({ a1: 999 }, [{ id: 'a1' }]), {});
+  assert.equal(fired.a2, 100, 'reopen with the same arm keeps the fired flag (no re-fire)');
+  // Re-arm a2 (armedAt bumped past the fired arm) -> flag drops -> watchable again.
+  assert.equal(reconcileFired({ a2: 100 }, [{ id: 'a2', armedAt: 200 }]).a2, undefined);
+  // A fresh active alert with no prior fired flag stays watchable.
+  assert.deepEqual(reconcileFired({}, [{ id: 'a3', armedAt: 300 }]), {});
 });

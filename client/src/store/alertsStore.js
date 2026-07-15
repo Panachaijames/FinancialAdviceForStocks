@@ -53,6 +53,7 @@ export const useAlertsStore = create(
           value: v,
           enabled: true,
           createdAt: new Date().toISOString(),
+          armedAt: Date.now(), // arm version — bumped on re-arm so the server watcher re-fires
         };
         set((state) => ({ alerts: [...state.alerts, alert] }));
         return alert;
@@ -73,11 +74,14 @@ export const useAlertsStore = create(
         }));
       },
 
-      /** Re-arm a fired alert so it can trigger again. */
+      /** Re-arm a fired alert so it can trigger again (bumps armedAt so the
+       *  server watcher treats it as a fresh arm and will fire it again). */
       rearmAlert(id) {
         set((state) => ({
           alerts: state.alerts.map((a) =>
-            a.id === id ? { ...a, triggeredAt: undefined, triggeredPrice: undefined, enabled: true } : a
+            a.id === id
+              ? { ...a, triggeredAt: undefined, triggeredPrice: undefined, enabled: true, armedAt: Date.now() }
+              : a
           ),
         }));
       },

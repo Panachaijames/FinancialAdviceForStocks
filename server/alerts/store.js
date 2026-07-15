@@ -52,7 +52,18 @@ export async function saveAll(all) {
 export function reconcileFired(prevFired = {}, alerts = [], now = Date.now()) {
   const fired = {};
   for (const a of alerts) {
-    if (a && a.triggeredAt) fired[a.id] = prevFired[a.id] || Date.parse(a.triggeredAt) || now;
+    if (!a || !a.id) continue;
+    const prev = prevFired[a.id];
+    if (a.triggeredAt) {
+      // Client already fired it in-app — keep it marked so the server never re-fires.
+      fired[a.id] = prev != null ? prev : Number(a.armedAt) || Date.parse(a.triggeredAt) || now;
+    } else if (prev != null && (a.armedAt == null || prev >= Number(a.armedAt))) {
+      // Active, but the watcher already fired it for THIS arm version — don't
+      // re-fire on a plain app reopen. A genuine re-arm bumps armedAt above
+      // `prev`, so the flag drops and the alert becomes watchable again.
+      fired[a.id] = prev;
+    }
+    // else: fresh or re-armed -> no fired flag -> the watcher may fire it.
   }
   return fired;
 }

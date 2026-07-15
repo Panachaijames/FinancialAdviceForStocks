@@ -17,6 +17,7 @@ function sanitize(alerts) {
       value: Number(a?.value),
       enabled: a?.enabled !== false,
       triggeredAt: a?.triggeredAt ? String(a.triggeredAt).slice(0, 32) : null,
+      armedAt: Number.isFinite(Number(a?.armedAt)) ? Number(a.armedAt) : null,
     }))
     .filter((a) => a.id && a.symbol && KINDS.has(a.kind) && Number.isFinite(a.value));
 }

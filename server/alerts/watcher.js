@@ -63,23 +63,36 @@ export function startAlertWatcher({ getQuotes, intervalMs = 15000 } = {}) {
       const bySymbol = {};
       for (const q of Array.isArray(quotes) ? quotes : []) if (q && q.symbol) bySymbol[q.symbol] = q;
 
-      let changed = false;
+      const delivered = [];
       for (const { deviceId, topic, alert } of pending) {
         const q = bySymbol[alert.symbol];
         if (!evaluateAlert(alert, q)) continue;
         // Deliver first; only mark fired if it actually went out (or there's no
         // topic to deliver to), so a transient ntfy failure retries next tick.
-        const delivered = topic ? await notifyNtfy(topic, alert, q) : true;
-        if (!delivered) {
+        const ok = topic ? await notifyNtfy(topic, alert, q) : true;
+        if (!ok) {
           log.warn(`alerts: delivery failed, will retry: ${describeAlert(alert)}`);
           continue;
         }
-        all[deviceId].fired = all[deviceId].fired || {};
-        all[deviceId].fired[alert.id] = Date.now();
-        changed = true;
+        // Record the fired flag AGAINST THE ALERT'S ARM VERSION (armedAt), so a
+        // plain re-PUT on app reopen doesn't re-fire it — only a genuine re-arm
+        // (newer armedAt) will. See store.reconcileFired.
+        delivered.push({ deviceId, alertId: alert.id, armedAt: Number(alert.armedAt) || Date.now() });
         log.info(`alerts: fired ${describeAlert(alert)} -> ${topic ? `ntfy/${topic}` : '(no topic)'}`);
       }
-      if (changed) await store.saveAll(all);
+      if (delivered.length) {
+        // Re-read the latest state and apply ONLY the fired flags, so a client PUT
+        // that landed during the getQuotes/ntfy awaits isn't clobbered by a stale
+        // full-blob write.
+        const fresh = await store.loadAll();
+        for (const d of delivered) {
+          if (fresh[d.deviceId]) {
+            fresh[d.deviceId].fired = fresh[d.deviceId].fired || {};
+            fresh[d.deviceId].fired[d.alertId] = d.armedAt;
+          }
+        }
+        await store.saveAll(fresh);
+      }
     } catch (e) {
       log.warn('alerts: watcher tick failed', e?.message);
     } finally {

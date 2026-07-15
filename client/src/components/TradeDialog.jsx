@@ -97,15 +97,22 @@ export default function TradeDialog({ holding, side, livePrice, editTx, onClose 
     // Same-day trades keep the real instant (preserves intraday order); a
     // backdated date is anchored at noon UTC so the calendar day is stable.
     const at = date === todayStr() ? new Date().toISOString() : `${date}T12:00:00.000Z`;
-    if (isEdit) {
-      const ok = editTransaction(editTx.id, { qty: qtyNum, price: priceNum, fee: feeNum, at });
-      if (ok) snackbar.push({ message: `Updated ${editTx.side} ${holding.symbol}` });
-    } else {
-      const tx = recordTrade(holding.id, { side: isSell ? 'sell' : 'buy', qty: qtyNum, price: priceNum, fee: feeNum, at });
-      if (tx) {
-        const shownQty = fmtNumber(tx.qty, Number.isInteger(tx.qty) ? 0 : 4);
-        snackbar.push({ message: `Recorded ${tx.side} ${shownQty} ${holding.symbol}` });
-      }
+    const verb = isEdit ? 'Updated' : 'Recorded';
+    const saved = isEdit
+      ? editTransaction(editTx.id, { qty: qtyNum, price: priceNum, fee: feeNum, at })
+      : recordTrade(holding.id, { side: isSell ? 'sell' : 'buy', qty: qtyNum, price: priceNum, fee: feeNum, at });
+    if (saved) {
+      const shownQty = fmtNumber(saved.qty, Number.isInteger(saved.qty) ? 0 : 4);
+      // Replay may clamp a sell to the shares actually held at that date — tell the user.
+      const clamped = saved.side === 'sell' && saved.qty < qtyNum;
+      snackbar.push({
+        message: clamped
+          ? `${verb} sell ${shownQty} ${holding.symbol} — clamped (only ${shownQty} held on that date)`
+          : `${verb} ${saved.side} ${shownQty} ${holding.symbol}`,
+        tone: clamped ? 'error' : 'default',
+      });
+    } else if (isSell) {
+      snackbar.push({ message: `Nothing was held to sell for ${holding.symbol} on that date`, tone: 'error' });
     }
     onClose && onClose();
   }

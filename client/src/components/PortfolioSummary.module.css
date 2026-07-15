@@ -13,7 +13,9 @@
 
 /* Compound with the global .panel so these beat .panel's padding/border (equal
    single-class specificity would otherwise let .panel win by cascade order — the
-   old inline styles always won). */
+   old inline styles always won). NOTE: no transform/box-shadow here — SpotlightCard
+   owns the hover (it drives a cursor-following tilt/lift/scale via --fx-* custom
+   properties + an inline box-shadow); a transform here would override and kill it. */
 :global(.panel).card {
   height: 100%;
   padding: 12px;
@@ -21,13 +23,6 @@
   flex-direction: column;
   gap: 4px;
   border-left: 3px solid var(--card-accent, var(--accent));
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-
-/* Impossible with inline styles — the concrete capability this migration unlocks. */
-:global(.panel).card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
 }
 
 .label {

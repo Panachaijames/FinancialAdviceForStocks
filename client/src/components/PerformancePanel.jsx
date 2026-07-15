@@ -66,13 +66,21 @@ export default function PerformancePanel() {
     setError('');
     try {
       const fetched = await Promise.all(symbols.map((s) => getCandles(s, nextRange, '1d').catch(() => [])));
+      // Only replay symbols we could actually price. A symbol whose fetch failed
+      // (empty) would otherwise keep its cost in net-invested while contributing
+      // nothing to market value — a phantom loss. Exclude it from BOTH and warn,
+      // so the two figures always cover the same set.
+      const priced = symbols.filter((s, i) => (fetched[i] || []).length >= 2);
+      const missing = symbols.filter((s, i) => (fetched[i] || []).length < 2);
       const closesBySymbol = {};
-      symbols.forEach((s, i) => {
-        closesBySymbol[s] = fetched[i] || [];
+      priced.forEach((s) => {
+        closesBySymbol[s] = fetched[symbols.indexOf(s)];
       });
-      const series = buildPerformanceSeries({ transactions, closesBySymbol, currencyBySymbol, convert });
+      const pricedSet = new Set(priced);
+      const txForPriced = (transactions || []).filter((t) => t && pricedSet.has(t.symbol));
+      const series = buildPerformanceSeries({ transactions: txForPriced, closesBySymbol, currencyBySymbol, convert });
       if (!series.times.length) throw new Error('No price history available for your holdings yet.');
-      setResult({ range: nextRange, series, summary: summarize(series) });
+      setResult({ range: nextRange, series, summary: summarize(series), missing });
     } catch (e) {
       setError((e && e.message) || 'Failed to load performance data');
     } finally {
@@ -147,6 +155,12 @@ export default function PerformancePanel() {
               <Stat label="Realized" value={fmtMoney(s.realized, displayCurrency)} color={plColor(s.realized)} />
             )}
           </div>
+          {result.missing && result.missing.length > 0 && (
+            <div style={{ fontSize: 11, color: theme.colors.warn }}>
+              ⚠ No price data for {result.missing.join(', ')} — excluded from value and invested (source throttled?
+              try Refresh).
+            </div>
+          )}
           <div style={{ fontSize: 10.5, color: theme.colors.textFaint }}>
             Replays your recorded trades against daily closes ·{' '}
             <b style={{ color: theme.colors.accent }}>value</b> vs{' '}

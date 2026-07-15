@@ -6,7 +6,9 @@
 
 /* Compound with the global .panel so `padding` beats .panel's (equal single-class
    specificity would otherwise let .panel win by cascade order, as the old inline
-   padding always did). */
+   padding always did). NOTE: no transform/box-shadow here — SpotlightCard owns the
+   hover tilt/lift/scale (via --fx-* + inline box-shadow); a transform here would
+   override and kill it. */
 :global(.panel).card {
   padding: 12px;
   display: flex;
@@ -14,10 +16,4 @@
   gap: 8px;
   cursor: pointer;
   min-width: 0;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-
-:global(.panel).card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
 }
