@@ -4,6 +4,8 @@ import { theme } from '../lib/theme.js';
 import { searchSymbols } from '../api/client.js';
 import { classify, assetMeta, normalizeInput } from '../lib/assetType.js';
 import { usePortfolioStore } from '../store/portfolioStore.js';
+import { snackbar } from '../store/snackbarStore.js';
+import { scrollToCard } from '../lib/scrollToCard.js';
 import HoldingEditor from './HoldingEditor.jsx';
 
 const QUICK_ADD = [
@@ -164,7 +166,13 @@ export default function AddAssetBar() {
 
   function handleSaveHolding({ shares, avgCost }) {
     if (pending) {
+      const sym = pending.symbol;
       addHolding(pending, { shares, avgCost });
+      snackbar.push({
+        message: `Added ${sym}`,
+        actionLabel: 'View',
+        onAction: () => scrollToCard(sym),
+      });
     }
     setPending(null);
   }
@@ -318,7 +326,11 @@ export default function AddAssetBar() {
                     <button
                       type="button"
                       className="btn-ghost"
-                      onClick={(e) => { e.stopPropagation(); addToWatchlist(r); }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        addToWatchlist(r);
+                        snackbar.push({ message: `Watching ${r.symbol}`, tone: 'success' });
+                      }}
                       disabled={watched}
                       title={watched ? 'On your watchlist' : `Watch ${r.symbol} (no position)`}
                       aria-label={watched ? `${r.symbol} is on your watchlist` : `Watch ${r.symbol}`}

@@ -8,6 +8,8 @@ import React, { useMemo, useState } from 'react';
 import { Eye, Plus, X } from 'lucide-react';
 import { theme } from '../lib/theme.js';
 import { usePortfolioStore } from '../store/portfolioStore.js';
+import { snackbar } from '../store/snackbarStore.js';
+import { scrollToCard } from '../lib/scrollToCard.js';
 import useQuotes from '../hooks/useQuotes.js';
 import { assetMeta } from '../lib/assetType.js';
 import { fmtMoney, fmtSignedPct, classForChange } from '../lib/format.js';
@@ -148,8 +150,10 @@ export default function WatchlistStrip({ onOpenChart }) {
           asset={{ symbol: promoting.symbol, name: promoting.name, type: promoting.type, currency: promoting.currency }}
           mode="add"
           onSave={({ shares, avgCost }) => {
+            const sym = promoting.symbol;
             promoteToHolding(promoting.id, { shares, avgCost });
             setPromoting(null);
+            snackbar.push({ message: `Promoted ${sym}`, actionLabel: 'View', onAction: () => scrollToCard(sym) });
           }}
           onCancel={() => setPromoting(null)}
         />

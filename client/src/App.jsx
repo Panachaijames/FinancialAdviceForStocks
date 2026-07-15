@@ -19,7 +19,7 @@ import TransactionsPanel from './components/TransactionsPanel.jsx';
 import AlertsPanel from './components/AlertsPanel.jsx';
 import RebalancePanel from './components/RebalancePanel.jsx';
 import BenchmarkPanel from './components/BenchmarkPanel.jsx';
-import UndoRemoveBar from './components/UndoRemoveBar.jsx';
+import SnackbarHost from './components/SnackbarHost.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 import HoldingEditor from './components/HoldingEditor.jsx';
 import FundsPanel from './components/plan/FundsPanel.jsx';
@@ -249,7 +249,7 @@ export default function App() {
           onCancel={() => setPending(null)}
         />
       ) : null}
-      <UndoRemoveBar />
+      <SnackbarHost />
     </div>
   );
 }

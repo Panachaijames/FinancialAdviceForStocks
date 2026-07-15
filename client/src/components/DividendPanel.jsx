@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import theme from '../lib/theme.js';
 import { getDividend } from '../api/client.js';
 import { usePortfolioStore } from '../store/portfolioStore.js';
+import { snackbar } from '../store/snackbarStore.js';
 import { useSettingsStore } from '../store/settingsStore.js';
 import useFx from '../hooks/useFx.js';
 import useQuotes from '../hooks/useQuotes.js';
@@ -243,7 +244,13 @@ export default function DividendPanel() {
           onCancel={() => setLogging(false)}
           onSave={({ holdingId, amount, wht, at }) => {
             const tx = recordDividend(holdingId, { amount, wht, at });
-            if (tx) setLogging(false);
+            if (tx) {
+              setLogging(false);
+              snackbar.push({
+                message: `Logged dividend ${fmtMoney(tx.amount, tx.currency)} ${tx.symbol}`,
+                tone: 'success',
+              });
+            }
             return !!tx;
           }}
         />

@@ -1492,3 +1492,25 @@ ul {
     filter: brightness(1.3) saturate(1.25);
   }
 }
+
+/* ---- Card flash: brief highlight when a snackbar "View" scrolls to a card. ---- */
+.card-flash {
+  animation: cardFlash 1.4s ease-out;
+}
+@keyframes cardFlash {
+  0% {
+    box-shadow: 0 0 0 2px var(--accent), 0 0 22px 2px color-mix(in srgb, var(--accent) 55%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+/* Movement-averse users: skip the pulse (respect the app's reduced-motion mode). */
+:root[data-motion='reduce'] .card-flash {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-flash {
+    animation: none;
+  }
+}

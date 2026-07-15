@@ -5,6 +5,7 @@ import { fmtMoney, fmtNumber } from '../lib/format.js';
 import { assetMeta } from '../lib/assetType.js';
 import { applyBuy, applySell } from '../lib/trades.js';
 import { usePortfolioStore } from '../store/portfolioStore.js';
+import { snackbar } from '../store/snackbarStore.js';
 
 /**
  * Record a buy or sell the user made at their broker (the app never places
@@ -77,7 +78,11 @@ export default function TradeDialog({ holding, side, livePrice, onClose }) {
     e.preventDefault();
     setTouched(true);
     if (!valid) return;
-    recordTrade(holding.id, { side: isSell ? 'sell' : 'buy', qty: qtyNum, price: priceNum, fee: feeNum });
+    const tx = recordTrade(holding.id, { side: isSell ? 'sell' : 'buy', qty: qtyNum, price: priceNum, fee: feeNum });
+    if (tx) {
+      const shownQty = fmtNumber(tx.qty, Number.isInteger(tx.qty) ? 0 : 4);
+      snackbar.push({ message: `Recorded ${tx.side} ${shownQty} ${holding.symbol}` });
+    }
     onClose && onClose();
   }
 

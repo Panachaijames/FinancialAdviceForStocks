@@ -8,6 +8,7 @@ import useFx from '../hooks/useFx.js';
 import usePriceFlash from '../hooks/usePriceFlash.js';
 import { usePortfolioStore } from '../store/portfolioStore.js';
 import { useSettingsStore } from '../store/settingsStore.js';
+import { snackbar } from '../store/snackbarStore.js';
 import { getDividend } from '../api/client.js';
 import { computeDividendIncome } from '../lib/dividends.js';
 import { DIVIDEND_ERROR, isDividendError } from '../lib/dividendState.js';
@@ -67,6 +68,7 @@ export default function AssetCard({ holding, onOpen }) {
   const displayCurrency = useSettingsStore((s) => s.displayCurrency);
   const updateHolding = usePortfolioStore((s) => s.updateHolding);
   const removeHolding = usePortfolioStore((s) => s.removeHolding);
+  const restoreRemoved = usePortfolioStore((s) => s.restoreRemoved);
   const transactions = usePortfolioStore((s) => s.transactions);
 
   const [editing, setEditing] = useState(false);
@@ -164,6 +166,7 @@ export default function AssetCard({ holding, onOpen }) {
   return (
     <>
       <SpotlightCard
+        id={`card-${symbol}`}
         className="panel"
         role="button"
         tabIndex={0}
@@ -257,6 +260,13 @@ export default function AssetCard({ holding, onOpen }) {
               onClick={(e) => {
                 stop(e);
                 removeHolding(holding.id);
+                snackbar.push({
+                  id: 'undo-remove', // single-level: consecutive removes replace it
+                  message: `Removed ${symbol}`,
+                  actionLabel: 'Undo',
+                  onAction: () => restoreRemoved(),
+                  duration: 8000,
+                });
               }}
               style={{ padding: 6, lineHeight: 0, color: theme.colors.down }}
             >
