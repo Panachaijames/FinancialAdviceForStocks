@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Search, Plus, Loader2 } from 'lucide-react';
+import { Search, Plus, Loader2, Eye } from 'lucide-react';
 import { theme } from '../lib/theme.js';
 import { searchSymbols } from '../api/client.js';
 import { classify, assetMeta, normalizeInput } from '../lib/assetType.js';
@@ -57,12 +57,15 @@ export default function AddAssetBar() {
 
   const addHolding = usePortfolioStore((s) => s.addHolding);
   const holdings = usePortfolioStore((s) => s.holdings);
+  const watchlist = usePortfolioStore((s) => s.watchlist);
+  const addToWatchlist = usePortfolioStore((s) => s.addToWatchlist);
 
   const boxRef = useRef(null);
   const debounceRef = useRef(null);
   const reqIdRef = useRef(0);
 
   const existingSymbols = new Set(holdings.map((h) => h.symbol));
+  const watchedSymbols = new Set((watchlist || []).map((w) => w.symbol));
 
   // Debounced search.
   useEffect(() => {
@@ -252,11 +255,13 @@ export default function AddAssetBar() {
             {results.map((r, i) => {
               const meta = assetMeta(r.type || classify(r.symbol));
               const already = existingSymbols.has(r.symbol);
+              const watched = watchedSymbols.has(r.symbol);
               const active = i === highlight;
               return (
-                <button
+                // A div (not a button) so it can hold the nested Watch button;
+                // arrow-key highlight + Enter selection still runs via the input.
+                <div
                   key={`${r.symbol}-${i}`}
-                  type="button"
                   role="option"
                   aria-selected={active}
                   onMouseEnter={() => setHighlight(i)}
@@ -269,7 +274,6 @@ export default function AddAssetBar() {
                     textAlign: 'left',
                     padding: `${theme.space(2)}px ${theme.space(2)}px`,
                     background: active ? theme.colors.panelElev : 'transparent',
-                    border: 'none',
                     borderRadius: theme.radius.sm,
                     cursor: 'pointer',
                     color: theme.colors.text,
@@ -309,12 +313,34 @@ export default function AddAssetBar() {
                   >
                     {meta.label}
                   </span>
+                  {/* Watch (track without a position) — hidden once owned */}
+                  {!already && (
+                    <button
+                      type="button"
+                      className="btn-ghost"
+                      onClick={(e) => { e.stopPropagation(); addToWatchlist(r); }}
+                      disabled={watched}
+                      title={watched ? 'On your watchlist' : `Watch ${r.symbol} (no position)`}
+                      aria-label={watched ? `${r.symbol} is on your watchlist` : `Watch ${r.symbol}`}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: 3,
+                        lineHeight: 0,
+                        color: watched ? theme.colors.accent : theme.colors.textFaint,
+                        flexShrink: 0,
+                        cursor: watched ? 'default' : 'pointer',
+                      }}
+                    >
+                      <Eye size={15} />
+                    </button>
+                  )}
                   {already ? (
                     <span style={{ fontSize: 11, color: theme.colors.textFaint }}>added</span>
                   ) : (
                     <Plus size={16} style={{ color: theme.colors.accent, flexShrink: 0 }} />
                   )}
-                </button>
+                </div>
               );
             })}
           </div>

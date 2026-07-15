@@ -27,6 +27,7 @@ export const usePortfolioStore = create(
       holdings: [],
       transactions: [], // trade: { id, symbol, side:'buy'|'sell', qty, price, fee, currency, at, realized?, costBasis?, prevShares, prevAvgCost }
                         // dividend: { id, symbol, side:'dividend', amount, wht, currency, at, prevShares, prevAvgCost }
+      watchlist: [], // [{ id, symbol, type, name, currency, addedAt }] — symbols to track WITHOUT a position
       lastRemoved: null, // { holding, index, at } — most recent removeHolding, for undo (not persisted)
 
       /**
@@ -280,20 +281,79 @@ export const usePortfolioStore = create(
       getSymbols() {
         return Array.from(new Set(get().holdings.map((h) => h.symbol)));
       },
+
+      // ── watchlist ───────────────────────────────────────────────────────────
+      // A watchlist entry tracks a symbol WITHOUT a position. It's a separate
+      // collection (not a flag on holdings) on purpose: `holdings` stays purely
+      // positions, so every totals/allocation/dividend/rebalance consumer keeps
+      // ignoring watched symbols automatically — no chance of a 0-share "watch"
+      // leaking into portfolio value the way the old 0-share-holding hack did.
+
+      /**
+       * Add a symbol to the watchlist. No-op if it's already watched or already a
+       * real holding (a position you own doesn't also need watching).
+       * @param {{symbol,name?,type?,currency?}} searchResultLike
+       */
+      addToWatchlist(searchResultLike) {
+        const sr = searchResultLike || {};
+        const symbol = (sr.symbol || '').trim();
+        if (!symbol) return;
+        if (get().holdings.some((h) => h.symbol === symbol)) return;
+        if (get().watchlist.some((w) => w.symbol === symbol)) return;
+        const type = sr.type || classify(symbol);
+        const item = {
+          id: makeId(symbol),
+          symbol,
+          type,
+          name: sr.name || symbol,
+          currency: sr.currency || nativeCurrencyForType(type),
+          addedAt: new Date().toISOString(),
+        };
+        set((state) => ({ watchlist: [...state.watchlist, item] }));
+      },
+
+      /** Remove a watchlist entry by id. */
+      removeFromWatchlist(id) {
+        if (!id) return;
+        set((state) => ({ watchlist: state.watchlist.filter((w) => w.id !== id) }));
+      },
+
+      /**
+       * Promote a watched symbol into a real holding with a position, dropping it
+       * from the watchlist. Reuses addHolding so the position/currency logic and
+       * dedupe stay in one place.
+       * @param {string} id watchlist entry id
+       * @param {{shares:number, avgCost:number}} position
+       */
+      promoteToHolding(id, position = {}) {
+        const w = get().watchlist.find((x) => x.id === id);
+        if (!w) return;
+        get().addHolding(
+          { symbol: w.symbol, name: w.name, type: w.type, currency: w.currency },
+          position
+        );
+        set((state) => ({ watchlist: state.watchlist.filter((x) => x.id !== id) }));
+      },
     }),
     {
       name: 'pt-portfolio',
-      version: 2,
+      version: 3,
       // Corruption-safe storage: quarantines unparseable JSON to pt-portfolio.corrupt
       // and keeps a one-deep pt-portfolio.bak, so a bad write can't silently wipe
       // the only copy of the user's holdings/ledger.
       storage: createJSONStorage(() => createSafeStorage()),
       // Only the real collections persist; transient undo state stays in memory.
-      partialize: (state) => ({ holdings: state.holdings, transactions: state.transactions }),
-      // v1 -> v2: the trade ledger arrived; older snapshots just get an empty one.
+      partialize: (state) => ({
+        holdings: state.holdings,
+        transactions: state.transactions,
+        watchlist: state.watchlist,
+      }),
+      // v1 -> v2: the trade ledger arrived. v2 -> v3: the watchlist arrived.
+      // Both defaults are just empty arrays, so this stays version-agnostic.
       migrate(persisted) {
         const state = persisted || {};
         if (!Array.isArray(state.transactions)) state.transactions = [];
+        if (!Array.isArray(state.watchlist)) state.watchlist = [];
         return state;
       },
     }

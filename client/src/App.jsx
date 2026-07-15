@@ -10,6 +10,7 @@ import AddAssetBar from './components/AddAssetBar.jsx';
 import PortfolioSummary from './components/PortfolioSummary.jsx';
 import AllocationDonut from './components/AllocationDonut.jsx';
 import HoldingsSection from './components/HoldingsSection.jsx';
+import WatchlistStrip from './components/WatchlistStrip.jsx';
 import DividendPanel from './components/DividendPanel.jsx';
 import NewsPanel from './components/NewsPanel.jsx';
 import ChartModal from './components/ChartModal.jsx';
@@ -97,6 +98,8 @@ export default function App() {
             switches (and useQuotes subscriptions stop churning). */}
         <ViewPane active={view === 'portfolio'}>
           <AddAssetBar />
+
+          <WatchlistStrip onOpenChart={openChart} />
 
           {holdings.length === 0 ? (
             <>
