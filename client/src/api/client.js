@@ -144,6 +144,18 @@ export async function deleteSyncBlob(code) {
 }
 
 /**
+ * Mirror this device's price alerts to the server watcher (closed-app delivery).
+ * @param {{ deviceId:string, topic:string|null, alerts:Array }} payload
+ */
+export async function putAlerts(payload) {
+  return request('/api/alerts', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
  * Search for symbols.
  * @param {string} q
  * @returns {Promise<Array>}

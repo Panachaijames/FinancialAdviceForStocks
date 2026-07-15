@@ -24,6 +24,9 @@ import analysisRouter from './routes/analysis.js';
 import fundsRouter from './routes/funds.js';
 import syncRouter from './routes/sync.js';
 import forecastRouter from './routes/forecast.js';
+import alertsRouter from './routes/alerts.js';
+import { startAlertWatcher } from './alerts/watcher.js';
+import { getQuotes } from './providers/yahoo.js';
 import { isConfigured as syncConfigured } from './providers/kv.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -116,6 +119,7 @@ app.use('/api/analysis', analysisLimiter, analysisRouter);
 app.use('/api/funds', fundsRouter);
 app.use('/api/sync', syncLimiter, syncRouter);
 app.use('/api/forecast', forecastRouter);
+app.use('/api/alerts', alertsRouter);
 
 // Optionally serve the built client if it exists. CLIENT_DIST lets the packaged
 // desktop (Electron) app point at the bundled client build wherever it lands.
@@ -177,6 +181,11 @@ const server = http.createServer(app);
 
 // Attach the realtime WebSocket hub (path '/ws').
 attach(server);
+
+// Closed-app price-alert watcher (server-side eval + ntfy delivery). Reuses the
+// same quote provider the hub polls with. Best-effort on the free tier — only
+// runs while the dyno is awake.
+startAlertWatcher({ getQuotes, intervalMs: 15000 });
 
 server.listen(config.PORT, () => {
   // eslint-disable-next-line no-console
