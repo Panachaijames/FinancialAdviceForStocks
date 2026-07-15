@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { BrainCircuit, Play, Loader2, ChevronDown, ChevronUp, History, Trash2 } from 'lucide-react';
+import { BrainCircuit, Play, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { theme } from '../../lib/theme.js';
 import { fmtMoney } from '../../lib/format.js';
 import { usePortfolioStore } from '../../store/portfolioStore.js';
@@ -15,7 +15,11 @@ import {
 } from '../../lib/forecast/features.js';
 import { fitArima, autoArima, forecastArima } from '../../lib/forecast/arima.js';
 import { trainGBDT, predictGBDT } from '../../lib/forecast/gbdt.js';
+import { bandFor, ensembleCloses, forecastReturnsPct } from '../../lib/forecast/ensemble.js';
 import ForecastChart, { SERIES_COLORS } from './ForecastChart.jsx';
+import TrainingLog from './TrainingLog.jsx';
+import PastRuns from './PastRuns.jsx';
+import LossSparkline from './LossSparkline.jsx';
 
 const RANGES = ['1y', '2y', '5y'];
 const HORIZONS = [7, 14, 30, 60, 90];
@@ -30,14 +34,6 @@ const field = {
   display: 'block',
   marginBottom: 4,
 };
-
-/** Geometric uncertainty band: path × exp(±1.96·σ·√h), σ = the model's 1-step RMSE. */
-function bandFor(path, sigma) {
-  return {
-    lower: path.map((c, i) => c * Math.exp(-1.96 * sigma * Math.sqrt(i + 1))),
-    upper: path.map((c, i) => c * Math.exp(1.96 * sigma * Math.sqrt(i + 1))),
-  };
-}
 
 function businessDays(fromSec, n) {
   const out = [];
@@ -344,10 +340,7 @@ export default function ForecastView() {
 
       // ── 5. Ensemble (equal-weight mean of the enabled models) ───────────
       if (forecasts.length > 1) {
-        const closes = fDates.map((_, i) => {
-          const vals = forecasts.map((f) => f.closes[i]).filter(Number.isFinite);
-          return vals.reduce((s, v) => s + v, 0) / vals.length;
-        });
+        const closes = ensembleCloses(forecasts, fDates.length);
         forecasts.push({ key: 'ensemble', label: 'Ensemble', color: SERIES_COLORS.ensemble, dates: fDates, closes });
       }
 
@@ -368,10 +361,7 @@ export default function ForecastView() {
       });
 
       // Persist this run into the history (what was trained, how, how it scored).
-      for (const f of forecasts) {
-        const end = f.closes[f.closes.length - 1];
-        if (Number.isFinite(end) && lastClose > 0) runReturns[f.key] = (end / lastClose - 1) * 100;
-      }
+      Object.assign(runReturns, forecastReturnsPct(forecasts, lastClose));
       store.addRun({
         symbol: sym,
         range,
@@ -626,152 +616,5 @@ export default function ForecastView() {
 
       <PastRuns />
     </div>
-  );
-}
-
-/**
- * Live training log — one row per stage, updated in place while running (with
- * a progress bar for epochs/trees) and kept after the run so "what was
- * trained, and for how many epochs" stays visible.
- */
-function TrainingLog({ entries, busy }) {
-  if (!entries.length) return null;
-  const icon = (e) => {
-    if (e.state === 'running') return <Loader2 size={13} style={{ color: theme.colors.accent, animation: 'pulse 1s linear infinite', flex: '0 0 auto' }} />;
-    if (e.state === 'error') return <span style={{ color: theme.colors.down, fontWeight: 700, flex: '0 0 auto' }}>✕</span>;
-    return <span style={{ color: theme.colors.up, fontWeight: 700, flex: '0 0 auto' }}>✓</span>;
-  };
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 5, background: theme.colors.bgElev, borderRadius: theme.radius.sm, padding: theme.space(2) }}>
-      <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4, color: theme.colors.textDim, fontWeight: 600 }}>
-        Training status{busy ? '' : ' — finished'}
-      </div>
-      {entries.map((e) => (
-        <div key={e.id} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
-            {icon(e)}
-            <span style={{ fontWeight: 700, color: theme.colors.text, whiteSpace: 'nowrap' }}>{e.label}</span>
-            <span style={{ color: theme.colors.textDim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {e.progress ? `${e.progress.done}/${e.progress.total} ${e.progress.unit}${e.progress.extra ? ` · ${e.progress.extra}` : ''}` : e.detail}
-            </span>
-            <span style={{ marginLeft: 'auto', fontSize: 10.5, fontFamily: theme.mono, color: theme.colors.textFaint, whiteSpace: 'nowrap' }}>
-              {e.ms != null ? `${(e.ms / 1000).toFixed(1)}s` : ''}
-            </span>
-          </div>
-          {e.progress && (
-            <div style={{ height: 5, borderRadius: 3, background: theme.colors.panel, overflow: 'hidden', marginLeft: 21 }}>
-              <div style={{ width: `${(e.progress.done / e.progress.total) * 100}%`, height: '100%', background: theme.colors.accent, transition: 'width 0.15s' }} />
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/**
- * Persisted run history (pt-forecast, last 20): when, what symbol, what was
- * trained (models + epochs/trees), how each scored, and the horizon calls.
- */
-function PastRuns() {
-  const runs = useForecastStore((s) => s.runs);
-  const clearRuns = useForecastStore((s) => s.clearRuns);
-  const [open, setOpen] = useState(false);
-  if (runs.length === 0) return null;
-
-  const td = { padding: `${theme.space(1)}px ${theme.space(2)}px`, borderTop: `1px solid ${theme.colors.border}`, fontSize: 12, whiteSpace: 'nowrap', verticalAlign: 'top' };
-  const pct = (v) => (v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`);
-
-  return (
-    <div className="panel" style={{ padding: theme.space(3), display: 'flex', flexDirection: 'column', gap: theme.space(2) }}>
-      <button
-        type="button"
-        className="btn-ghost"
-        onClick={() => setOpen((s) => !s)}
-        style={{ display: 'flex', alignItems: 'center', gap: theme.space(1), fontWeight: 700, fontSize: 13, color: theme.colors.text, padding: 0, textAlign: 'left' }}
-      >
-        <History size={15} style={{ color: theme.colors.accent }} />
-        Past runs ({runs.length})
-        <span style={{ marginLeft: 'auto', color: theme.colors.textDim, display: 'flex' }}>
-          {open ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-        </span>
-      </button>
-
-      {open && (
-        <>
-          <div style={{ overflowX: 'auto', border: `1px solid ${theme.colors.border}`, borderRadius: theme.radius.sm }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: theme.colors.bgElev }}>
-                  {['When', 'Symbol', 'Trained', 'Direction (holdout)', 'Ensemble call', 'Took'].map((h, i) => (
-                    <th key={h} style={{ padding: `${theme.space(1)}px ${theme.space(2)}px`, fontSize: 11, color: theme.colors.textDim, fontWeight: 600, textAlign: i >= 4 ? 'right' : 'left', whiteSpace: 'nowrap' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {runs.map((r) => {
-                  const ensemble = r.returns?.ensemble ?? r.returns?.[r.models[0]?.key];
-                  return (
-                    <tr key={r.id}>
-                      <td style={{ ...td, color: theme.colors.textDim }}>{String(r.at).slice(0, 16).replace('T', ' ')}</td>
-                      <td style={{ ...td, fontFamily: theme.mono, fontWeight: 700, color: theme.colors.text }}>
-                        {r.symbol}
-                        <span style={{ color: theme.colors.textFaint, fontWeight: 400 }}> · {r.range} · {r.horizon}d</span>
-                      </td>
-                      <td style={{ ...td, color: theme.colors.text }} title={(r.models || []).map((m) => m.detail).join('\n')}>
-                        {(r.models || []).map((m) => m.short).join(' · ') || '—'}
-                        <div style={{ fontSize: 10.5, color: theme.colors.textFaint }}>{r.nFeatures} features × {r.nSamples} samples</div>
-                      </td>
-                      <td style={{ ...td, fontFamily: theme.mono, color: theme.colors.textDim }}>
-                        {(r.models || []).map((m) => `${m.short.split(' ')[0]} ${m.dirAcc != null ? m.dirAcc.toFixed(0) : '—'}%`).join(' · ')}
-                      </td>
-                      <td style={{ ...td, textAlign: 'right', fontFamily: theme.mono, fontWeight: 700, color: ensemble >= 0 ? theme.colors.up : theme.colors.down }}>
-                        {pct(ensemble)}
-                      </td>
-                      <td style={{ ...td, textAlign: 'right', fontFamily: theme.mono, color: theme.colors.textFaint }}>
-                        {r.durationMs != null ? `${(r.durationMs / 1000).toFixed(0)}s` : '—'}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: theme.space(2) }}>
-            <span style={{ fontSize: 10.5, color: theme.colors.textFaint }}>
-              Hover "Trained" for full hyperparameters · "Ensemble call" is the predicted move over that run's horizon — check back later to see how it aged
-            </span>
-            <button
-              type="button"
-              className="btn-ghost"
-              onClick={clearRuns}
-              style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: theme.colors.textFaint }}
-            >
-              <Trash2 size={12} /> Clear history
-            </button>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-/** Tiny SVG loss-curve sparkline (log-ish scaling via min/max normalize). */
-function LossSparkline({ loss, valLoss }) {
-  const W = 360;
-  const H = 80;
-  const all = [...loss, ...valLoss.filter((v) => v != null)];
-  const lo = Math.min(...all);
-  const hi = Math.max(...all);
-  const path = (arr) =>
-    arr
-      .map((v, i) => (v == null ? null : `${i === 0 || arr[i - 1] == null ? 'M' : 'L'} ${(i / (arr.length - 1)) * (W - 4) + 2} ${H - 4 - ((v - lo) / (hi - lo || 1)) * (H - 8)}`))
-      .filter(Boolean)
-      .join(' ');
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 80, display: 'block' }} role="img" aria-label="LSTM loss curve">
-      <path d={path(loss)} fill="none" stroke={SERIES_COLORS.lstm} strokeWidth="2" />
-      {valLoss.some((v) => v != null) && <path d={path(valLoss)} fill="none" stroke={theme.colors.textDim} strokeWidth="1.5" strokeDasharray="4,3" />}
-    </svg>
   );
 }
