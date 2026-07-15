@@ -10,6 +10,7 @@ import AddAssetBar from './components/AddAssetBar.jsx';
 import PortfolioSummary from './components/PortfolioSummary.jsx';
 import AllocationDonut from './components/AllocationDonut.jsx';
 import HoldingsSection from './components/HoldingsSection.jsx';
+import WatchlistStrip from './components/WatchlistStrip.jsx';
 import DividendPanel from './components/DividendPanel.jsx';
 import NewsPanel from './components/NewsPanel.jsx';
 import ChartModal from './components/ChartModal.jsx';
@@ -18,7 +19,7 @@ import TransactionsPanel from './components/TransactionsPanel.jsx';
 import AlertsPanel from './components/AlertsPanel.jsx';
 import RebalancePanel from './components/RebalancePanel.jsx';
 import BenchmarkPanel from './components/BenchmarkPanel.jsx';
-import UndoRemoveBar from './components/UndoRemoveBar.jsx';
+import SnackbarHost from './components/SnackbarHost.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 import HoldingEditor from './components/HoldingEditor.jsx';
 import FundsPanel from './components/plan/FundsPanel.jsx';
@@ -60,6 +61,16 @@ export default function App() {
     setVisited((v) => (v[view] ? v : { ...v, [view]: true }));
   }, [view]);
 
+  // Warm the TensorFlow.js chunk the moment the Forecast tab is opened, so
+  // training starts without waiting on the download. Dynamic-imports the same
+  // chunk ForecastView trains against; the browser caches it, so this is a
+  // no-op on repeat visits / when training actually starts.
+  useEffect(() => {
+    if (view === 'forecast') {
+      import('@tensorflow/tfjs').catch(() => {});
+    }
+  }, [view]);
+
   // Open the live socket as soon as the app mounts.
   useEffect(() => {
     marketSocket.ensureConnected();
@@ -97,6 +108,8 @@ export default function App() {
             switches (and useQuotes subscriptions stop churning). */}
         <ViewPane active={view === 'portfolio'}>
           <AddAssetBar />
+
+          <WatchlistStrip onOpenChart={openChart} />
 
           {holdings.length === 0 ? (
             <>
@@ -246,7 +259,7 @@ export default function App() {
           onCancel={() => setPending(null)}
         />
       ) : null}
-      <UndoRemoveBar />
+      <SnackbarHost />
     </div>
   );
 }

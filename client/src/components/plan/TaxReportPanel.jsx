@@ -5,7 +5,7 @@ import { fmtMoney } from '../../lib/format.js';
 import { usePortfolioStore } from '../../store/portfolioStore.js';
 import { useSettingsStore } from '../../store/settingsStore.js';
 import useFx from '../../hooks/useFx.js';
-import { buildTaxReport, sellYears, DIVIDEND_NOTES } from '../../lib/taxReport.js';
+import { buildTaxReport, buildDividendReport, taxYears, DIVIDEND_NOTES } from '../../lib/taxReport.js';
 import { PanelHeader } from './SavingsPanel.jsx';
 
 const BADGE = {
@@ -25,7 +25,7 @@ export default function TaxReportPanel() {
   const displayCurrency = useSettingsStore((s) => s.displayCurrency);
   const { convert } = useFx();
 
-  const years = useMemo(() => sellYears(transactions), [transactions]);
+  const years = useMemo(() => taxYears(transactions), [transactions]);
   const [year, setYear] = useState(null);
   const activeYear = year != null && years.includes(year) ? year : years[0];
 
@@ -33,11 +33,17 @@ export default function TaxReportPanel() {
     () => (activeYear != null ? buildTaxReport(transactions, activeYear) : null),
     [transactions, activeYear]
   );
+  const dividendReport = useMemo(
+    () => (activeYear != null ? buildDividendReport(transactions, activeYear) : null),
+    [transactions, activeYear]
+  );
 
   const toDisplay = (byCurrency) =>
     Object.entries(byCurrency || {}).reduce((s, [cur, v]) => s + convert(v, cur), 0);
 
   const totalRealized = report ? report.groups.reduce((s, g) => s + toDisplay(g.byCurrency), 0) : 0;
+  const totalDivNet = dividendReport ? toDisplay(dividendReport.totals.net) : 0;
+  const totalDivWht = dividendReport ? toDisplay(dividendReport.totals.wht) : 0;
 
   return (
     <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: theme.space(3) }}>
@@ -45,8 +51,9 @@ export default function TaxReportPanel() {
 
       {years.length === 0 ? (
         <div style={{ fontSize: 13, color: theme.colors.textDim, lineHeight: 1.6 }}>
-          ยังไม่มีรายการขาย — กดปุ่ม <b>Sell</b> บนการ์ดสินทรัพย์ (แท็บ Portfolio) เพื่อบันทึกการขายที่ทำกับโบรกเกอร์
-          แล้วระบบจะสรุปกำไร/ขาดทุนที่เกิดขึ้นจริงของแต่ละปี พร้อมสถานะภาษีไทยของสินทรัพย์แต่ละประเภทให้ที่นี่
+          ยังไม่มีรายการขายหรือเงินปันผล — กดปุ่ม <b>Sell</b> บนการ์ดสินทรัพย์ (แท็บ Portfolio) เพื่อบันทึกการขาย
+          หรือกด <b>Log dividend</b> ในแผงเงินปันผลเพื่อบันทึกเงินปันผลที่ได้รับ แล้วระบบจะสรุปกำไร/ขาดทุนที่เกิดขึ้นจริง
+          และเงินปันผลของแต่ละปี พร้อมสถานะภาษีไทยของสินทรัพย์แต่ละประเภทให้ที่นี่
         </div>
       ) : (
         <>
@@ -70,15 +77,28 @@ export default function TaxReportPanel() {
                 {y} ({y + 543})
               </button>
             ))}
-            <span style={{ marginLeft: 'auto', fontSize: 13, color: theme.colors.textDim }}>
-              รวมกำไรที่ขายแล้ว:{' '}
-              <b style={{ fontFamily: theme.mono, color: totalRealized >= 0 ? theme.colors.up : theme.colors.down }}>
-                {fmtMoney(totalRealized, displayCurrency)}
-              </b>
+            <span style={{ marginLeft: 'auto', display: 'flex', gap: theme.space(3), fontSize: 13, color: theme.colors.textDim, flexWrap: 'wrap' }}>
+              <span>
+                รวมกำไรที่ขายแล้ว:{' '}
+                <b style={{ fontFamily: theme.mono, color: totalRealized >= 0 ? theme.colors.up : theme.colors.down }}>
+                  {fmtMoney(totalRealized, displayCurrency)}
+                </b>
+              </span>
+              {dividendReport && dividendReport.count > 0 && (
+                <span>
+                  เงินปันผล (สุทธิ):{' '}
+                  <b style={{ fontFamily: theme.mono, color: theme.colors.gold }}>
+                    {fmtMoney(totalDivNet, displayCurrency)}
+                  </b>
+                </span>
+              )}
             </span>
           </div>
 
-          {/* Per-class table */}
+          {/* Per-class capital-gains table (sells) */}
+          {report.groups.length === 0 ? (
+            <div style={{ fontSize: 12.5, color: theme.colors.textDim }}>ปีนี้ไม่มีรายการขาย (มีเฉพาะเงินปันผล)</div>
+          ) : (
           <div style={{ overflowX: 'auto', border: `1px solid ${theme.colors.border}`, borderRadius: theme.radius.sm }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
@@ -122,8 +142,62 @@ export default function TaxReportPanel() {
               </tbody>
             </table>
           </div>
+          )}
 
-          {/* Dividend withholding notes */}
+          {/* Per-class dividend table (received, from the ledger) */}
+          {dividendReport && dividendReport.count > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: theme.space(1) }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: theme.colors.text }}>
+                เงินปันผลที่ได้รับปีนี้ (จากบันทึกรายการ)
+              </div>
+              <div style={{ overflowX: 'auto', border: `1px solid ${theme.colors.border}`, borderRadius: theme.radius.sm }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: theme.colors.bgElev }}>
+                      {['ประเภทสินทรัพย์', 'ครั้ง', 'เงินปันผล (ก่อนหัก)', 'หัก ณ ที่จ่าย', 'สุทธิ', 'สถานะภาษีเงินปันผล'].map((h, i) => (
+                        <th key={i} style={{ padding: `${theme.space(1)}px ${theme.space(2)}px`, fontSize: 11, color: theme.colors.textDim, fontWeight: 600, textAlign: i >= 1 && i <= 4 ? 'right' : 'left', whiteSpace: 'nowrap' }}>
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dividendReport.groups.map((g) => {
+                      const badge = BADGE[g.treatment.taxable] || BADGE.conditional;
+                      const cell = { padding: `${theme.space(1)}px ${theme.space(2)}px`, borderTop: `1px solid ${theme.colors.border}`, fontSize: 12.5, whiteSpace: 'nowrap', verticalAlign: 'top' };
+                      const rightMono = { ...cell, textAlign: 'right', fontFamily: theme.mono };
+                      return (
+                        <tr key={g.type}>
+                          <td style={{ ...cell, fontWeight: 700, color: theme.colors.text }}>{g.treatment.label}</td>
+                          <td style={{ ...rightMono, color: theme.colors.textDim }}>{g.count}</td>
+                          <td style={{ ...rightMono, color: theme.colors.text }}>{fmtMoney(toDisplay(g.gross), displayCurrency)}</td>
+                          <td style={{ ...rightMono, color: theme.colors.down }}>{fmtMoney(toDisplay(g.wht), displayCurrency)}</td>
+                          <td style={{ ...rightMono, color: theme.colors.gold, fontWeight: 700 }}>{fmtMoney(toDisplay(g.net), displayCurrency)}</td>
+                          <td style={{ ...cell }}>
+                            <span className="badge" style={{ background: badge.color + '22', color: badge.color, fontWeight: 700 }}>
+                              {badge.text}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ background: theme.colors.bgElev, fontWeight: 700 }}>
+                      <td style={{ padding: `${theme.space(1)}px ${theme.space(2)}px`, borderTop: `2px solid ${theme.colors.border}`, fontSize: 12.5 }}>รวม</td>
+                      <td style={{ padding: `${theme.space(1)}px ${theme.space(2)}px`, borderTop: `2px solid ${theme.colors.border}`, textAlign: 'right', fontFamily: theme.mono, color: theme.colors.textDim }}>{dividendReport.count}</td>
+                      <td style={{ padding: `${theme.space(1)}px ${theme.space(2)}px`, borderTop: `2px solid ${theme.colors.border}`, textAlign: 'right', fontFamily: theme.mono, color: theme.colors.text }}>{fmtMoney(toDisplay(dividendReport.totals.gross), displayCurrency)}</td>
+                      <td style={{ padding: `${theme.space(1)}px ${theme.space(2)}px`, borderTop: `2px solid ${theme.colors.border}`, textAlign: 'right', fontFamily: theme.mono, color: theme.colors.down }}>{fmtMoney(totalDivWht, displayCurrency)}</td>
+                      <td style={{ padding: `${theme.space(1)}px ${theme.space(2)}px`, borderTop: `2px solid ${theme.colors.border}`, textAlign: 'right', fontFamily: theme.mono, color: theme.colors.gold }}>{fmtMoney(totalDivNet, displayCurrency)}</td>
+                      <td style={{ borderTop: `2px solid ${theme.colors.border}` }} />
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Dividend withholding notes (legal context) */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {DIVIDEND_NOTES.map((n, i) => (
               <div key={i} style={{ fontSize: 11.5, color: theme.colors.textDim, lineHeight: 1.5 }}>
@@ -135,8 +209,8 @@ export default function TaxReportPanel() {
       )}
 
       <div style={{ fontSize: 10.5, color: theme.colors.textFaint, lineHeight: 1.5 }}>
-        * สรุปจากรายการขายที่บันทึกไว้ (วิธีต้นทุนเฉลี่ย) แปลงเป็นสกุลแสดงผลด้วยอัตราปัจจุบัน — เป็นข้อมูลประกอบการวางแผน
-        ไม่ใช่เอกสารยื่นภาษีและไม่ใช่คำแนะนำทางภาษี โปรดตรวจสอบกับกรมสรรพากร
+        * สรุปจากรายการขาย (วิธีต้นทุนเฉลี่ย) และเงินปันผลที่บันทึกไว้ แปลงเป็นสกุลแสดงผลด้วยอัตราปัจจุบัน —
+        เป็นข้อมูลประกอบการวางแผน ไม่ใช่เอกสารยื่นภาษีและไม่ใช่คำแนะนำทางภาษี โปรดตรวจสอบกับกรมสรรพากร
       </div>
     </div>
   );

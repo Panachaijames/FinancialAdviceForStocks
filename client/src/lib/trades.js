@@ -91,4 +91,65 @@ export function realizedBySymbol(transactions = []) {
   return out;
 }
 
-export default { applyBuy, applySell, realizedByCurrency, realizedBySymbol };
+// ── dividends ────────────────────────────────────────────────────────────────
+// Dividend ledger entries ({ side:'dividend', amount, wht, currency, at }) record
+// income actually RECEIVED (as opposed to the projected income DividendPanel
+// estimates). They never move the position. These are kept separate from the
+// realized*-P/L helpers above — those mean capital gains from sells, which have a
+// different Thai tax treatment. Total realized return = realized sells + dividends.
+
+/**
+ * Net cash from one dividend ledger entry: gross amount minus withholding tax.
+ * @param {{side?:string, amount?:number, wht?:number}} t
+ * @returns {number|null} net (amount − wht), or null if not a valid dividend entry
+ */
+export function dividendNet(t) {
+  if (!t || t.side !== 'dividend') return null;
+  const amount = Number(t.amount);
+  if (!Number.isFinite(amount)) return null;
+  const whtRaw = Number(t.wht);
+  const wht = Number.isFinite(whtRaw) && whtRaw > 0 ? whtRaw : 0;
+  return amount - Math.min(wht, amount);
+}
+
+/**
+ * Net dividend income grouped by currency (received, after withholding).
+ * @param {Array} transactions
+ * @returns {Record<string, number>} e.g. { USD: 42.5, THB: 900 }
+ */
+export function dividendsByCurrency(transactions = []) {
+  const out = {};
+  for (const t of transactions || []) {
+    const net = dividendNet(t);
+    if (net === null) continue;
+    const cur = t.currency || 'USD';
+    out[cur] = (out[cur] || 0) + net;
+  }
+  return out;
+}
+
+/**
+ * Net dividend income per symbol (native currency), for per-holding display.
+ * @param {Array} transactions
+ * @returns {Record<string, {net:number, currency:string}>}
+ */
+export function dividendsBySymbol(transactions = []) {
+  const out = {};
+  for (const t of transactions || []) {
+    const net = dividendNet(t);
+    if (net === null || !t.symbol) continue;
+    if (!out[t.symbol]) out[t.symbol] = { net: 0, currency: t.currency || 'USD' };
+    out[t.symbol].net += net;
+  }
+  return out;
+}
+
+export default {
+  applyBuy,
+  applySell,
+  realizedByCurrency,
+  realizedBySymbol,
+  dividendNet,
+  dividendsByCurrency,
+  dividendsBySymbol,
+};

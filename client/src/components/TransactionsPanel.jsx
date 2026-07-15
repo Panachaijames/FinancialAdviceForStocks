@@ -5,7 +5,7 @@ import { fmtMoney, fmtNumber, classForChange } from '../lib/format.js';
 import { usePortfolioStore } from '../store/portfolioStore.js';
 import { useSettingsStore } from '../store/settingsStore.js';
 import useFx from '../hooks/useFx.js';
-import { realizedByCurrency } from '../lib/trades.js';
+import { realizedByCurrency, dividendsByCurrency } from '../lib/trades.js';
 import { tradesToCsv } from '../lib/csvImport.js';
 import { downloadTextFile } from '../lib/backup.js';
 import CsvImportDialog from './CsvImportDialog.jsx';
@@ -38,23 +38,30 @@ export default function TransactionsPanel() {
     [transactions]
   );
 
-  // Latest transaction per symbol -> the only ones that may be undone.
+  // Last-RECORDED entry per symbol -> the only ones that may be undone. Keyed on
+  // insertion order (not the `at`-sorted display rows), matching the store's LIFO
+  // — dividends are stamped at local-noon so `at` order ≠ record order.
   const undoable = useMemo(() => {
-    const latest = new Set();
-    const seen = new Set();
-    for (const t of rows) {
-      if (!seen.has(t.symbol)) {
-        latest.add(t.id);
-        seen.add(t.symbol);
-      }
-    }
-    return latest;
-  }, [rows]);
+    const lastIdBySymbol = new Map();
+    for (const t of transactions || []) if (t && t.symbol) lastIdBySymbol.set(t.symbol, t.id);
+    return new Set(lastIdBySymbol.values());
+  }, [transactions]);
 
   const totalRealized = useMemo(() => {
     const byCur = realizedByCurrency(transactions);
     return Object.entries(byCur).reduce((sum, [cur, v]) => sum + convert(v, cur), 0);
   }, [transactions, convert]);
+
+  const totalDividends = useMemo(() => {
+    const byCur = dividendsByCurrency(transactions);
+    return Object.entries(byCur).reduce((sum, [cur, v]) => sum + convert(v, cur), 0);
+  }, [transactions, convert]);
+  // Presence-based (not `!== 0`), so a fully-withheld $0.00-net dividend still
+  // shows the chip — matching PortfolioSummary's "Dividends Received" card.
+  const hasDividends = useMemo(
+    () => (transactions || []).some((t) => t && t.side === 'dividend'),
+    [transactions]
+  );
 
   const visible = showAll ? rows : rows.slice(0, SHOW_COLLAPSED);
   const td = { padding: `${theme.space(1)}px ${theme.space(2)}px`, borderTop: `1px solid ${theme.colors.border}`, fontSize: 12.5, whiteSpace: 'nowrap' };
@@ -65,7 +72,7 @@ export default function TransactionsPanel() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: theme.space(2), flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: theme.space(1), fontWeight: 700, fontSize: 13, color: theme.colors.text }}>
           <History size={15} style={{ color: theme.colors.accent }} />
-          Trades ({rows.length})
+          Activity ({rows.length})
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: theme.space(3) }}>
           <button
@@ -88,12 +95,28 @@ export default function TransactionsPanel() {
               <Download size={14} /> Export CSV
             </button>
           )}
+          {hasDividends && (
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: theme.space(1) }}>
+              <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4, color: theme.colors.textDim }}>
+                Dividends
+              </span>
+              <span
+                style={{ fontSize: 15, fontWeight: 800, fontFamily: theme.mono, color: theme.colors.gold }}
+                title="Net dividends received (after withholding), converted to your display currency"
+              >
+                {fmtMoney(totalDividends, displayCurrency)}
+              </span>
+            </div>
+          )}
           {rows.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'baseline', gap: theme.space(1) }}>
               <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4, color: theme.colors.textDim }}>
                 Realized P/L
               </span>
-              <span style={{ fontSize: 15, fontWeight: 800, fontFamily: theme.mono, color: colorForChange(totalRealized) }}>
+              <span
+                style={{ fontSize: 15, fontWeight: 800, fontFamily: theme.mono, color: colorForChange(totalRealized) }}
+                title="Realized capital gains from recorded sells (average-cost)"
+              >
                 {fmtMoney(totalRealized, displayCurrency)}
               </span>
             </div>
@@ -106,7 +129,8 @@ export default function TransactionsPanel() {
       {rows.length === 0 ? (
         <div style={{ fontSize: 12.5, color: theme.colors.textDim }}>
           Record buys/sells with the <b>Buy / Sell</b> buttons on your asset cards — or import your broker's
-          CSV — to track realized profit &amp; loss here.
+          CSV — to track realized profit &amp; loss here. Received dividends can be logged from the
+          <b> Dividend Income</b> panel and show up here too.
         </div>
       ) : (
       <div style={{ overflowX: 'auto', border: `1px solid ${theme.colors.border}`, borderRadius: theme.radius.sm }}>
@@ -133,39 +157,64 @@ export default function TransactionsPanel() {
           <tbody>
             {visible.map((t) => {
               const isSell = t.side === 'sell';
+              const isDividend = t.side === 'dividend';
+              const badge = isDividend
+                ? { bg: theme.colors.gold, fg: theme.colors.gold, text: 'DIV' }
+                : isSell
+                ? { bg: theme.colors.down, fg: theme.colors.down, text: 'SELL' }
+                : { bg: theme.colors.up, fg: theme.colors.up, text: 'BUY' };
+              const net = isDividend ? Number(t.amount || 0) - Number(t.wht || 0) : 0;
               return (
                 <tr key={t.id}>
                   <td style={{ ...td, color: theme.colors.textDim }}>{String(t.at).slice(0, 10)}</td>
                   <td style={td}>
                     <span
                       className="badge"
-                      style={{
-                        background: (isSell ? theme.colors.down : theme.colors.up) + '22',
-                        color: isSell ? theme.colors.down : theme.colors.up,
-                        fontWeight: 700,
-                      }}
+                      style={{ background: badge.bg + '22', color: badge.fg, fontWeight: 700 }}
                     >
-                      {isSell ? 'SELL' : 'BUY'}
+                      {badge.text}
                     </span>
                   </td>
                   <td style={{ ...td, fontFamily: theme.mono, fontWeight: 700, color: theme.colors.text }}>{t.symbol}</td>
-                  <td style={{ ...td, ...right, color: theme.colors.text }}>
-                    {fmtNumber(t.qty, Number.isInteger(t.qty) ? 0 : 4)}
-                  </td>
-                  <td style={{ ...td, ...right, color: theme.colors.text }}>{fmtMoney(t.price, t.currency)}</td>
-                  <td style={{ ...td, ...right, color: theme.colors.textDim }}>
-                    {t.fee > 0 ? fmtMoney(t.fee, t.currency) : '—'}
-                  </td>
-                  <td style={{ ...td, ...right, fontWeight: 700, color: isSell ? colorForChange(t.realized) : theme.colors.textFaint }}>
-                    {isSell ? fmtMoney(t.realized, t.currency) : '—'}
-                  </td>
+                  {isDividend ? (
+                    <>
+                      {/* Qty / per-share Price don't apply to a cash dividend. */}
+                      <td style={{ ...td, ...right, color: theme.colors.textFaint }}>—</td>
+                      <td style={{ ...td, ...right, color: theme.colors.textFaint }}>—</td>
+                      <td
+                        style={{ ...td, ...right, color: theme.colors.textDim }}
+                        title="Withholding tax deducted"
+                      >
+                        {Number(t.wht) > 0 ? fmtMoney(t.wht, t.currency) : '—'}
+                      </td>
+                      <td
+                        style={{ ...td, ...right, fontWeight: 700, color: theme.colors.gold }}
+                        title={`Dividend received: gross ${fmtMoney(t.amount, t.currency)}${Number(t.wht) > 0 ? `, net of ${fmtMoney(t.wht, t.currency)} withholding` : ''}`}
+                      >
+                        {fmtMoney(net, t.currency)}
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td style={{ ...td, ...right, color: theme.colors.text }}>
+                        {fmtNumber(t.qty, Number.isInteger(t.qty) ? 0 : 4)}
+                      </td>
+                      <td style={{ ...td, ...right, color: theme.colors.text }}>{fmtMoney(t.price, t.currency)}</td>
+                      <td style={{ ...td, ...right, color: theme.colors.textDim }}>
+                        {t.fee > 0 ? fmtMoney(t.fee, t.currency) : '—'}
+                      </td>
+                      <td style={{ ...td, ...right, fontWeight: 700, color: isSell ? colorForChange(t.realized) : theme.colors.textFaint }}>
+                        {isSell ? fmtMoney(t.realized, t.currency) : '—'}
+                      </td>
+                    </>
+                  )}
                   <td style={{ ...td, textAlign: 'right' }}>
                     {undoable.has(t.id) && (
                       <button
                         type="button"
                         className="btn-ghost"
                         onClick={() => undoTransaction(t.id)}
-                        title="Undo this trade (restores the position as it was before)"
+                        title={isDividend ? 'Remove this dividend entry' : 'Undo this trade (restores the position as it was before)'}
                         style={{ padding: 4, lineHeight: 0, color: theme.colors.textDim }}
                       >
                         <Undo2 size={14} />
@@ -194,8 +243,8 @@ export default function TransactionsPanel() {
 
       {rows.length > 0 && (
         <div style={{ fontSize: 10.5, color: theme.colors.textFaint }}>
-          Records of what you did at your broker — realized P/L uses the average-cost method. Only the latest
-          trade per symbol can be undone.
+          Records of what you did at your broker — realized P/L uses the average-cost method; dividends are
+          shown net of withholding. Only the latest entry per symbol can be undone. CSV export covers trades only.
         </div>
       )}
     </div>

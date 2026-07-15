@@ -1,9 +1,11 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Search, Plus, Loader2 } from 'lucide-react';
+import { Search, Plus, Loader2, Eye } from 'lucide-react';
 import { theme } from '../lib/theme.js';
 import { searchSymbols } from '../api/client.js';
 import { classify, assetMeta, normalizeInput } from '../lib/assetType.js';
 import { usePortfolioStore } from '../store/portfolioStore.js';
+import { snackbar } from '../store/snackbarStore.js';
+import { scrollToCard } from '../lib/scrollToCard.js';
 import HoldingEditor from './HoldingEditor.jsx';
 
 const QUICK_ADD = [
@@ -57,12 +59,15 @@ export default function AddAssetBar() {
 
   const addHolding = usePortfolioStore((s) => s.addHolding);
   const holdings = usePortfolioStore((s) => s.holdings);
+  const watchlist = usePortfolioStore((s) => s.watchlist);
+  const addToWatchlist = usePortfolioStore((s) => s.addToWatchlist);
 
   const boxRef = useRef(null);
   const debounceRef = useRef(null);
   const reqIdRef = useRef(0);
 
   const existingSymbols = new Set(holdings.map((h) => h.symbol));
+  const watchedSymbols = new Set((watchlist || []).map((w) => w.symbol));
 
   // Debounced search.
   useEffect(() => {
@@ -161,7 +166,13 @@ export default function AddAssetBar() {
 
   function handleSaveHolding({ shares, avgCost }) {
     if (pending) {
+      const sym = pending.symbol;
       addHolding(pending, { shares, avgCost });
+      snackbar.push({
+        message: `Added ${sym}`,
+        actionLabel: 'View',
+        onAction: () => scrollToCard(sym),
+      });
     }
     setPending(null);
   }
@@ -234,7 +245,6 @@ export default function AddAssetBar() {
               padding: theme.space(1),
               boxShadow: theme.shadow,
             }}
-            role="listbox"
           >
             {loading && results.length === 0 && (
               <div style={{ padding: theme.space(3), color: theme.colors.textDim, fontSize: 13 }}>
@@ -252,13 +262,16 @@ export default function AddAssetBar() {
             {results.map((r, i) => {
               const meta = assetMeta(r.type || classify(r.symbol));
               const already = existingSymbols.has(r.symbol);
+              const watched = watchedSymbols.has(r.symbol);
               const active = i === highlight;
               return (
-                <button
+                // A plain div row with two real buttons (Add + Watch). We dropped
+                // the listbox/option roles: they were never wired to the input via
+                // aria-activedescendant, and nesting the Watch button inside a
+                // role="option" is an ARIA violation. Arrow-key highlight + Enter
+                // selection still runs through the input's keydown handler.
+                <div
                   key={`${r.symbol}-${i}`}
-                  type="button"
-                  role="option"
-                  aria-selected={active}
                   onMouseEnter={() => setHighlight(i)}
                   onClick={() => selectResult(r)}
                   style={{
@@ -269,7 +282,6 @@ export default function AddAssetBar() {
                     textAlign: 'left',
                     padding: `${theme.space(2)}px ${theme.space(2)}px`,
                     background: active ? theme.colors.panelElev : 'transparent',
-                    border: 'none',
                     borderRadius: theme.radius.sm,
                     cursor: 'pointer',
                     color: theme.colors.text,
@@ -309,12 +321,38 @@ export default function AddAssetBar() {
                   >
                     {meta.label}
                   </span>
+                  {/* Watch (track without a position) — hidden once owned */}
+                  {!already && (
+                    <button
+                      type="button"
+                      className="btn-ghost"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        addToWatchlist(r);
+                        snackbar.push({ message: `Watching ${r.symbol}`, tone: 'success' });
+                      }}
+                      disabled={watched}
+                      title={watched ? 'On your watchlist' : `Watch ${r.symbol} (no position)`}
+                      aria-label={watched ? `${r.symbol} is on your watchlist` : `Watch ${r.symbol}`}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: 3,
+                        lineHeight: 0,
+                        color: watched ? theme.colors.accent : theme.colors.textFaint,
+                        flexShrink: 0,
+                        cursor: watched ? 'default' : 'pointer',
+                      }}
+                    >
+                      <Eye size={15} />
+                    </button>
+                  )}
                   {already ? (
                     <span style={{ fontSize: 11, color: theme.colors.textFaint }}>added</span>
                   ) : (
                     <Plus size={16} style={{ color: theme.colors.accent, flexShrink: 0 }} />
                   )}
-                </button>
+                </div>
               );
             })}
           </div>

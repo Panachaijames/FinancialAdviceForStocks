@@ -93,6 +93,24 @@ export function sellYears(transactions = []) {
   return Array.from(years).sort((a, b) => b - a);
 }
 
+/** Distinct years (desc) that have at least one DIVIDEND in the ledger. */
+export function dividendYears(transactions = []) {
+  const years = new Set();
+  for (const t of transactions || []) {
+    if (t && t.side === 'dividend') {
+      const y = yearOf(t.at);
+      if (y) years.add(y);
+    }
+  }
+  return Array.from(years).sort((a, b) => b - a);
+}
+
+/** Union of sell + dividend years (desc) — every year with taxable activity. */
+export function taxYears(transactions = []) {
+  const years = new Set([...sellYears(transactions), ...dividendYears(transactions)]);
+  return Array.from(years).sort((a, b) => b - a);
+}
+
 /**
  * Build the report for one calendar year.
  * @param {Array} transactions — ledger entries ({ side, symbol, type?, realized, currency, at })
@@ -124,4 +142,56 @@ export function buildTaxReport(transactions = [], year) {
   return { year, groups: list, sellCount };
 }
 
-export default { TAX_TREATMENT, DIVIDEND_NOTES, sellYears, buildTaxReport };
+/**
+ * Build the DIVIDEND section for one calendar year from the ledger — grouped by
+ * asset class with gross / withholding / net per currency, plus totals. Kept
+ * separate from buildTaxReport() because dividends and capital gains have
+ * different Thai tax treatments.
+ * @param {Array} transactions — ledger entries ({ side:'dividend', amount, wht, currency, type?, symbol, at })
+ * @param {number} year
+ * @returns {{ year:number, groups:Array, totals:{gross:Object,wht:Object,net:Object}, count:number }}
+ */
+export function buildDividendReport(transactions = [], year) {
+  const groups = new Map();
+  const totals = { gross: {}, wht: {}, net: {} };
+  let count = 0;
+  for (const t of transactions || []) {
+    if (!t || t.side !== 'dividend' || yearOf(t.at) !== year) continue;
+    const amount = Number(t.amount);
+    if (!Number.isFinite(amount) || amount <= 0) continue;
+    const whtRaw = Number(t.wht);
+    const wht = Math.min(Number.isFinite(whtRaw) && whtRaw > 0 ? whtRaw : 0, amount);
+    const net = amount - wht;
+    count += 1;
+    // Older entries predate the `type` field — classify by symbol.
+    const type = t.type || classify(t.symbol);
+    const key = TAX_TREATMENT[type] ? type : 'other';
+    if (!groups.has(key)) {
+      groups.set(key, { type: key, treatment: TAX_TREATMENT[key], count: 0, gross: {}, wht: {}, net: {} });
+    }
+    const g = groups.get(key);
+    const cur = t.currency || 'USD';
+    g.count += 1;
+    g.gross[cur] = (g.gross[cur] || 0) + amount;
+    g.wht[cur] = (g.wht[cur] || 0) + wht;
+    g.net[cur] = (g.net[cur] || 0) + net;
+    totals.gross[cur] = (totals.gross[cur] || 0) + amount;
+    totals.wht[cur] = (totals.wht[cur] || 0) + wht;
+    totals.net[cur] = (totals.net[cur] || 0) + net;
+  }
+  const list = Array.from(groups.values()).sort((a, b) => {
+    const mag = (g) => Object.values(g.net).reduce((s, v) => s + Math.abs(v), 0);
+    return mag(b) - mag(a);
+  });
+  return { year, groups: list, totals, count };
+}
+
+export default {
+  TAX_TREATMENT,
+  DIVIDEND_NOTES,
+  sellYears,
+  dividendYears,
+  taxYears,
+  buildTaxReport,
+  buildDividendReport,
+};

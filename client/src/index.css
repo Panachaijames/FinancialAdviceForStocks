@@ -1,8 +1,12 @@
 /* ============================================================
    PT Financial Advisor — global stylesheet
-   Dark fintech palette (mirrors client/src/lib/theme.js)
    ============================================================ */
 
+/* SINGLE SOURCE OF TRUTH: client/src/lib/theme.js. applyThemeVars() (called from
+   main.jsx before render) stamps these same custom properties onto :root from
+   theme.js and OVERRIDES the values below. The declarations here exist only as a
+   pre-JS fallback so the very first paint isn't unstyled — edit theme.js, not
+   these. Keep them roughly in sync as a courtesy; theme.js always wins at runtime. */
 :root {
   --bg: #0b0e14;
   --bg-elev: #0f1320;
@@ -1490,5 +1494,27 @@ ul {
      Static filter on a pointer-events:none decorative layer. ---- */
   :root[data-glass='1'] .fx-spotlight-glow {
     filter: brightness(1.3) saturate(1.25);
+  }
+}
+
+/* ---- Card flash: brief highlight when a snackbar "View" scrolls to a card. ---- */
+.card-flash {
+  animation: cardFlash 1.4s ease-out;
+}
+@keyframes cardFlash {
+  0% {
+    box-shadow: 0 0 0 2px var(--accent), 0 0 22px 2px color-mix(in srgb, var(--accent) 55%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+/* Movement-averse users: skip the pulse (respect the app's reduced-motion mode). */
+:root[data-motion='reduce'] .card-flash {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-flash {
+    animation: none;
   }
 }

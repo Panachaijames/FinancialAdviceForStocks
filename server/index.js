@@ -131,12 +131,27 @@ if (fs.existsSync(clientDist)) {
       maxAge: '1y',
       immutable: true,
       setHeaders(res, filePath) {
-        if (filePath.endsWith('index.html')) res.setHeader('Cache-Control', 'no-cache');
+        // Fixed-name files (not content-hashed) must revalidate, or a PWA update
+        // could never reach an already-installed client: index.html references
+        // the hashed bundles, and sw.js / manifest.webmanifest / registerSW.js
+        // drive the service-worker update. Everything else is hashed -> immutable.
+        const base = path.basename(filePath);
+        if (
+          base === 'index.html' ||
+          base === 'sw.js' ||
+          base === 'manifest.webmanifest' ||
+          base === 'registerSW.js'
+        ) {
+          res.setHeader('Cache-Control', 'no-cache');
+        }
       },
     })
   );
   // SPA fallback for non-API GET routes.
-  app.get(/^(?!\/api\/|\/ws).*/, (req, res, next) => {
+  // Exclude the API/WS namespaces — including the bare `/api` (no trailing slash),
+  // which must return the JSON 404 below, not the HTML shell. \b matches at both
+  // `/api` end-of-string and the `/api/` slash.
+  app.get(/^(?!\/api\b|\/ws\b).*/, (req, res, next) => {
     if (req.method !== 'GET') return next();
     const indexHtml = path.join(clientDist, 'index.html');
     if (fs.existsSync(indexHtml)) {

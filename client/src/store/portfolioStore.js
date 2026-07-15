@@ -25,7 +25,9 @@ export const usePortfolioStore = create(
   persist(
     (set, get) => ({
       holdings: [],
-      transactions: [], // [{ id, symbol, side:'buy'|'sell', qty, price, fee, currency, at, realized?, costBasis?, prevShares, prevAvgCost }]
+      transactions: [], // trade: { id, symbol, side:'buy'|'sell', qty, price, fee, currency, at, realized?, costBasis?, prevShares, prevAvgCost }
+                        // dividend: { id, symbol, side:'dividend', amount, wht, currency, at, prevShares, prevAvgCost }
+      watchlist: [], // [{ id, symbol, type, name, currency, addedAt }] — symbols to track WITHOUT a position
       lastRemoved: null, // { holding, index, at } — most recent removeHolding, for undo (not persisted)
 
       /**
@@ -56,6 +58,8 @@ export const usePortfolioStore = create(
                   }
                 : h
             ),
+            // A symbol is never both held and watched — drop any watch entry.
+            watchlist: state.watchlist.filter((w) => w.symbol !== symbol),
           }));
           return;
         }
@@ -70,7 +74,11 @@ export const usePortfolioStore = create(
           avgCost,
           addedAt: new Date().toISOString(),
         };
-        set((state) => ({ holdings: [...state.holdings, holding] }));
+        set((state) => ({
+          holdings: [...state.holdings, holding],
+          // A symbol is never both held and watched — drop any watch entry.
+          watchlist: state.watchlist.filter((w) => w.symbol !== symbol),
+        }));
       },
 
       /**
@@ -176,6 +184,42 @@ export const usePortfolioStore = create(
       },
 
       /**
+       * Record a dividend the user RECEIVED for a holding (income, not a trade).
+       * It never moves the position, so the snapshot equals the current position
+       * — undoTransaction then restores a safe no-op. Returns the ledger entry,
+       * or null if invalid (unknown holding, amount <= 0, negative withholding).
+       * @param {string} holdingId
+       * @param {{ amount:number, wht?:number, at?:string }} d  amounts in native currency
+       */
+      recordDividend(holdingId, d = {}) {
+        const h = get().holdings.find((x) => x.id === holdingId);
+        if (!h) return null;
+        const amount = Number(d.amount) || 0;
+        const whtRaw = Number(d.wht) || 0;
+        if (amount <= 0 || whtRaw < 0) return null;
+        const wht = Math.min(whtRaw, amount); // withholding can't exceed the gross dividend
+
+        const prev = { shares: Number(h.shares) || 0, avgCost: Number(h.avgCost) || 0 };
+        const tx = {
+          id: `tx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          symbol: h.symbol,
+          type: h.type, // asset class — the tax report groups dividends by it
+          side: 'dividend',
+          qty: 0,
+          price: 0,
+          fee: 0,
+          amount, // gross dividend received
+          wht, // withholding tax deducted
+          currency: h.currency || nativeCurrencyForType(h.type),
+          at: d.at || new Date().toISOString(),
+          prevShares: prev.shares, // dividends don't change the position; snapshot
+          prevAvgCost: prev.avgCost, // = current so undo is a safe no-op
+        };
+        set((state) => ({ transactions: [...state.transactions, tx] }));
+        return tx;
+      },
+
+      /**
        * Bulk-import parsed broker trades (lib/csvImport.js output, oldest
        * first). Unknown symbols become new holdings (0 shares) so the buys
        * replay into them; each trade goes through recordTrade so average-cost
@@ -213,25 +257,29 @@ export const usePortfolioStore = create(
       },
 
       /**
-       * Undo a ledger entry — only allowed for the LATEST transaction of its
-       * symbol (LIFO), restoring the position snapshot taken when it was
-       * recorded. Returns true if undone.
+       * Undo a ledger entry — only allowed for the LAST-RECORDED entry of its
+       * symbol (LIFO by INSERTION ORDER, not by `at`: dividends are stamped at
+       * local-noon and trades at the real instant, so `at` order ≠ record order).
+       * A buy/sell restores the position snapshot; a dividend never moved the
+       * position, so its undo only removes the ledger row. Returns true if undone.
        */
       undoTransaction(txId) {
-        const { transactions, holdings } = get();
-        const tx = transactions.find((x) => x.id === txId);
-        if (!tx) return false;
-        const laterSameSymbol = transactions.some(
-          (x) => x.symbol === tx.symbol && x.id !== tx.id && x.at > tx.at
-        );
-        if (laterSameSymbol) return false; // only the most recent per symbol is reversible
-        const h = holdings.find((x) => x.symbol === tx.symbol);
+        const { transactions } = get();
+        const idx = transactions.findIndex((x) => x.id === txId);
+        if (idx === -1) return false;
+        const tx = transactions[idx];
+        // Reversible only if nothing for this symbol was recorded after it.
+        const laterSameSymbol = transactions.slice(idx + 1).some((x) => x.symbol === tx.symbol);
+        if (laterSameSymbol) return false;
         set((state) => ({
-          holdings: h
-            ? state.holdings.map((x) =>
-                x.id === h.id ? { ...x, shares: tx.prevShares, avgCost: tx.prevAvgCost } : x
-              )
-            : state.holdings,
+          holdings:
+            tx.side === 'dividend'
+              ? state.holdings // income never changed the position — don't touch it
+              : state.holdings.map((x) =>
+                  x.symbol === tx.symbol
+                    ? { ...x, shares: tx.prevShares, avgCost: tx.prevAvgCost }
+                    : x
+                ),
           transactions: state.transactions.filter((x) => x.id !== tx.id),
         }));
         return true;
@@ -243,20 +291,79 @@ export const usePortfolioStore = create(
       getSymbols() {
         return Array.from(new Set(get().holdings.map((h) => h.symbol)));
       },
+
+      // ── watchlist ───────────────────────────────────────────────────────────
+      // A watchlist entry tracks a symbol WITHOUT a position. It's a separate
+      // collection (not a flag on holdings) on purpose: `holdings` stays purely
+      // positions, so every totals/allocation/dividend/rebalance consumer keeps
+      // ignoring watched symbols automatically — no chance of a 0-share "watch"
+      // leaking into portfolio value the way the old 0-share-holding hack did.
+
+      /**
+       * Add a symbol to the watchlist. No-op if it's already watched or already a
+       * real holding (a position you own doesn't also need watching).
+       * @param {{symbol,name?,type?,currency?}} searchResultLike
+       */
+      addToWatchlist(searchResultLike) {
+        const sr = searchResultLike || {};
+        const symbol = (sr.symbol || '').trim();
+        if (!symbol) return;
+        if (get().holdings.some((h) => h.symbol === symbol)) return;
+        if (get().watchlist.some((w) => w.symbol === symbol)) return;
+        const type = sr.type || classify(symbol);
+        const item = {
+          id: makeId(symbol),
+          symbol,
+          type,
+          name: sr.name || symbol,
+          currency: sr.currency || nativeCurrencyForType(type),
+          addedAt: new Date().toISOString(),
+        };
+        set((state) => ({ watchlist: [...state.watchlist, item] }));
+      },
+
+      /** Remove a watchlist entry by id. */
+      removeFromWatchlist(id) {
+        if (!id) return;
+        set((state) => ({ watchlist: state.watchlist.filter((w) => w.id !== id) }));
+      },
+
+      /**
+       * Promote a watched symbol into a real holding with a position, dropping it
+       * from the watchlist. Reuses addHolding so the position/currency logic and
+       * dedupe stay in one place.
+       * @param {string} id watchlist entry id
+       * @param {{shares:number, avgCost:number}} position
+       */
+      promoteToHolding(id, position = {}) {
+        const w = get().watchlist.find((x) => x.id === id);
+        if (!w) return;
+        get().addHolding(
+          { symbol: w.symbol, name: w.name, type: w.type, currency: w.currency },
+          position
+        );
+        set((state) => ({ watchlist: state.watchlist.filter((x) => x.id !== id) }));
+      },
     }),
     {
       name: 'pt-portfolio',
-      version: 2,
+      version: 3,
       // Corruption-safe storage: quarantines unparseable JSON to pt-portfolio.corrupt
       // and keeps a one-deep pt-portfolio.bak, so a bad write can't silently wipe
       // the only copy of the user's holdings/ledger.
       storage: createJSONStorage(() => createSafeStorage()),
       // Only the real collections persist; transient undo state stays in memory.
-      partialize: (state) => ({ holdings: state.holdings, transactions: state.transactions }),
-      // v1 -> v2: the trade ledger arrived; older snapshots just get an empty one.
+      partialize: (state) => ({
+        holdings: state.holdings,
+        transactions: state.transactions,
+        watchlist: state.watchlist,
+      }),
+      // v1 -> v2: the trade ledger arrived. v2 -> v3: the watchlist arrived.
+      // Both defaults are just empty arrays, so this stays version-agnostic.
       migrate(persisted) {
         const state = persisted || {};
         if (!Array.isArray(state.transactions)) state.transactions = [];
+        if (!Array.isArray(state.watchlist)) state.watchlist = [];
         return state;
       },
     }

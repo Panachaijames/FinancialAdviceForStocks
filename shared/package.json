@@ -1,0 +1,7 @@
+{
+  "name": "shared",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Code shared byte-for-byte between the client and server (symbol conventions, etc.) so the two ends can never drift."
+}

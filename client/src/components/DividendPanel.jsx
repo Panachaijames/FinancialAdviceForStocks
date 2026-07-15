@@ -2,11 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import theme from '../lib/theme.js';
 import { getDividend } from '../api/client.js';
 import { usePortfolioStore } from '../store/portfolioStore.js';
+import { snackbar } from '../store/snackbarStore.js';
 import { useSettingsStore } from '../store/settingsStore.js';
 import useFx from '../hooks/useFx.js';
 import useQuotes from '../hooks/useQuotes.js';
 import { assetMeta } from '../lib/assetType.js';
-import { computeDividendIncome } from '../lib/dividends.js';
+import { computeDividendIncome, nextDividendDate } from '../lib/dividends.js';
+import { dividendsByCurrency, dividendsBySymbol } from '../lib/trades.js';
 import { fmtMoney, fmtNumber, fmtPct } from '../lib/format.js';
 
 // Asset types that can pay dividends. Crypto & gold are excluded by design.
@@ -32,12 +34,22 @@ const dividendCache = new Map(); // symbol -> Dividend | null
  */
 export default function DividendPanel() {
   const holdings = usePortfolioStore((s) => s.holdings);
+  const transactions = usePortfolioStore((s) => s.transactions);
+  const recordDividend = usePortfolioStore((s) => s.recordDividend);
   const displayCurrency = useSettingsStore((s) => s.displayCurrency);
   const { convert } = useFx();
 
   const [period, setPeriod] = useState('annual');
   const [divs, setDivs] = useState({}); // symbol -> Dividend | null
   const [loading, setLoading] = useState(false);
+  const [logging, setLogging] = useState(false); // dividend-logging form open?
+
+  // Net dividends actually RECEIVED (from the ledger), per symbol and in total.
+  const receivedBySym = useMemo(() => dividendsBySymbol(transactions), [transactions]);
+  const receivedTotal = useMemo(() => {
+    const byCur = dividendsByCurrency(transactions);
+    return Object.entries(byCur).reduce((s, [c, v]) => s + convert(v, c), 0);
+  }, [transactions, convert]);
 
   // Only consider dividend-capable holdings.
   const payerHoldings = useMemo(
@@ -141,6 +153,19 @@ export default function DividendPanel() {
     });
   }, [payerHoldings, divs, quotes, convert, period]);
 
+  // Upcoming ex-dividend dates (confirmed from the provider, or estimated from
+  // history cadence on cloud where quoteSummary is blocked), soonest first.
+  const upcoming = useMemo(() => {
+    const out = [];
+    for (const h of payerHoldings) {
+      const d = divs[h.symbol];
+      if (!d) continue;
+      const next = nextDividendDate(d);
+      if (next) out.push({ holding: h, ...next });
+    }
+    return out.sort((a, b) => Date.parse(a.exDate) - Date.parse(b.exDate));
+  }, [payerHoldings, divs]);
+
   const payerRows = rows.filter((r) => r.isPayer);
   const totalForPeriod = payerRows.reduce(
     (acc, r) => acc + (r.income ? r.income[period] || 0 : 0),
@@ -175,6 +200,26 @@ export default function DividendPanel() {
 
         <div style={{ flex: 1 }} />
 
+        {/* Log a received dividend into the ledger */}
+        <button
+          type="button"
+          className="btn-ghost"
+          onClick={() => setLogging((v) => !v)}
+          disabled={payerHoldings.length === 0}
+          aria-expanded={logging}
+          title="Record a dividend you actually received"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 5,
+            fontSize: 12,
+            fontWeight: 600,
+            color: payerHoldings.length === 0 ? theme.colors.textFaint : theme.colors.accent,
+          }}
+        >
+          <span style={{ fontSize: 14, lineHeight: 1 }}>＋</span> Log dividend
+        </button>
+
         {/* Period selector */}
         <div className="segmented" role="group" aria-label="Income period">
           {PERIODS.map((p) => (
@@ -191,6 +236,28 @@ export default function DividendPanel() {
           ))}
         </div>
       </div>
+
+      {/* Log-a-dividend form */}
+      {logging && payerHoldings.length > 0 && (
+        <LogDividendForm
+          holdings={payerHoldings}
+          onCancel={() => setLogging(false)}
+          onSave={({ holdingId, amount, wht, at }) => {
+            const tx = recordDividend(holdingId, { amount, wht, at });
+            if (tx) {
+              setLogging(false);
+              snackbar.push({
+                message: `Logged dividend ${fmtMoney(tx.amount, tx.currency)} ${tx.symbol}`,
+                tone: 'success',
+              });
+            }
+            return !!tx;
+          }}
+        />
+      )}
+
+      {/* Upcoming ex-dividend dates */}
+      {upcoming.length > 0 && <UpcomingStrip items={upcoming} />}
 
       {/* Body */}
       {payerHoldings.length === 0 ? (
@@ -230,6 +297,7 @@ export default function DividendPanel() {
                     row={r}
                     period={period}
                     displayCurrency={displayCurrency}
+                    received={receivedBySym[r.holding.symbol]}
                   />
                 ))}
               </tbody>
@@ -281,6 +349,12 @@ export default function DividendPanel() {
             Projected {periodLabel.toLowerCase()} income across {payerRows.length}{' '}
             dividend-paying {payerRows.length === 1 ? 'holding' : 'holdings'}, shown in{' '}
             {displayCurrency}.
+            {receivedTotal > 0 && (
+              <>
+                {' '}Received to date (logged, net of withholding):{' '}
+                <b style={{ color: theme.colors.up }}>{fmtMoney(receivedTotal, displayCurrency)}</b>.
+              </>
+            )}
           </div>
         </>
       )}
@@ -322,7 +396,7 @@ function Td({ children, style }) {
   );
 }
 
-function Row({ row, period, displayCurrency }) {
+function Row({ row, period, displayCurrency, received }) {
   const { holding, income, isPayer, pending } = row;
   const meta = assetMeta(holding.type);
 
@@ -392,9 +466,242 @@ function Row({ row, period, displayCurrency }) {
           : '—'}
       </Td>
       <Td style={{ color: theme.colors.up, fontFamily: theme.mono, fontWeight: 600 }}>
-        {fmtMoney(income[period] || 0, displayCurrency)}
+        <div>{fmtMoney(income[period] || 0, displayCurrency)}</div>
+        {received && received.net > 0 && (
+          <div
+            style={{ fontSize: 10, fontWeight: 500, color: theme.colors.textFaint }}
+            title="Dividends you've logged as received for this holding (net of withholding)"
+          >
+            logged {fmtMoney(received.net, received.currency)}
+          </div>
+        )}
       </Td>
     </tr>
+  );
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Ex-/pay-dates are calendar dates anchored at 00:00 UTC — format and count in
+// UTC so viewers west of UTC don't see the previous day / an off-by-one countdown.
+const fmtDay = (iso) =>
+  new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' });
+
+/** Horizontal strip of upcoming ex-dividend dates with days-until badges. */
+function UpcomingStrip({ items }) {
+  const utcMidnightToday = Math.floor(Date.now() / DAY_MS) * DAY_MS;
+  return (
+    <div style={{ marginBottom: theme.space(3) }}>
+      <div
+        style={{
+          fontSize: 11,
+          textTransform: 'uppercase',
+          letterSpacing: 0.4,
+          color: theme.colors.textDim,
+          fontWeight: 600,
+          marginBottom: theme.space(1),
+        }}
+      >
+        Upcoming ex-dividends
+      </div>
+      <div className="scroll-area" style={{ display: 'flex', gap: theme.space(2), overflowX: 'auto', paddingBottom: 4 }}>
+        {items.map(({ holding, exDate, payDate, estimated }) => {
+          const days = Math.max(0, Math.round((Date.parse(exDate) - utcMidnightToday) / DAY_MS));
+          const exLabel = fmtDay(exDate);
+          const meta = assetMeta(holding.type);
+          const soon = days <= 7;
+          return (
+            <div
+              key={holding.id}
+              title={
+                (estimated ? 'Estimated from payment history — ' : 'Confirmed ex-dividend date — ') +
+                `ex-date ${exLabel}${payDate ? `, pays ${fmtDay(payDate)}` : ''}`
+              }
+              style={{
+                flex: '0 0 auto',
+                minWidth: 118,
+                border: `1px solid ${soon ? theme.colors.gold : theme.colors.border}`,
+                borderRadius: theme.radius.md,
+                background: theme.colors.bgElev,
+                padding: `${theme.space(2)}px ${theme.space(2)}px`,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 2,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ fontSize: 12 }}>{meta.emoji}</span>
+                <span style={{ fontWeight: 700, fontSize: 12.5, color: theme.colors.text }}>{holding.symbol}</span>
+                {estimated && (
+                  <span
+                    style={{ fontSize: 9, fontWeight: 700, color: theme.colors.textFaint, border: `1px solid ${theme.colors.border}`, borderRadius: 4, padding: '0 3px' }}
+                  >
+                    EST
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 12, fontFamily: theme.mono, color: theme.colors.text }}>{exLabel}</div>
+              <div style={{ fontSize: 10.5, fontWeight: 600, color: soon ? theme.colors.gold : theme.colors.textDim }}>
+                {days === 0 ? 'today' : `in ${days} day${days === 1 ? '' : 's'}`}
+                {payDate ? ` · pays ${fmtDay(payDate)}` : ''}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Compact form to record a dividend actually received for one holding. Amounts
+ * are in the selected holding's native currency; withholding is optional.
+ */
+function LogDividendForm({ holdings, onCancel, onSave }) {
+  const [holdingId, setHoldingId] = useState(holdings[0]?.id || '');
+  const [amount, setAmount] = useState('');
+  const [wht, setWht] = useState('');
+  const [at, setAt] = useState(() => new Date().toISOString().slice(0, 10));
+  const [error, setError] = useState('');
+
+  const selected = holdings.find((h) => h.id === holdingId) || holdings[0];
+  const currency = selected?.currency || 'USD';
+
+  const inputStyle = {
+    background: theme.colors.bg,
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.radius.sm,
+    color: theme.colors.text,
+    padding: `${theme.space(1)}px ${theme.space(2)}px`,
+    fontSize: 13,
+    fontFamily: theme.mono,
+    width: '100%',
+  };
+  const labelStyle = {
+    fontSize: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    color: theme.colors.textDim,
+    fontWeight: 600,
+    marginBottom: 3,
+    display: 'block',
+  };
+
+  function submit(e) {
+    e.preventDefault();
+    const amt = Number(amount);
+    const tax = wht === '' ? 0 : Number(wht);
+    if (!holdingId) return setError('Pick a holding.');
+    if (!Number.isFinite(amt) || amt <= 0) return setError('Enter a dividend amount greater than 0.');
+    if (!Number.isFinite(tax) || tax < 0) return setError('Withholding tax cannot be negative.');
+    if (tax > amt) return setError('Withholding tax cannot exceed the dividend amount.');
+    // Store an ISO instant at local noon so the calendar day is stable across time zones.
+    const iso = `${at}T12:00:00.000Z`;
+    const ok = onSave({ holdingId, amount: amt, wht: tax, at: iso });
+    if (!ok) setError('Could not record that dividend.');
+  }
+
+  return (
+    <form
+      onSubmit={submit}
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'flex-end',
+        gap: theme.space(2),
+        padding: theme.space(3),
+        marginBottom: theme.space(3),
+        background: theme.colors.bgElev,
+        border: `1px solid ${theme.colors.border}`,
+        borderRadius: theme.radius.md,
+      }}
+    >
+      <label style={{ flex: '2 1 160px' }}>
+        <span style={labelStyle}>Holding</span>
+        <select
+          value={holdingId}
+          onChange={(e) => setHoldingId(e.target.value)}
+          style={{ ...inputStyle, fontFamily: theme.font }}
+        >
+          {holdings.map((h) => (
+            <option key={h.id} value={h.id}>
+              {h.symbol} — {h.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label style={{ flex: '1 1 100px' }}>
+        <span style={labelStyle}>Amount ({currency})</span>
+        <input
+          type="number"
+          inputMode="decimal"
+          step="any"
+          min="0"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          placeholder="0.00"
+          style={inputStyle}
+          autoFocus
+        />
+      </label>
+      <label style={{ flex: '1 1 100px' }}>
+        <span style={labelStyle}>Withholding ({currency})</span>
+        <input
+          type="number"
+          inputMode="decimal"
+          step="any"
+          min="0"
+          value={wht}
+          onChange={(e) => setWht(e.target.value)}
+          placeholder="0.00"
+          style={inputStyle}
+        />
+      </label>
+      <label style={{ flex: '1 1 130px' }}>
+        <span style={labelStyle}>Date</span>
+        <input
+          type="date"
+          value={at}
+          max={new Date().toISOString().slice(0, 10)}
+          onChange={(e) => setAt(e.target.value)}
+          style={inputStyle}
+        />
+      </label>
+      <div style={{ display: 'flex', gap: theme.space(1) }}>
+        <button
+          type="submit"
+          className="btn"
+          style={{
+            background: theme.colors.accent,
+            color: '#fff',
+            border: 'none',
+            borderRadius: theme.radius.sm,
+            padding: `${theme.space(2)}px ${theme.space(3)}px`,
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: 'pointer',
+          }}
+        >
+          Save
+        </button>
+        <button
+          type="button"
+          className="btn-ghost"
+          onClick={onCancel}
+          style={{
+            color: theme.colors.textDim,
+            padding: `${theme.space(2)}px ${theme.space(2)}px`,
+            fontSize: 13,
+            fontWeight: 600,
+          }}
+        >
+          Cancel
+        </button>
+      </div>
+      {error && (
+        <div style={{ flexBasis: '100%', color: theme.colors.down, fontSize: 12 }}>{error}</div>
+      )}
+    </form>
   );
 }
 
