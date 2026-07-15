@@ -6,6 +6,7 @@
 //
 // Keys are dot-namespaced (e.g. 'summary.marketValue'). Interpolation: pass a
 // vars object and use {name} placeholders — t('x.y', { n: 3 }).
+import { useCallback } from 'react';
 import { useSettingsStore } from '../store/settingsStore.js';
 import generated from './i18nDict.js';
 
@@ -111,7 +112,9 @@ export function translate(key, lang, vars) {
  */
 export function useT() {
   const lang = useSettingsStore((s) => s.language) || 'en';
-  return (key, vars) => translate(key, lang, vars);
+  // Stable identity per language so consumers' useMemo/useCallback deps that
+  // include `t` don't invalidate on every render.
+  return useCallback((key, vars) => translate(key, lang, vars), [lang]);
 }
 
 export default { translate, useT };

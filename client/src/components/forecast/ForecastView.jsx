@@ -1,11 +1,12 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { BrainCircuit, Play, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { theme } from '../../lib/theme.js';
 import { fmtMoney } from '../../lib/format.js';
 import { useT } from '../../lib/i18n.js';
 import { usePortfolioStore } from '../../store/portfolioStore.js';
 import { useForecastStore } from '../../store/forecastStore.js';
-import { getCandles, getNewsSentiment } from '../../api/client.js';
+import { getCandles, getNewsSentiment, getNews } from '../../api/client.js';
+import { scoreText, scoreArticles } from '../../lib/forecast/sentiment.js';
 import {
   MACRO_SERIES,
   buildDataset,
@@ -16,11 +17,13 @@ import {
 } from '../../lib/forecast/features.js';
 import { fitArima, autoArima, forecastArima } from '../../lib/forecast/arima.js';
 import { trainGBDT, predictGBDT } from '../../lib/forecast/gbdt.js';
-import { bandFor, ensembleCloses, forecastReturnsPct } from '../../lib/forecast/ensemble.js';
+import { bandFor, ensembleCloses, forecastReturnsPct, newsScenario } from '../../lib/forecast/ensemble.js';
 import ForecastChart, { SERIES_COLORS } from './ForecastChart.jsx';
 import TrainingLog from './TrainingLog.jsx';
 import PastRuns from './PastRuns.jsx';
 import LossSparkline from './LossSparkline.jsx';
+import NewsScenarios from './NewsScenarios.jsx';
+import TradeScout from '../TradeScout.jsx';
 
 const RANGES = ['1y', '2y', '5y'];
 const HORIZONS = [7, 14, 30, 60, 90];
@@ -73,6 +76,12 @@ export default function ForecastView() {
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
   const runningRef = useRef(false);
+
+  // News-aware scenario layer: recent headlines for the forecast symbol, scored
+  // by the built-in lexicon, drive illustrative up/down branches on the chart.
+  const [news, setNews] = useState(null); // { items:[{title,url,source,publishedAt,score}], agg }
+  const [newsBusy, setNewsBusy] = useState(false);
+  const [showOverlay, setShowOverlay] = useState(true);
 
   // Training status log — one entry per stage, live-updated while running and
   // KEPT after the run so you can see exactly what was trained and for how long.
@@ -346,11 +355,22 @@ export default function ForecastView() {
         forecasts.push({ key: 'ensemble', label: 'Ensemble', color: SERIES_COLORS.ensemble, dates: fDates, closes });
       }
 
+      // Daily log-vol from recent history — sizes the news-scenario cone so it's
+      // proportional to how much THIS stock actually moves (not an arbitrary %).
+      const recent = ds.closes.slice(-61);
+      const rets = [];
+      for (let i = 1; i < recent.length; i += 1) {
+        if (recent[i] > 0 && recent[i - 1] > 0) rets.push(Math.log(recent[i] / recent[i - 1]));
+      }
+      const meanR = rets.length ? rets.reduce((s, v) => s + v, 0) / rets.length : 0;
+      const sigmaDaily = rets.length > 1 ? Math.sqrt(rets.reduce((s, v) => s + (v - meanR) ** 2, 0) / (rets.length - 1)) : 0;
+
       const histTail = 120;
       setResult({
         symbol: sym,
         currency: (target.find((c) => c) || {}).currency || (sym.endsWith('.BK') ? 'THB' : 'USD'),
         lastClose,
+        sigmaDaily,
         historyDates: ds.dates.slice(-histTail),
         historyCloses: ds.closes.slice(-histTail),
         forecasts,
@@ -382,6 +402,94 @@ export default function ForecastView() {
       setBusy(false);
     }
   }
+
+  // Fetch + tone-score recent headlines whenever the forecast symbol changes.
+  useEffect(() => {
+    const sym = result?.symbol;
+    if (!sym) {
+      setNews(null);
+      return undefined;
+    }
+    let ok = true;
+    setNewsBusy(true);
+    setNews(null);
+    getNews([sym])
+      .then((list) => {
+        if (!ok) return;
+        const raw = Array.isArray(list) ? list : [];
+        const items = raw
+          .map((n) => ({
+            title: n.title || '',
+            url: n.url || '',
+            source: n.source || '',
+            publishedAt: n.publishedAt || '',
+            score: scoreText(`${n.title || ''}. ${n.summary || ''}`),
+          }))
+          .filter((n) => n.title);
+        setNews({ items, agg: scoreArticles(raw) });
+      })
+      .catch(() => {
+        if (ok) setNews({ items: [], agg: { score: 0, count: 0, positive: 0, negative: 0 } });
+      })
+      .finally(() => {
+        if (ok) setNewsBusy(false);
+      });
+    return () => {
+      ok = false;
+    };
+  }, [result?.symbol]);
+
+  // Build the chart overlay: illustrative bullish/bearish branches off the base
+  // path (ensemble if present) sized by news tilt × the stock's own vol, plus
+  // per-day news flags. Recomputed when the forecast or the headlines change.
+  const overlay = useMemo(() => {
+    const empty = { scenarioSeries: [], events: [], summary: null };
+    if (!result || !Array.isArray(result.forecasts) || result.forecasts.length === 0) return empty;
+    const base = result.forecasts.find((f) => f.key === 'ensemble') || result.forecasts[0];
+    if (!base || !Array.isArray(base.closes) || base.closes.length === 0) return empty;
+    // A degenerate/explosive model can emit a non-finite or non-positive terminal
+    // close; skip the scenario overlay rather than render NaN% / broken lines.
+    const baseTerminal = base.closes[base.closes.length - 1];
+    if (!Number.isFinite(baseTerminal) || baseTerminal <= 0) return empty;
+    const tilt = news?.agg?.score || 0;
+    const sc = newsScenario(base.closes, result.sigmaDaily, tilt);
+    const dates = base.dates;
+    const scenarioSeries = [
+      { key: 'scenUp', kind: 'scenario', label: t('fnews.bullShort'), color: theme.colors.up, dates, closes: sc.up, dash: '1,4', opacity: 0.9, width: 1.5 },
+      { key: 'scenDown', kind: 'scenario', label: t('fnews.bearShort'), color: theme.colors.down, dates, closes: sc.down, dash: '1,4', opacity: 0.9, width: 1.5 },
+    ];
+    const lc = result.lastClose;
+    const summary = lc > 0
+      ? { upPct: (sc.up[sc.up.length - 1] / lc - 1) * 100, downPct: (sc.down[sc.down.length - 1] / lc - 1) * 100 }
+      : null;
+    // Aggregate headlines by calendar day so multiple same-day items are one flag.
+    const events = [];
+    if (news && Array.isArray(news.items) && news.items.length) {
+      const byDay = new Map();
+      for (const it of news.items) {
+        const ms = Date.parse(it.publishedAt);
+        if (!Number.isFinite(ms)) continue;
+        const dayKey = new Date(ms).toISOString().slice(0, 10);
+        const g = byDay.get(dayKey) || { date: Math.floor(ms / 1000), scores: [], titles: [] };
+        g.scores.push(it.score);
+        g.titles.push(it.title);
+        byDay.set(dayKey, g);
+      }
+      for (const g of byDay.values()) {
+        const score = g.scores.reduce((s, v) => s + v, 0) / g.scores.length;
+        const extra = g.titles.length > 1 ? ` (+${g.titles.length - 1})` : '';
+        events.push({ date: g.date, score, title: `${g.titles[0]}${extra}` });
+      }
+    }
+    return { scenarioSeries, events, summary };
+  }, [result, news, t]);
+
+  // Stable merged series for the chart, so its layout memo isn't invalidated by a
+  // fresh inline array on every render.
+  const chartForecasts = useMemo(
+    () => (result ? (showOverlay ? [...result.forecasts, ...overlay.scenarioSeries] : result.forecasts) : []),
+    [result, overlay, showOverlay]
+  );
 
   const chip = (active) => ({
     fontWeight: 700,
@@ -524,7 +632,8 @@ export default function ForecastView() {
             <ForecastChart
               historyDates={result.historyDates}
               historyCloses={result.historyCloses}
-              forecasts={result.forecasts}
+              forecasts={chartForecasts}
+              events={showOverlay ? overlay.events : []}
               currency={result.currency}
               height={320}
             />
@@ -532,6 +641,17 @@ export default function ForecastView() {
               {t('forecast.chartLegend')}
             </div>
           </div>
+
+          <NewsScenarios
+            symbol={result.symbol}
+            news={news}
+            loading={newsBusy}
+            showOverlay={showOverlay}
+            onToggleOverlay={() => setShowOverlay((v) => !v)}
+            scenario={overlay.summary}
+          />
+
+          <TradeScout symbol={result.symbol} />
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: theme.space(5) }}>
             {/* Holdout metrics */}
