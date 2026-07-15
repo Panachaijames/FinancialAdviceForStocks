@@ -61,6 +61,16 @@ export default function App() {
     setVisited((v) => (v[view] ? v : { ...v, [view]: true }));
   }, [view]);
 
+  // Warm the TensorFlow.js chunk the moment the Forecast tab is opened, so
+  // training starts without waiting on the download. Dynamic-imports the same
+  // chunk ForecastView trains against; the browser caches it, so this is a
+  // no-op on repeat visits / when training actually starts.
+  useEffect(() => {
+    if (view === 'forecast') {
+      import('@tensorflow/tfjs').catch(() => {});
+    }
+  }, [view]);
+
   // Open the live socket as soon as the app mounts.
   useEffect(() => {
     marketSocket.ensureConnected();
