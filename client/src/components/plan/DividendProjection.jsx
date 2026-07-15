@@ -7,6 +7,7 @@ import { useSettingsStore } from '../../store/settingsStore.js';
 import useQuotes from '../../hooks/useQuotes.js';
 import useFx from '../../hooks/useFx.js';
 import useNetWorth from '../../hooks/useNetWorth.js';
+import { useT } from '../../lib/i18n.js';
 import { getDividend } from '../../api/client.js';
 import { computeDividendIncome } from '../../lib/dividends.js';
 import { projectDividends } from '../../lib/planning.js';
@@ -29,6 +30,7 @@ const fieldLabel = {
  * Projects the portfolio's dividend income forward using REAL per-holding yields.
  */
 export default function DividendProjection() {
+  const t = useT();
   const holdings = usePortfolioStore((s) => s.holdings);
   const displayCurrency = useSettingsStore((s) => s.displayCurrency);
   const symbols = useMemo(() => holdings.map((h) => h.symbol), [holdings]);
@@ -93,9 +95,9 @@ export default function DividendProjection() {
   if (annualIncome <= 0) {
     return (
       <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: theme.space(2) }}>
-        <PanelHeader icon={<Coins size={16} />} title="Dividend Income Projection" />
+        <PanelHeader icon={<Coins size={16} />} title={t('divproj.title')} />
         <div style={{ fontSize: 13, color: theme.colors.textDim }}>
-          No dividend-paying holdings detected yet. Add dividend stocks/ETFs (e.g. SCHD, PTT.BK) to project passive income.
+          {t('divproj.empty')}
         </div>
       </div>
     );
@@ -103,34 +105,34 @@ export default function DividendProjection() {
 
   return (
     <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: theme.space(3) }}>
-      <PanelHeader icon={<Coins size={16} />} title="Dividend Income Projection" />
+      <PanelHeader icon={<Coins size={16} />} title={t('divproj.title')} />
 
       <div style={{ display: 'flex', gap: theme.space(3), flexWrap: 'wrap' }}>
         <div>
-          <div style={{ fontSize: 11, color: theme.colors.textDim, textTransform: 'uppercase', letterSpacing: 0.4 }}>Income now</div>
+          <div style={{ fontSize: 11, color: theme.colors.textDim, textTransform: 'uppercase', letterSpacing: 0.4 }}>{t('divproj.income_now')}</div>
           <div style={{ fontSize: 20, fontWeight: 800, fontFamily: theme.mono, color: theme.colors.gold }}>{fmtMoney(annualIncome, displayCurrency)}/yr</div>
         </div>
         <div>
-          <div style={{ fontSize: 11, color: theme.colors.textDim, textTransform: 'uppercase', letterSpacing: 0.4 }}>Portfolio yield</div>
+          <div style={{ fontSize: 11, color: theme.colors.textDim, textTransform: 'uppercase', letterSpacing: 0.4 }}>{t('divproj.portfolio_yield')}</div>
           <div style={{ fontSize: 20, fontWeight: 800, fontFamily: theme.mono, color: theme.colors.text }}>{fmtPct(yieldPct)}</div>
         </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: theme.space(2), alignItems: 'end' }}>
         <label>
-          <span style={fieldLabel}>Years</span>
+          <span style={fieldLabel}>{t('divproj.years')}</span>
           <input className="input" type="number" inputMode="numeric" step="1" min="1" value={years} onChange={(e) => setYears(e.target.value)} />
         </label>
         <label>
-          <span style={fieldLabel}>Div. growth %/yr</span>
+          <span style={fieldLabel}>{t('divproj.div_growth')}</span>
           <input className="input" type="number" inputMode="decimal" step="any" value={growth} onChange={(e) => setGrowth(e.target.value)} />
         </label>
         <label>
-          <span style={fieldLabel}>Reinvest (DRIP)</span>
-          <div className="segmented" role="group" aria-label="Reinvest dividends">
-            {[['On', true], ['Off', false]].map(([t, v]) => (
-              <button key={t} type="button" className="segmented-item" aria-pressed={reinvest === v} onClick={() => setReinvest(v)} style={{ background: reinvest === v ? theme.colors.accent : 'transparent', color: reinvest === v ? '#fff' : theme.colors.textDim }}>
-                {t}
+          <span style={fieldLabel}>{t('divproj.reinvest')}</span>
+          <div className="segmented" role="group" aria-label={t('divproj.reinvest_aria')}>
+            {[[t('divproj.on'), true], [t('divproj.off'), false]].map(([label, v]) => (
+              <button key={String(v)} type="button" className="segmented-item" aria-pressed={reinvest === v} onClick={() => setReinvest(v)} style={{ background: reinvest === v ? theme.colors.accent : 'transparent', color: reinvest === v ? '#fff' : theme.colors.textDim }}>
+                {label}
               </button>
             ))}
           </div>
@@ -141,16 +143,16 @@ export default function DividendProjection() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: theme.space(2) }}>
         <div>
-          <div style={{ fontSize: 11, color: theme.colors.textDim, textTransform: 'uppercase', letterSpacing: 0.4 }}>Income in {years}y</div>
+          <div style={{ fontSize: 11, color: theme.colors.textDim, textTransform: 'uppercase', letterSpacing: 0.4 }}>{t('divproj.income_in_years', { years })}</div>
           <div style={{ fontSize: 18, fontWeight: 800, fontFamily: theme.mono, color: theme.colors.gold }}>{fmtMoney(proj.finalIncome, displayCurrency)}/yr</div>
         </div>
         <div>
-          <div style={{ fontSize: 11, color: theme.colors.textDim, textTransform: 'uppercase', letterSpacing: 0.4 }}>Total received ({years}y)</div>
+          <div style={{ fontSize: 11, color: theme.colors.textDim, textTransform: 'uppercase', letterSpacing: 0.4 }}>{t('divproj.total_received', { years })}</div>
           <div style={{ fontSize: 18, fontWeight: 800, fontFamily: theme.mono, color: theme.colors.text }}>{fmtMoney(proj.cumulative, displayCurrency)}</div>
         </div>
       </div>
       <div style={{ fontSize: 11, color: theme.colors.textFaint }}>
-        Assumes {reinvest ? 'dividends reinvested at the current yield' : 'dividends taken as cash'} + {growth || 0}%/yr payout growth. Estimate, not a guarantee.
+        {t('divproj.assumes', { mode: reinvest ? t('divproj.mode_reinvest') : t('divproj.mode_cash'), growth: growth || 0 })}
       </div>
     </div>
   );

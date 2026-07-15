@@ -3,6 +3,7 @@ import { LineChart, Loader2 } from 'lucide-react';
 import { theme } from '../../lib/theme.js';
 import { fmtMoney, fmtSignedPct } from '../../lib/format.js';
 import { classify } from '../../lib/assetType.js';
+import { useT } from '../../lib/i18n.js';
 import { usePortfolioStore } from '../../store/portfolioStore.js';
 import { getCandles } from '../../api/client.js';
 import { dcaBacktest } from '../../lib/planning.js';
@@ -30,6 +31,7 @@ function nativeCurrency(symbol) {
  * real historical prices. Amounts are in the asset's native price currency.
  */
 export default function DcaBacktest() {
+  const t = useT();
   const holdings = usePortfolioStore((s) => s.holdings);
   const [symbol, setSymbol] = useState(() => (holdings[0] && holdings[0].symbol) || 'AAPL');
   const [range, setRange] = useState('3y');
@@ -48,12 +50,12 @@ export default function DcaBacktest() {
       .then((rows) => {
         if (!active) return;
         setCandles(Array.isArray(rows) ? rows : []);
-        if (!rows || rows.length === 0) setErr('No price history for that symbol.');
+        if (!rows || rows.length === 0) setErr(t('dca.errNoHistory'));
       })
       .catch(() => {
         if (active) {
           setCandles([]);
-          setErr('Could not load price history.');
+          setErr(t('dca.errLoadFailed'));
         }
       })
       .finally(() => active && setLoading(false));
@@ -73,13 +75,13 @@ export default function DcaBacktest() {
     <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: theme.space(3) }}>
       <PanelHeader
         icon={<LineChart size={16} />}
-        title="DCA Backtest"
+        title={t('dca.title')}
         right={loading ? <Loader2 size={15} style={{ animation: 'pulse 1s linear infinite', color: theme.colors.textDim }} /> : null}
       />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: theme.space(2), alignItems: 'end' }}>
         <label>
-          <span style={fieldLabel}>Symbol</span>
+          <span style={fieldLabel}>{t('dca.symbol')}</span>
           <input
             className="input"
             value={symbol}
@@ -94,12 +96,12 @@ export default function DcaBacktest() {
           </datalist>
         </label>
         <label>
-          <span style={fieldLabel}>Monthly ({cur})</span>
+          <span style={fieldLabel}>{t('dca.monthly', { cur })}</span>
           <input className="input" type="number" inputMode="decimal" step="any" min="0" value={monthly} onChange={(e) => setMonthly(e.target.value)} />
         </label>
         <div>
-          <span style={fieldLabel}>Period</span>
-          <div className="segmented" role="group" aria-label="Period">
+          <span style={fieldLabel}>{t('dca.period')}</span>
+          <div className="segmented" role="group" aria-label={t('dca.period')}>
             {RANGES.map((r) => (
               <button key={r} type="button" className="segmented-item" aria-pressed={range === r} onClick={() => setRange(r)} style={{ background: range === r ? theme.colors.accent : 'transparent', color: range === r ? '#fff' : theme.colors.textDim }}>
                 {r}
@@ -116,20 +118,20 @@ export default function DcaBacktest() {
           <ProjectionChart series={chartSeries} height={140} />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: theme.space(2) }}>
             <div>
-              <div style={{ fontSize: 11, color: theme.colors.textDim, textTransform: 'uppercase', letterSpacing: 0.4 }}>Invested</div>
+              <div style={{ fontSize: 11, color: theme.colors.textDim, textTransform: 'uppercase', letterSpacing: 0.4 }}>{t('dca.invested')}</div>
               <div style={{ fontSize: 18, fontWeight: 800, fontFamily: theme.mono, color: theme.colors.text }}>{fmtMoney(result.invested, cur)}</div>
             </div>
             <div>
-              <div style={{ fontSize: 11, color: theme.colors.textDim, textTransform: 'uppercase', letterSpacing: 0.4 }}>Value now</div>
+              <div style={{ fontSize: 11, color: theme.colors.textDim, textTransform: 'uppercase', letterSpacing: 0.4 }}>{t('dca.valueNow')}</div>
               <div style={{ fontSize: 18, fontWeight: 800, fontFamily: theme.mono, color: theme.colors.up }}>{fmtMoney(result.value, cur)}</div>
             </div>
             <div>
-              <div style={{ fontSize: 11, color: theme.colors.textDim, textTransform: 'uppercase', letterSpacing: 0.4 }}>Return</div>
+              <div style={{ fontSize: 11, color: theme.colors.textDim, textTransform: 'uppercase', letterSpacing: 0.4 }}>{t('dca.return')}</div>
               <div style={{ fontSize: 18, fontWeight: 800, fontFamily: theme.mono, color: result.returnPct >= 0 ? theme.colors.up : theme.colors.down }}>{fmtSignedPct(result.returnPct)}</div>
             </div>
           </div>
           <div style={{ fontSize: 11, color: theme.colors.textFaint }}>
-            Buys {fmtMoney(Number(monthly) || 0, cur)} of {symbol} once per month over {range} of real prices. Past performance ≠ future results.
+            {t('dca.summary', { amount: fmtMoney(Number(monthly) || 0, cur), symbol, range })}
           </div>
         </>
       )}

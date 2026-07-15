@@ -10,6 +10,7 @@ import { assetMeta } from '../lib/assetType.js';
 import { computeDividendIncome, nextDividendDate } from '../lib/dividends.js';
 import { dividendsByCurrency, dividendsBySymbol } from '../lib/trades.js';
 import { fmtMoney, fmtNumber, fmtPct } from '../lib/format.js';
+import { useT } from '../lib/i18n.js';
 
 // Asset types that can pay dividends. Crypto & gold are excluded by design.
 const DIVIDEND_TYPES = new Set(['us_stock', 'etf', 'th_stock']);
@@ -38,6 +39,7 @@ export default function DividendPanel() {
   const recordDividend = usePortfolioStore((s) => s.recordDividend);
   const displayCurrency = useSettingsStore((s) => s.displayCurrency);
   const { convert } = useFx();
+  const t = useT();
 
   const [period, setPeriod] = useState('annual');
   const [divs, setDivs] = useState({}); // symbol -> Dividend | null
@@ -176,7 +178,7 @@ export default function DividendPanel() {
     0,
   );
 
-  const periodLabel = PERIODS.find((p) => p.id === period)?.label || 'Year';
+  const periodLabel = t(`dividend.period.${period}`);
 
   return (
     <div className="panel" style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
@@ -192,10 +194,10 @@ export default function DividendPanel() {
       >
         <span style={{ fontSize: 18 }}>💸</span>
         <div style={{ fontSize: 15, fontWeight: 700, color: theme.colors.text }}>
-          Dividend Income
+          {t('dividend.title')}
         </div>
         {loading ? (
-          <span style={{ fontSize: 11, color: theme.colors.textFaint }}>updating…</span>
+          <span style={{ fontSize: 11, color: theme.colors.textFaint }}>{t('dividend.updating')}</span>
         ) : null}
 
         <div style={{ flex: 1 }} />
@@ -207,7 +209,7 @@ export default function DividendPanel() {
           onClick={() => setLogging((v) => !v)}
           disabled={payerHoldings.length === 0}
           aria-expanded={logging}
-          title="Record a dividend you actually received"
+          title={t('dividend.log_button_title')}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -217,11 +219,11 @@ export default function DividendPanel() {
             color: payerHoldings.length === 0 ? theme.colors.textFaint : theme.colors.accent,
           }}
         >
-          <span style={{ fontSize: 14, lineHeight: 1 }}>＋</span> Log dividend
+          <span style={{ fontSize: 14, lineHeight: 1 }}>＋</span> {t('dividend.log_button')}
         </button>
 
         {/* Period selector */}
-        <div className="segmented" role="group" aria-label="Income period">
+        <div className="segmented" role="group" aria-label={t('dividend.period_group_label')}>
           {PERIODS.map((p) => (
             <button
               key={p.id}
@@ -231,7 +233,7 @@ export default function DividendPanel() {
               aria-pressed={p.id === period}
               onClick={() => setPeriod(p.id)}
             >
-              {p.label}
+              {t(`dividend.period.${p.id}`)}
             </button>
           ))}
         </div>
@@ -247,7 +249,10 @@ export default function DividendPanel() {
             if (tx) {
               setLogging(false);
               snackbar.push({
-                message: `Logged dividend ${fmtMoney(tx.amount, tx.currency)} ${tx.symbol}`,
+                message: t('dividend.logged_snackbar', {
+                  amount: fmtMoney(tx.amount, tx.currency),
+                  symbol: tx.symbol,
+                }),
                 tone: 'success',
               });
             }
@@ -262,13 +267,13 @@ export default function DividendPanel() {
       {/* Body */}
       {payerHoldings.length === 0 ? (
         <EmptyState
-          title="No dividend-paying assets"
-          body="Add US stocks, ETFs, or Thai stocks to your portfolio to project dividend income. Crypto and gold do not pay dividends."
+          title={t('dividend.empty_no_payers_title')}
+          body={t('dividend.empty_no_payers_body')}
         />
       ) : !loading && payerRows.length === 0 ? (
         <EmptyState
-          title="No dividends found"
-          body="None of your eligible holdings currently report a dividend. They may not pay one, or data is unavailable."
+          title={t('dividend.empty_none_found_title')}
+          body={t('dividend.empty_none_found_body')}
         />
       ) : (
         <>
@@ -283,11 +288,11 @@ export default function DividendPanel() {
             >
               <thead>
                 <tr style={{ color: theme.colors.textFaint, textAlign: 'right' }}>
-                  <Th style={{ textAlign: 'left' }}>Asset</Th>
-                  <Th>Shares</Th>
-                  <Th>Yield</Th>
-                  <Th>Per Share / yr</Th>
-                  <Th>{periodLabel} Income</Th>
+                  <Th style={{ textAlign: 'left' }}>{t('dividend.col_asset')}</Th>
+                  <Th>{t('dividend.col_shares')}</Th>
+                  <Th>{t('dividend.col_yield')}</Th>
+                  <Th>{t('dividend.col_per_share_yr')}</Th>
+                  <Th>{t('dividend.col_period_income', { period: periodLabel })}</Th>
                 </tr>
               </thead>
               <tbody>
@@ -310,7 +315,7 @@ export default function DividendPanel() {
                   }}
                 >
                   <td style={{ padding: `${theme.space(2)}px ${theme.space(2)}px`, textAlign: 'left' }}>
-                    Total
+                    {t('dividend.total')}
                   </td>
                   <td />
                   <td />
@@ -323,7 +328,7 @@ export default function DividendPanel() {
                       fontSize: 11,
                     }}
                   >
-                    {fmtMoney(totalAnnual, displayCurrency)}/yr
+                    {t('dividend.per_year_suffix', { value: fmtMoney(totalAnnual, displayCurrency) })}
                   </td>
                   <td
                     style={{
@@ -346,12 +351,15 @@ export default function DividendPanel() {
               color: theme.colors.textFaint,
             }}
           >
-            Projected {periodLabel.toLowerCase()} income across {payerRows.length}{' '}
-            dividend-paying {payerRows.length === 1 ? 'holding' : 'holdings'}, shown in{' '}
-            {displayCurrency}.
+            {t('dividend.projected_summary', {
+              period: periodLabel.toLowerCase(),
+              count: payerRows.length,
+              noun: payerRows.length === 1 ? t('dividend.holding_one') : t('dividend.holding_other'),
+              currency: displayCurrency,
+            })}
             {receivedTotal > 0 && (
               <>
-                {' '}Received to date (logged, net of withholding):{' '}
+                {' '}{t('dividend.received_to_date')}{' '}
                 <b style={{ color: theme.colors.up }}>{fmtMoney(receivedTotal, displayCurrency)}</b>.
               </>
             )}
@@ -399,6 +407,7 @@ function Td({ children, style }) {
 function Row({ row, period, displayCurrency, received }) {
   const { holding, income, isPayer, pending } = row;
   const meta = assetMeta(holding.type);
+  const t = useT();
 
   const assetCell = (
     <Td style={{ textAlign: 'left' }}>
@@ -445,7 +454,7 @@ function Row({ row, period, displayCurrency, received }) {
           {fmtNumber(holding.shares, holding.shares % 1 === 0 ? 0 : 4)}
         </Td>
         <Td colSpan={3} style={{ fontStyle: 'italic', fontSize: 12 }}>
-          No dividend
+          {t('dividend.no_dividend')}
         </Td>
       </tr>
     );
@@ -470,9 +479,9 @@ function Row({ row, period, displayCurrency, received }) {
         {received && received.net > 0 && (
           <div
             style={{ fontSize: 10, fontWeight: 500, color: theme.colors.textFaint }}
-            title="Dividends you've logged as received for this holding (net of withholding)"
+            title={t('dividend.logged_cell_title')}
           >
-            logged {fmtMoney(received.net, received.currency)}
+            {t('dividend.logged_cell', { amount: fmtMoney(received.net, received.currency) })}
           </div>
         )}
       </Td>
@@ -489,6 +498,7 @@ const fmtDay = (iso) =>
 
 /** Horizontal strip of upcoming ex-dividend dates with days-until badges. */
 function UpcomingStrip({ items }) {
+  const t = useT();
   const utcMidnightToday = Math.floor(Date.now() / DAY_MS) * DAY_MS;
   return (
     <div style={{ marginBottom: theme.space(3) }}>
@@ -502,7 +512,7 @@ function UpcomingStrip({ items }) {
           marginBottom: theme.space(1),
         }}
       >
-        Upcoming ex-dividends
+        {t('dividend.upcoming_heading')}
       </div>
       <div className="scroll-area" style={{ display: 'flex', gap: theme.space(2), overflowX: 'auto', paddingBottom: 4 }}>
         {items.map(({ holding, exDate, payDate, estimated }) => {
@@ -514,8 +524,11 @@ function UpcomingStrip({ items }) {
             <div
               key={holding.id}
               title={
-                (estimated ? 'Estimated from payment history — ' : 'Confirmed ex-dividend date — ') +
-                `ex-date ${exLabel}${payDate ? `, pays ${fmtDay(payDate)}` : ''}`
+                (estimated
+                  ? t('dividend.upcoming_estimated_prefix')
+                  : t('dividend.upcoming_confirmed_prefix')) +
+                t('dividend.upcoming_exdate_detail', { exDate: exLabel }) +
+                (payDate ? t('dividend.upcoming_pays_detail', { payDate: fmtDay(payDate) }) : '')
               }
               style={{
                 flex: '0 0 auto',
@@ -536,14 +549,14 @@ function UpcomingStrip({ items }) {
                   <span
                     style={{ fontSize: 9, fontWeight: 700, color: theme.colors.textFaint, border: `1px solid ${theme.colors.border}`, borderRadius: 4, padding: '0 3px' }}
                   >
-                    EST
+                    {t('dividend.est_badge')}
                   </span>
                 )}
               </div>
               <div style={{ fontSize: 12, fontFamily: theme.mono, color: theme.colors.text }}>{exLabel}</div>
               <div style={{ fontSize: 10.5, fontWeight: 600, color: soon ? theme.colors.gold : theme.colors.textDim }}>
-                {days === 0 ? 'today' : `in ${days} day${days === 1 ? '' : 's'}`}
-                {payDate ? ` · pays ${fmtDay(payDate)}` : ''}
+                {days === 0 ? t('dividend.days_today') : t('dividend.days_until', { days })}
+                {payDate ? t('dividend.pays_dot', { payDate: fmtDay(payDate) }) : ''}
               </div>
             </div>
           );
@@ -558,6 +571,7 @@ function UpcomingStrip({ items }) {
  * are in the selected holding's native currency; withholding is optional.
  */
 function LogDividendForm({ holdings, onCancel, onSave }) {
+  const t = useT();
   const [holdingId, setHoldingId] = useState(holdings[0]?.id || '');
   const [amount, setAmount] = useState('');
   const [wht, setWht] = useState('');
@@ -591,14 +605,14 @@ function LogDividendForm({ holdings, onCancel, onSave }) {
     e.preventDefault();
     const amt = Number(amount);
     const tax = wht === '' ? 0 : Number(wht);
-    if (!holdingId) return setError('Pick a holding.');
-    if (!Number.isFinite(amt) || amt <= 0) return setError('Enter a dividend amount greater than 0.');
-    if (!Number.isFinite(tax) || tax < 0) return setError('Withholding tax cannot be negative.');
-    if (tax > amt) return setError('Withholding tax cannot exceed the dividend amount.');
+    if (!holdingId) return setError(t('dividend.err_pick_holding'));
+    if (!Number.isFinite(amt) || amt <= 0) return setError(t('dividend.err_amount_gt_zero'));
+    if (!Number.isFinite(tax) || tax < 0) return setError(t('dividend.err_wht_negative'));
+    if (tax > amt) return setError(t('dividend.err_wht_exceeds'));
     // Store an ISO instant at local noon so the calendar day is stable across time zones.
     const iso = `${at}T12:00:00.000Z`;
     const ok = onSave({ holdingId, amount: amt, wht: tax, at: iso });
-    if (!ok) setError('Could not record that dividend.');
+    if (!ok) setError(t('dividend.err_could_not_record'));
   }
 
   return (
@@ -617,7 +631,7 @@ function LogDividendForm({ holdings, onCancel, onSave }) {
       }}
     >
       <label style={{ flex: '2 1 160px' }}>
-        <span style={labelStyle}>Holding</span>
+        <span style={labelStyle}>{t('dividend.form_holding')}</span>
         <select
           value={holdingId}
           onChange={(e) => setHoldingId(e.target.value)}
@@ -631,7 +645,7 @@ function LogDividendForm({ holdings, onCancel, onSave }) {
         </select>
       </label>
       <label style={{ flex: '1 1 100px' }}>
-        <span style={labelStyle}>Amount ({currency})</span>
+        <span style={labelStyle}>{t('dividend.form_amount', { currency })}</span>
         <input
           type="number"
           inputMode="decimal"
@@ -645,7 +659,7 @@ function LogDividendForm({ holdings, onCancel, onSave }) {
         />
       </label>
       <label style={{ flex: '1 1 100px' }}>
-        <span style={labelStyle}>Withholding ({currency})</span>
+        <span style={labelStyle}>{t('dividend.form_withholding', { currency })}</span>
         <input
           type="number"
           inputMode="decimal"
@@ -658,7 +672,7 @@ function LogDividendForm({ holdings, onCancel, onSave }) {
         />
       </label>
       <label style={{ flex: '1 1 130px' }}>
-        <span style={labelStyle}>Date</span>
+        <span style={labelStyle}>{t('dividend.form_date')}</span>
         <input
           type="date"
           value={at}
@@ -682,7 +696,7 @@ function LogDividendForm({ holdings, onCancel, onSave }) {
             cursor: 'pointer',
           }}
         >
-          Save
+          {t('dividend.form_save')}
         </button>
         <button
           type="button"
@@ -695,7 +709,7 @@ function LogDividendForm({ holdings, onCancel, onSave }) {
             fontWeight: 600,
           }}
         >
-          Cancel
+          {t('dividend.form_cancel')}
         </button>
       </div>
       {error && (

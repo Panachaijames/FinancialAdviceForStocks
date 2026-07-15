@@ -5,6 +5,7 @@ import { useAlertsStore } from '../store/alertsStore.js';
 import useQuotes from '../hooks/useQuotes.js';
 import { evaluateAlert, describeAlert } from '../lib/alerts.js';
 import { putAlerts } from '../api/client.js';
+import { useT } from '../lib/i18n.js';
 
 /**
  * Price-alert watcher + list. Watches the live quotes the app already polls;
@@ -14,6 +15,7 @@ import { putAlerts } from '../api/client.js';
  * from the bell on an asset card).
  */
 export default function AlertsPanel() {
+  const t = useT();
   const alerts = useAlertsStore((s) => s.alerts);
   const markTriggered = useAlertsStore((s) => s.markTriggered);
   const rearmAlert = useAlertsStore((s) => s.rearmAlert);
@@ -49,7 +51,7 @@ export default function AlertsPanel() {
         if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
           // eslint-disable-next-line no-new
           new Notification(`📈 ${describeAlert(a)}`, {
-            body: q && Number(q.price) > 0 ? `${a.symbol} now at ${q.price}` : a.symbol,
+            body: q && Number(q.price) > 0 ? t('alerts.notifBody', { symbol: a.symbol, price: q.price }) : a.symbol,
           });
         }
       } catch {
@@ -83,10 +85,10 @@ export default function AlertsPanel() {
         ) : (
           <Bell size={15} style={{ color: theme.colors.accent }} />
         )}
-        Price alerts
+        {t('alerts.title')}
         {fired.length > 0 && (
           <span className="badge" style={{ background: theme.colors.warn + '22', color: theme.colors.warn, fontWeight: 700 }}>
-            {fired.length} fired
+            {t('alerts.firedCount', { count: fired.length })}
           </span>
         )}
       </div>
@@ -95,14 +97,14 @@ export default function AlertsPanel() {
         <div key={a.id} style={{ ...row, background: theme.colors.bgElev, borderRadius: theme.radius.sm, padding: theme.space(2) }}>
           <span style={{ fontWeight: 700, color: theme.colors.warn }}>🔔 {describeAlert(a)}</span>
           <span style={{ color: theme.colors.textDim, fontSize: 11.5 }}>
-            hit {String(a.triggeredAt).slice(0, 16).replace('T', ' ')}
+            {t('alerts.hitAt', { time: String(a.triggeredAt).slice(0, 16).replace('T', ' ') })}
             {a.triggeredPrice != null ? ` @ ${a.triggeredPrice}` : ''}
           </span>
           <span style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
-            <button type="button" className="btn-ghost" style={iconBtn} title="Re-arm — watch this level again" onClick={() => rearmAlert(a.id)}>
+            <button type="button" className="btn-ghost" style={iconBtn} title={t('alerts.rearm')} onClick={() => rearmAlert(a.id)}>
               <RotateCcw size={14} />
             </button>
-            <button type="button" className="btn-ghost" style={{ ...iconBtn, color: theme.colors.down }} title="Delete alert" onClick={() => removeAlert(a.id)}>
+            <button type="button" className="btn-ghost" style={{ ...iconBtn, color: theme.colors.down }} title={t('alerts.delete')} onClick={() => removeAlert(a.id)}>
               <Trash2 size={14} />
             </button>
           </span>
@@ -114,7 +116,7 @@ export default function AlertsPanel() {
           {active.map((a) => (
             <span key={a.id} className="chip" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5 }}>
               {describeAlert(a)}
-              <button type="button" className="btn-ghost" style={{ padding: 0, lineHeight: 0, color: theme.colors.textFaint }} title="Delete alert" onClick={() => removeAlert(a.id)}>
+              <button type="button" className="btn-ghost" style={{ padding: 0, lineHeight: 0, color: theme.colors.textFaint }} title={t('alerts.delete')} onClick={() => removeAlert(a.id)}>
                 <Trash2 size={12} />
               </button>
             </span>
@@ -134,15 +136,15 @@ export default function AlertsPanel() {
       >
         <label style={{ display: 'flex', alignItems: 'center', gap: theme.space(2), cursor: 'pointer', fontSize: 12.5, color: theme.colors.text }}>
           <input type="checkbox" checked={pushEnabled} onChange={(e) => setPushEnabled(e.target.checked)} />
-          <span style={{ fontWeight: 600 }}>Notify me when the app is closed</span>
+          <span style={{ fontWeight: 600 }}>{t('alerts.notifyClosed')}</span>
         </label>
         {pushEnabled && (
           <div style={{ fontSize: 11.5, color: theme.colors.textDim, lineHeight: 1.6 }}>
-            Subscribe to this free topic in the{' '}
+            {t('alerts.subscribePrefix')}{' '}
             <a href="https://ntfy.sh/" target="_blank" rel="noopener noreferrer" style={{ color: theme.colors.accent }}>
               ntfy
             </a>{' '}
-            app (or open the link) to get pushes on your phone/desktop:
+            {t('alerts.subscribeSuffix')}
             <div style={{ display: 'flex', alignItems: 'center', gap: theme.space(2), marginTop: 4 }}>
               <code style={{ fontFamily: theme.mono, color: theme.colors.text, background: theme.colors.bgElev, padding: '2px 6px', borderRadius: theme.radius.sm }}>
                 {pushTopic}
@@ -153,20 +155,18 @@ export default function AlertsPanel() {
                 rel="noopener noreferrer"
                 style={{ fontSize: 11, fontWeight: 600, color: theme.colors.accent }}
               >
-                open ntfy.sh/{pushTopic} ↗
+                {t('alerts.openNtfy', { topic: pushTopic })}
               </a>
             </div>
             <div style={{ color: theme.colors.warn, marginTop: 4 }}>
-              ⚠ Best-effort on the free tier: the server only checks while it's awake, so delivery can lag or be
-              missed. Keep the in-app alerts as your primary signal.
+              ⚠ {t('alerts.bestEffort')}
             </div>
           </div>
         )}
       </div>
 
       <div style={{ fontSize: 10.5, color: theme.colors.textFaint }}>
-        Watched against live prices while the app is open · fires once — re-arm to watch again · add alerts
-        from the 🔔 on an asset card
+        {t('alerts.footer')}
       </div>
     </div>
   );

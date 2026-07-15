@@ -5,6 +5,7 @@ import { getHealth } from '../../api/client.js';
 import { sendTransfer, receiveTransfer, snapshot, applySnapshot, counts } from '../../lib/sync.js';
 import { backupFilename, serializeBackup, parseBackup, downloadTextFile } from '../../lib/backup.js';
 import { PanelHeader } from './SavingsPanel.jsx';
+import { useT } from '../../lib/i18n.js';
 
 /**
  * One-time cross-device transfer. "Send" uploads this device's data and shows a
@@ -13,6 +14,7 @@ import { PanelHeader } from './SavingsPanel.jsx';
  * copy afterward, and nothing lingers in the cloud.
  */
 export default function SyncPanel() {
+  const t = useT();
   const [serverReady, setServerReady] = useState(null); // null=loading
   const [sentCode, setSentCode] = useState('');
   const [input, setInput] = useState('');
@@ -39,7 +41,7 @@ export default function SyncPanel() {
       const code = await sendTransfer();
       setSentCode(code);
     } catch {
-      setMsg({ ok: false, text: 'Could not reach the transfer server. Try again.' });
+      setMsg({ ok: false, text: t('sync.sendError') });
     } finally {
       setBusy(false);
     }
@@ -51,9 +53,9 @@ export default function SyncPanel() {
     try {
       const { counts } = await receiveTransfer(input);
       setInput('');
-      setMsg({ ok: true, text: `Received — imported ${counts.holdings} holdings, ${counts.funds} funds, ${counts.savings} cash entries.` });
+      setMsg({ ok: true, text: t('sync.receiveSuccess', { holdings: counts.holdings, funds: counts.funds, savings: counts.savings }) });
     } catch (e) {
-      setMsg({ ok: false, text: e && e.message ? e.message : 'Receive failed.' });
+      setMsg({ ok: false, text: e && e.message ? e.message : t('sync.receiveError') });
     } finally {
       setBusy(false);
     }
@@ -72,9 +74,9 @@ export default function SyncPanel() {
   function downloadBackup() {
     try {
       downloadTextFile(backupFilename(), serializeBackup(snapshot(), new Date().toISOString()));
-      setRestoreMsg({ ok: true, text: 'Backup downloaded. Keep it somewhere safe.' });
+      setRestoreMsg({ ok: true, text: t('sync.backupDownloaded') });
     } catch {
-      setRestoreMsg({ ok: false, text: 'Could not create the backup file.' });
+      setRestoreMsg({ ok: false, text: t('sync.backupError') });
     }
   }
 
@@ -90,13 +92,13 @@ export default function SyncPanel() {
         const c = counts(snap);
         setRestoreMsg({
           ok: true,
-          text: `Restored ${c.holdings} holdings, ${c.funds} funds, ${c.savings} cash entries.`,
+          text: t('sync.restoreSuccess', { holdings: c.holdings, funds: c.funds, savings: c.savings }),
         });
       } catch (err) {
-        setRestoreMsg({ ok: false, text: err && err.message ? err.message : 'Could not read that backup.' });
+        setRestoreMsg({ ok: false, text: err && err.message ? err.message : t('sync.restoreError') });
       }
     };
-    reader.onerror = () => setRestoreMsg({ ok: false, text: 'Could not read that file.' });
+    reader.onerror = () => setRestoreMsg({ ok: false, text: t('sync.fileReadError') });
     reader.readAsText(file);
   }
 
@@ -104,21 +106,20 @@ export default function SyncPanel() {
 
   return (
     <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: theme.space(3) }}>
-      <PanelHeader icon={<ArrowLeftRight size={16} />} title="Move data to another device" />
+      <PanelHeader icon={<ArrowLeftRight size={16} />} title={t('sync.title')} />
 
       {/* Local backup — always available; needs no server (your data is on-device). */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: theme.space(2), padding: theme.space(2), background: theme.colors.bgElev, borderRadius: theme.radius.md }}>
-        <div style={label}>Backup on this device</div>
+        <div style={label}>{t('sync.backupLabel')}</div>
         <div style={{ fontSize: 13, color: theme.colors.textDim }}>
-          Your holdings, trades, cash &amp; funds live only in this browser. Download a <b>.json</b> backup you can
-          keep or move by hand — and restore it here anytime.
+          {t('sync.backupIntroPre')} <b>.json</b> {t('sync.backupIntroPost')}
         </div>
         <div style={{ display: 'flex', gap: theme.space(2), flexWrap: 'wrap' }}>
           <button type="button" className="btn" onClick={downloadBackup}>
-            <Save size={15} /> Download backup (.json)
+            <Save size={15} /> {t('sync.downloadBtn')}
           </button>
           <button type="button" className="btn" onClick={() => fileRef.current && fileRef.current.click()}>
-            <Upload size={15} /> Restore from file
+            <Upload size={15} /> {t('sync.restoreBtn')}
           </button>
           <input
             ref={fileRef}
@@ -129,7 +130,7 @@ export default function SyncPanel() {
           />
         </div>
         <div style={{ fontSize: 11, color: theme.colors.textFaint }}>
-          ⚠️ Restoring <b>replaces</b> this device's current holdings, trades, cash &amp; funds with the file's contents.
+          ⚠️ {t('sync.restoreWarnPre')} <b>{t('sync.replaces')}</b> {t('sync.restoreWarnPost')}
         </div>
         {restoreMsg ? (
           <div style={{ fontSize: 12.5, color: restoreMsg.ok ? theme.colors.up : theme.colors.down }}>{restoreMsg.text}</div>
@@ -138,51 +139,48 @@ export default function SyncPanel() {
 
       {serverReady === false ? (
         <div style={{ fontSize: 12.5, color: theme.colors.textDim, lineHeight: 1.6, background: theme.colors.bgElev, borderRadius: theme.radius.sm, padding: theme.space(2), borderLeft: `3px solid ${theme.colors.warn}` }}>
-          <b style={{ color: theme.colors.text }}>Transfer server not set up.</b> Add a free Upstash Redis DB's REST
-          credentials to Render as <code style={{ color: theme.colors.accent }}>UPSTASH_REDIS_REST_URL</code> and{' '}
-          <code style={{ color: theme.colors.accent }}>UPSTASH_REDIS_REST_TOKEN</code>.
+          <b style={{ color: theme.colors.text }}>{t('sync.serverNotSetTitle')}</b> {t('sync.serverNotSetPre')} <code style={{ color: theme.colors.accent }}>UPSTASH_REDIS_REST_URL</code> {t('sync.and')}{' '}
+          <code style={{ color: theme.colors.accent }}>UPSTASH_REDIS_REST_TOKEN</code>{t('sync.serverNotSetPost')}
         </div>
       ) : (
         <>
           <div style={{ fontSize: 13, color: theme.colors.textDim }}>
-            Copy your holdings, cash &amp; funds to another device. It's a <b>one-time</b> transfer — each device keeps
-            its own copy, and the cloud copy is deleted as soon as it's received (nothing stays online).
+            {t('sync.transferIntroPre')} <b>{t('sync.oneTime')}</b> {t('sync.transferIntroPost')}
           </div>
 
           {/* Send */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: theme.space(2), padding: theme.space(2), background: theme.colors.bgElev, borderRadius: theme.radius.md }}>
-            <div style={label}>Send from this device</div>
+            <div style={label}>{t('sync.sendLabel')}</div>
             {sentCode ? (
               <>
                 <div style={{ display: 'flex', gap: theme.space(2), alignItems: 'center', flexWrap: 'wrap' }}>
                   <span style={{ fontFamily: theme.mono, fontSize: 22, fontWeight: 800, color: theme.colors.accent, letterSpacing: 1 }}>{sentCode}</span>
                   <button type="button" className="btn-ghost" onClick={copyCode} style={{ display: 'flex', alignItems: 'center', gap: 4, color: theme.colors.accent, fontSize: 12 }}>
-                    {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'Copied' : 'Copy'}
+                    {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? t('sync.copied') : t('sync.copy')}
                   </button>
                 </div>
                 <div style={{ fontSize: 11, color: theme.colors.textFaint }}>
-                  On your other device, open this panel → <b>Receive</b> → enter this code. It works <b>once</b> and expires in 24h.
-                  Re-send if you change data here later.
+                  {t('sync.codeHintPre')} <b>{t('sync.receiveWord')}</b> {t('sync.codeHintMid')} <b>{t('sync.once')}</b> {t('sync.codeHintPost')}
                 </div>
               </>
             ) : (
               <button type="button" className="btn btn-primary" style={{ alignSelf: 'flex-start' }} disabled={busy || serverReady === null} onClick={send}>
-                <Send size={15} /> Create a transfer code
+                <Send size={15} /> {t('sync.createCodeBtn')}
               </button>
             )}
           </div>
 
           {/* Receive */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: theme.space(2), padding: theme.space(2), background: theme.colors.bgElev, borderRadius: theme.radius.md }}>
-            <div style={label}>Receive on this device</div>
+            <div style={label}>{t('sync.receiveLabel')}</div>
             <div style={{ display: 'flex', gap: theme.space(2), alignItems: 'flex-end', flexWrap: 'wrap' }}>
               <input className="input" style={{ flex: '1 1 160px' }} placeholder="PT-XXXX-XXXX" value={input} onChange={(e) => setInput(e.target.value)} />
               <button type="button" className="btn" disabled={busy || !input.trim()} onClick={receive}>
-                <Download size={15} /> Receive
+                <Download size={15} /> {t('sync.receiveWord')}
               </button>
             </div>
             <div style={{ fontSize: 11, color: theme.colors.textFaint }}>
-              ⚠️ Receiving <b>replaces this device's</b> current holdings, cash &amp; funds with the transferred set.
+              ⚠️ {t('sync.receiveWarnPre')} <b>{t('sync.replacesThisDevice')}</b> {t('sync.receiveWarnPost')}
             </div>
           </div>
 

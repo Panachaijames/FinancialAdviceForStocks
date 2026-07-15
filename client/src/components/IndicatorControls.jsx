@@ -1,5 +1,6 @@
 import React from 'react';
 import theme from '../lib/theme.js';
+import { useT } from '../lib/i18n.js';
 
 /**
  * Default indicator configuration. ChartModal owns the actual state; this is
@@ -152,6 +153,7 @@ function Row({ children, params, on }) {
  *   onChange : (nextConfig) => void
  */
 export default function IndicatorControls({ config = DEFAULT_INDICATOR_CONFIG, onChange }) {
+  const t = useT();
   const cfg = config || DEFAULT_INDICATOR_CONFIG;
 
   // Patch a single indicator key, merging the partial into its sub-object.
@@ -190,17 +192,17 @@ export default function IndicatorControls({ config = DEFAULT_INDICATOR_CONFIG, o
           marginBottom: theme.space(3),
         }}
       >
-        Indicators
+        {t('indicators.heading')}
       </div>
 
-      <Section title="Overlays">
+      <Section title={t('indicators.section.overlays')}>
         <Row
           on={cfg.sma?.on}
           params={
             <>
               <span style={labelStyle}>n</span>
               <PeriodInput
-                title="SMA period"
+                title={t('indicators.title.smaPeriod')}
                 value={cfg.sma?.period ?? 20}
                 onChange={(n) => patch('sma', { period: n })}
               />
@@ -221,7 +223,7 @@ export default function IndicatorControls({ config = DEFAULT_INDICATOR_CONFIG, o
             <>
               <span style={labelStyle}>n</span>
               <PeriodInput
-                title="EMA period"
+                title={t('indicators.title.emaPeriod')}
                 value={cfg.ema?.period ?? 50}
                 onChange={(n) => patch('ema', { period: n })}
               />
@@ -242,7 +244,7 @@ export default function IndicatorControls({ config = DEFAULT_INDICATOR_CONFIG, o
             <>
               <span style={labelStyle}>n</span>
               <PeriodInput
-                title="WMA period"
+                title={t('indicators.title.wmaPeriod')}
                 value={cfg.wma?.period ?? 20}
                 onChange={(n) => patch('wma', { period: n })}
               />
@@ -263,13 +265,13 @@ export default function IndicatorControls({ config = DEFAULT_INDICATOR_CONFIG, o
             <>
               <span style={labelStyle}>n</span>
               <PeriodInput
-                title="Bollinger period"
+                title={t('indicators.title.bollingerPeriod')}
                 value={cfg.bollinger?.period ?? 20}
                 onChange={(n) => patch('bollinger', { period: n })}
               />
               <span style={labelStyle}>σ</span>
               <PeriodInput
-                title="Bollinger std-dev multiplier"
+                title={t('indicators.title.bollingerMult')}
                 min={1}
                 max={5}
                 value={cfg.bollinger?.mult ?? 2}
@@ -281,7 +283,7 @@ export default function IndicatorControls({ config = DEFAULT_INDICATOR_CONFIG, o
           <Toggle
             checked={!!cfg.bollinger?.on}
             color={OVERLAY_COLORS.bollinger}
-            label="Bollinger"
+            label={t('indicators.label.bollinger')}
             onChange={(on) => patch('bollinger', { on })}
           />
         </Row>
@@ -299,20 +301,20 @@ export default function IndicatorControls({ config = DEFAULT_INDICATOR_CONFIG, o
           <Toggle
             checked={!!cfg.volume?.on}
             color={theme.colors.textDim}
-            label="Volume"
+            label={t('indicators.label.volume')}
             onChange={(on) => patch('volume', { on })}
           />
         </Row>
       </Section>
 
-      <Section title="Oscillators">
+      <Section title={t('indicators.section.oscillators')}>
         <Row
           on={cfg.rsi?.on}
           params={
             <>
               <span style={labelStyle}>n</span>
               <PeriodInput
-                title="RSI period"
+                title={t('indicators.title.rsiPeriod')}
                 value={cfg.rsi?.period ?? 14}
                 onChange={(n) => patch('rsi', { period: n })}
               />
@@ -331,17 +333,17 @@ export default function IndicatorControls({ config = DEFAULT_INDICATOR_CONFIG, o
           params={
             <>
               <PeriodInput
-                title="MACD fast period"
+                title={t('indicators.title.macdFast')}
                 value={cfg.macd?.fast ?? 12}
                 onChange={(n) => patch('macd', { fast: n })}
               />
               <PeriodInput
-                title="MACD slow period"
+                title={t('indicators.title.macdSlow')}
                 value={cfg.macd?.slow ?? 26}
                 onChange={(n) => patch('macd', { slow: n })}
               />
               <PeriodInput
-                title="MACD signal period"
+                title={t('indicators.title.macdSignal')}
                 value={cfg.macd?.signal ?? 9}
                 onChange={(n) => patch('macd', { signal: n })}
               />
@@ -361,13 +363,13 @@ export default function IndicatorControls({ config = DEFAULT_INDICATOR_CONFIG, o
             <>
               <span style={labelStyle}>%K</span>
               <PeriodInput
-                title="Stochastic %K period"
+                title={t('indicators.title.stochK')}
                 value={cfg.stochastic?.kPeriod ?? 14}
                 onChange={(n) => patch('stochastic', { kPeriod: n })}
               />
               <span style={labelStyle}>%D</span>
               <PeriodInput
-                title="Stochastic %D period"
+                title={t('indicators.title.stochD')}
                 value={cfg.stochastic?.dPeriod ?? 3}
                 onChange={(n) => patch('stochastic', { dPeriod: n })}
               />
@@ -376,7 +378,7 @@ export default function IndicatorControls({ config = DEFAULT_INDICATOR_CONFIG, o
         >
           <Toggle
             checked={!!cfg.stochastic?.on}
-            label="Stochastic"
+            label={t('indicators.label.stochastic')}
             onChange={(on) => patch('stochastic', { on })}
           />
         </Row>
@@ -393,7 +395,7 @@ export default function IndicatorControls({ config = DEFAULT_INDICATOR_CONFIG, o
             }
           }}
         >
-          Reset indicators
+          {t('indicators.reset')}
         </button>
       </div>
     </div>

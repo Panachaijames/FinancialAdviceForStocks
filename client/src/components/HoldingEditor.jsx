@@ -2,20 +2,21 @@ import React, { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { theme } from '../lib/theme.js';
 import { assetMeta } from '../lib/assetType.js';
+import { useT } from '../lib/i18n.js';
 
 /** Asset-appropriate wording for the quantity + per-unit cost fields. */
 function unitNoun(type) {
   switch (type) {
     case 'gold':
-      return { qty: 'Ounces', per: 'ounce', eg: '1.5' };
+      return { qtyKey: 'editor.unit.ounces.qty', perKey: 'editor.unit.ounces.per', eg: '1.5' };
     case 'crypto':
-      return { qty: 'Units', per: 'coin', eg: '0.25' };
+      return { qtyKey: 'editor.unit.units.qty', perKey: 'editor.unit.crypto.per', eg: '0.25' };
     case 'us_stock':
     case 'etf':
     case 'th_stock':
-      return { qty: 'Shares', per: 'share', eg: '10' };
+      return { qtyKey: 'editor.unit.shares.qty', perKey: 'editor.unit.shares.per', eg: '10' };
     default:
-      return { qty: 'Units', per: 'unit', eg: '10' };
+      return { qtyKey: 'editor.unit.units.qty', perKey: 'editor.unit.units.per', eg: '10' };
   }
 }
 
@@ -31,6 +32,7 @@ function unitNoun(type) {
  *   onCancel:() => void
  */
 export default function HoldingEditor({ asset, initial, mode = 'add', onSave, onCancel }) {
+  const t = useT();
   const [shares, setShares] = useState(
     initial && initial.shares != null ? String(initial.shares) : ''
   );
@@ -86,7 +88,7 @@ export default function HoldingEditor({ asset, initial, mode = 'add', onSave, on
         className="modal-card"
         role="dialog"
         aria-modal="true"
-        aria-label={`${mode === 'edit' ? 'Edit' : 'Add'} holding`}
+        aria-label={mode === 'edit' ? t('editor.aria.editHolding') : t('editor.aria.addHolding')}
         style={{ maxWidth: 420, width: '100%' }}
         onMouseDown={(e) => e.stopPropagation()}
       >
@@ -116,7 +118,7 @@ export default function HoldingEditor({ asset, initial, mode = 'add', onSave, on
             type="button"
             className="btn-ghost"
             onClick={() => onCancel && onCancel()}
-            aria-label="Close"
+            aria-label={t('editor.close')}
             style={{ padding: theme.space(1), lineHeight: 0 }}
           >
             <X size={18} />
@@ -146,7 +148,7 @@ export default function HoldingEditor({ asset, initial, mode = 'add', onSave, on
                 marginBottom: theme.space(1),
               }}
             >
-              {u.qty}
+              {t(u.qtyKey)}
             </span>
             <input
               ref={firstFieldRef}
@@ -155,14 +157,14 @@ export default function HoldingEditor({ asset, initial, mode = 'add', onSave, on
               inputMode="decimal"
               step="any"
               min="0"
-              placeholder={`e.g. ${u.eg}`}
+              placeholder={t('editor.placeholder.qty', { eg: u.eg })}
               value={shares}
               onChange={(e) => setShares(e.target.value)}
               style={fieldStyle(sharesValid)}
             />
             {touched && !sharesValid && (
               <span style={{ fontSize: 11, color: theme.colors.down, marginTop: 4, display: 'block' }}>
-                Enter a positive number of {u.qty.toLowerCase()}.
+                {t('editor.error.positiveQty', { unit: t(u.qtyKey).toLowerCase() })}
               </span>
             )}
           </label>
@@ -179,7 +181,7 @@ export default function HoldingEditor({ asset, initial, mode = 'add', onSave, on
                 marginBottom: theme.space(1),
               }}
             >
-              <span>Average cost / {u.per}</span>
+              <span>{t('editor.avgCostPer', { unit: t(u.perKey) })}</span>
               <span
                 style={{
                   fontFamily: theme.mono,
@@ -187,7 +189,7 @@ export default function HoldingEditor({ asset, initial, mode = 'add', onSave, on
                   color: theme.colors.textFaint,
                 }}
               >
-                in {currency}
+                {t('editor.inCurrency', { currency })}
               </span>
             </span>
             <input
@@ -196,21 +198,21 @@ export default function HoldingEditor({ asset, initial, mode = 'add', onSave, on
               inputMode="decimal"
               step="any"
               min="0"
-              placeholder={`e.g. 150.25 ${currency}`}
+              placeholder={t('editor.placeholder.cost', { currency })}
               value={avgCost}
               onChange={(e) => setAvgCost(e.target.value)}
               style={fieldStyle(avgCostValid)}
             />
             {touched && !avgCostValid && (
               <span style={{ fontSize: 11, color: theme.colors.down, marginTop: 4, display: 'block' }}>
-                Enter a positive cost per {u.per}.
+                {t('editor.error.positivePer', { unit: t(u.perKey) })}
               </span>
             )}
           </label>
 
           <div style={{ display: 'flex', gap: theme.space(2), justifyContent: 'flex-end' }}>
             <button type="button" className="btn btn-ghost" onClick={() => onCancel && onCancel()}>
-              Cancel
+              {t('editor.cancel')}
             </button>
             <button
               type="submit"
@@ -218,7 +220,7 @@ export default function HoldingEditor({ asset, initial, mode = 'add', onSave, on
               disabled={!valid}
               style={{ opacity: valid ? 1 : 0.55, cursor: valid ? 'pointer' : 'not-allowed' }}
             >
-              {mode === 'edit' ? 'Save changes' : 'Add to portfolio'}
+              {mode === 'edit' ? t('editor.saveChanges') : t('editor.addToPortfolio')}
             </button>
           </div>
         </form>

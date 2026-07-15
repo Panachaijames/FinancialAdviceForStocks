@@ -5,6 +5,7 @@ import { fmtMoney, fmtSignedPct } from '../lib/format.js';
 import { usePortfolioStore } from '../store/portfolioStore.js';
 import { useSettingsStore } from '../store/settingsStore.js';
 import useFx from '../hooks/useFx.js';
+import { useT } from '../lib/i18n.js';
 import { getCandles } from '../api/client.js';
 import { buildPerformanceSeries, summarize } from '../lib/performance.js';
 import ProjectionChart from './ProjectionChart.jsx';
@@ -24,6 +25,7 @@ export default function PerformancePanel() {
   const snapshots = usePortfolioStore((s) => s.snapshots);
   const displayCurrency = useSettingsStore((s) => s.displayCurrency);
   const { convert } = useFx();
+  const t = useT();
 
   const [range, setRange] = useState('6mo');
   const [loading, setLoading] = useState(false);
@@ -79,10 +81,10 @@ export default function PerformancePanel() {
       const pricedSet = new Set(priced);
       const txForPriced = (transactions || []).filter((t) => t && pricedSet.has(t.symbol));
       const series = buildPerformanceSeries({ transactions: txForPriced, closesBySymbol, currencyBySymbol, convert });
-      if (!series.times.length) throw new Error('No price history available for your holdings yet.');
+      if (!series.times.length) throw new Error(t('perf.errNoHistory'));
       setResult({ range: nextRange, series, summary: summarize(series), missing });
     } catch (e) {
-      setError((e && e.message) || 'Failed to load performance data');
+      setError((e && e.message) || t('perf.errLoadFailed'));
     } finally {
       setLoading(false);
     }
@@ -99,10 +101,10 @@ export default function PerformancePanel() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: theme.space(2), flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: theme.space(1), fontWeight: 700, fontSize: 13, color: theme.colors.text }}>
           <TrendingUp size={15} style={{ color: theme.colors.accent }} />
-          Portfolio performance
+          {t('perf.title')}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: theme.space(2) }}>
-          <div className="segmented" role="group" aria-label="Range">
+          <div className="segmented" role="group" aria-label={t('perf.rangeAria')}>
             {RANGES.map((r) => (
               <button
                 key={r}
@@ -127,7 +129,7 @@ export default function PerformancePanel() {
             style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: theme.colors.accent }}
           >
             {loading ? <Loader2 size={14} style={{ animation: 'pulse 1s linear infinite' }} /> : <RefreshCw size={14} />}
-            {loading ? 'Loading…' : result ? 'Refresh' : 'Show'}
+            {loading ? t('perf.loading') : result ? t('perf.refresh') : t('perf.show')}
           </button>
         </div>
       </div>
@@ -144,47 +146,43 @@ export default function PerformancePanel() {
             height={180}
           />
           <div style={{ display: 'flex', gap: theme.space(4), flexWrap: 'wrap' }}>
-            <Stat label="Current value" value={fmtMoney(s.currentValue, displayCurrency)} color={theme.colors.text} swatch={theme.colors.accent} />
-            <Stat label="Net invested" value={fmtMoney(s.netInvested, displayCurrency)} color={theme.colors.textDim} swatch={theme.colors.textDim} />
+            <Stat label={t('perf.currentValue')} value={fmtMoney(s.currentValue, displayCurrency)} color={theme.colors.text} swatch={theme.colors.accent} />
+            <Stat label={t('perf.netInvested')} value={fmtMoney(s.netInvested, displayCurrency)} color={theme.colors.textDim} swatch={theme.colors.textDim} />
             <Stat
-              label="Total P/L"
+              label={t('perf.totalPL')}
               value={`${fmtMoney(s.totalPL, displayCurrency)}${s.plPct != null ? ` (${fmtSignedPct(s.plPct)})` : ''}`}
               color={plColor(s.totalPL)}
             />
             {s.realized !== 0 && (
-              <Stat label="Realized" value={fmtMoney(s.realized, displayCurrency)} color={plColor(s.realized)} />
+              <Stat label={t('perf.realized')} value={fmtMoney(s.realized, displayCurrency)} color={plColor(s.realized)} />
             )}
           </div>
           {result.missing && result.missing.length > 0 && (
             <div style={{ fontSize: 11, color: theme.colors.warn }}>
-              ⚠ No price data for {result.missing.join(', ')} — excluded from value and invested (source throttled?
-              try Refresh).
+              ⚠ {t('perf.missingData', { names: result.missing.join(', ') })}
             </div>
           )}
           <div style={{ fontSize: 10.5, color: theme.colors.textFaint }}>
-            Replays your recorded trades against daily closes ·{' '}
-            <b style={{ color: theme.colors.accent }}>value</b> vs{' '}
-            <b style={{ color: theme.colors.textDim }}>net invested</b> · Total P/L credits cash already taken out
-            in sells · converted at today's FX (no historical rates)
+            {t('perf.footerLead')} ·{' '}
+            <b style={{ color: theme.colors.accent }}>{t('perf.valueWord')}</b> {t('perf.vs')}{' '}
+            <b style={{ color: theme.colors.textDim }}>{t('perf.netInvestedWord')}</b> · {t('perf.footerTail')}
           </div>
         </>
       ) : result && !replayMeaningful && snapshotSeries ? (
         <>
           <ProjectionChart series={[{ values: snapshotSeries.values, color: theme.colors.accent, area: true }]} height={180} />
           <div style={{ fontSize: 11.5, color: theme.colors.textDim }}>
-            No recorded trades to replay yet — showing your <b>recorded daily value</b> (
-            {snapshotSeries.values.length} days). Record buys/sells (or import a CSV) for a cost-vs-value breakdown.
+            {t('perf.snapshotLead')} <b>{t('perf.recordedDailyValue')}</b>{' '}
+            {t('perf.snapshotTrail', { count: snapshotSeries.values.length })}
           </div>
         </>
       ) : result ? (
         <div style={{ fontSize: 12.5, color: theme.colors.textDim }}>
-          Not enough history yet. Record your trades (or import a broker CSV) and your value history will build up
-          here — a daily snapshot is also saved each time you open the app.
+          {t('perf.notEnough')}
         </div>
       ) : (
         <div style={{ fontSize: 12.5, color: theme.colors.textDim }}>
-          See how your portfolio's value and cost basis have moved over time. Click <b>Show</b> to replay your
-          trade history against daily prices.
+          {t('perf.introLead')} <b>{t('perf.show')}</b> {t('perf.introTail')}
         </div>
       )}
     </div>

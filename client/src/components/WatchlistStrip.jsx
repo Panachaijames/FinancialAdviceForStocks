@@ -13,6 +13,7 @@ import { scrollToCard } from '../lib/scrollToCard.js';
 import useQuotes from '../hooks/useQuotes.js';
 import { assetMeta } from '../lib/assetType.js';
 import { fmtMoney, fmtSignedPct, classForChange } from '../lib/format.js';
+import { useT } from '../lib/i18n.js';
 import HoldingEditor from './HoldingEditor.jsx';
 
 function colorForChange(v) {
@@ -29,6 +30,7 @@ export default function WatchlistStrip({ onOpenChart }) {
   const watchlist = usePortfolioStore((s) => s.watchlist);
   const removeFromWatchlist = usePortfolioStore((s) => s.removeFromWatchlist);
   const promoteToHolding = usePortfolioStore((s) => s.promoteToHolding);
+  const t = useT();
   const [promoting, setPromoting] = useState(null); // watchlist entry being promoted
 
   const symbols = useMemo(() => (watchlist || []).map((w) => w.symbol), [watchlist]);
@@ -44,10 +46,10 @@ export default function WatchlistStrip({ onOpenChart }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: theme.space(1) }}>
         <Eye size={15} style={{ color: theme.colors.accent }} />
         <span style={{ fontWeight: 700, fontSize: 13, color: theme.colors.text }}>
-          Watchlist ({watchlist.length})
+          {t('watchlist.title', { count: watchlist.length })}
         </span>
         <span style={{ fontSize: 11, color: theme.colors.textFaint, marginLeft: theme.space(1) }}>
-          tracked only — not counted in your totals
+          {t('watchlist.subtitle')}
         </span>
       </div>
 
@@ -92,8 +94,8 @@ export default function WatchlistStrip({ onOpenChart }) {
                   type="button"
                   className="btn-ghost"
                   onClick={(e) => { e.stopPropagation(); removeFromWatchlist(w.id); }}
-                  title="Remove from watchlist"
-                  aria-label={`Remove ${w.symbol} from watchlist`}
+                  title={t('watchlist.removeTitle')}
+                  aria-label={t('watchlist.removeAria', { symbol: w.symbol })}
                   style={{ padding: 2, lineHeight: 0, color: theme.colors.textFaint }}
                 >
                   <X size={13} />
@@ -123,7 +125,7 @@ export default function WatchlistStrip({ onOpenChart }) {
                 type="button"
                 className="btn-ghost"
                 onClick={(e) => { e.stopPropagation(); setPromoting(w); }}
-                title="Buy in — move this to your holdings with a position"
+                title={t('watchlist.promoteTitle')}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -138,7 +140,7 @@ export default function WatchlistStrip({ onOpenChart }) {
                   marginTop: 2,
                 }}
               >
-                <Plus size={12} /> Promote
+                <Plus size={12} /> {t('watchlist.promote')}
               </button>
             </div>
           );
@@ -153,7 +155,7 @@ export default function WatchlistStrip({ onOpenChart }) {
             const sym = promoting.symbol;
             promoteToHolding(promoting.id, { shares, avgCost });
             setPromoting(null);
-            snackbar.push({ message: `Promoted ${sym}`, actionLabel: 'View', onAction: () => scrollToCard(sym) });
+            snackbar.push({ message: t('watchlist.promotedToast', { symbol: sym }), actionLabel: t('watchlist.viewAction'), onAction: () => scrollToCard(sym) });
           }}
           onCancel={() => setPromoting(null)}
         />

@@ -5,6 +5,7 @@ import { classify, assetMeta } from '../lib/assetType.js';
 import useQuotes from '../hooks/useQuotes.js';
 import useFx from '../hooks/useFx.js';
 import { useSettingsStore } from '../store/settingsStore.js';
+import { useT } from '../lib/i18n.js';
 import { fmtMoney, fmtSignedPct, classForChange } from '../lib/format.js';
 import FullChart from './FullChart.jsx';
 import ChartWipe from './fx/ChartWipe.jsx';
@@ -13,9 +14,9 @@ import TradeScout from './TradeScout.jsx';
 
 const RANGES = ['1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', 'max'];
 const CHART_TYPES = [
-  { id: 'candles', label: 'Candles' },
-  { id: 'line', label: 'Line' },
-  { id: 'area', label: 'Area' },
+  { id: 'candles', labelKey: 'chartmodal.type_candles' },
+  { id: 'line', labelKey: 'chartmodal.type_line' },
+  { id: 'area', labelKey: 'chartmodal.type_area' },
 ];
 
 /**
@@ -31,6 +32,7 @@ export default function ChartModal({ symbol, name, type, onClose }) {
   const [chartType, setChartType] = useState('candles');
   const [logScale, setLogScale] = useState(false);
   const [indicators, setIndicators] = useState(() => JSON.parse(JSON.stringify(DEFAULT_INDICATOR_CONFIG)));
+  const t = useT();
 
   const symbols = useMemo(() => (symbol ? [symbol] : []), [symbol]);
   const { quotes } = useQuotes(symbols);
@@ -129,7 +131,7 @@ export default function ChartModal({ symbol, name, type, onClose }) {
           {/* Live price + change */}
           <div style={{ marginLeft: 'auto', textAlign: 'right', display: 'flex', alignItems: 'center', gap: theme.space(2) }}>
             {quote ? (
-              <span className="live-dot" title="Live" style={{ background: theme.colors.up }} />
+              <span className="live-dot" title={t('chartmodal.live')} style={{ background: theme.colors.up }} />
             ) : null}
             <div>
               <div style={{ fontSize: 18, fontWeight: 700, color: theme.colors.text, fontFamily: theme.mono }}>
@@ -143,7 +145,7 @@ export default function ChartModal({ symbol, name, type, onClose }) {
 
           <button
             className="btn btn-ghost"
-            aria-label="Close"
+            aria-label={t('chartmodal.close')}
             onClick={() => onClose?.()}
             style={{ flex: '0 0 auto', padding: theme.space(2), marginLeft: theme.space(2) }}
           >
@@ -165,7 +167,7 @@ export default function ChartModal({ symbol, name, type, onClose }) {
         >
           {/* Range selector — scrolls horizontally on narrow phones instead of
               clipping the later ranges (2y/5y/max) off-screen. */}
-          <div className="segmented" role="group" aria-label="Range" style={{ maxWidth: '100%', overflowX: 'auto' }}>
+          <div className="segmented" role="group" aria-label={t('chartmodal.range')} style={{ maxWidth: '100%', overflowX: 'auto' }}>
             {RANGES.map((r) => (
               <button
                 key={r}
@@ -182,15 +184,15 @@ export default function ChartModal({ symbol, name, type, onClose }) {
           <div style={{ flex: 1 }} />
 
           {/* Chart type selector */}
-          <div className="segmented" role="group" aria-label="Chart type">
-            {CHART_TYPES.map((t) => (
+          <div className="segmented" role="group" aria-label={t('chartmodal.chart_type')}>
+            {CHART_TYPES.map((ct) => (
               <button
-                key={t.id}
-                className={`segmented-item${t.id === chartType ? ' active' : ''}`}
-                aria-pressed={t.id === chartType}
-                onClick={() => setChartType(t.id)}
+                key={ct.id}
+                className={`segmented-item${ct.id === chartType ? ' active' : ''}`}
+                aria-pressed={ct.id === chartType}
+                onClick={() => setChartType(ct.id)}
               >
-                {t.label}
+                {t(ct.labelKey)}
               </button>
             ))}
           </div>
@@ -213,7 +215,7 @@ export default function ChartModal({ symbol, name, type, onClose }) {
               onChange={(e) => setLogScale(e.target.checked)}
               style={{ accentColor: theme.colors.accent, cursor: 'pointer' }}
             />
-            Log
+            {t('chartmodal.log')}
           </label>
         </div>
 

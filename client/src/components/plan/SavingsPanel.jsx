@@ -5,6 +5,7 @@ import { fmtMoney } from '../../lib/format.js';
 import { useSavingsStore } from '../../store/savingsStore.js';
 import { useSettingsStore } from '../../store/settingsStore.js';
 import useNetWorth from '../../hooks/useNetWorth.js';
+import { useT } from '../../lib/i18n.js';
 
 /**
  * Net Worth = investments (live market value) + Thai funds (NAV) + cash/savings.
@@ -16,6 +17,7 @@ export default function SavingsPanel() {
   const removeSaving = useSavingsStore((s) => s.removeSaving);
   const displayCurrency = useSettingsStore((s) => s.displayCurrency);
   const { investments, cash, funds, net } = useNetWorth();
+  const t = useT();
 
   const [label, setLabel] = useState('');
   const [amount, setAmount] = useState('');
@@ -30,7 +32,7 @@ export default function SavingsPanel() {
     e.preventDefault();
     const amt = Number(amount);
     if (!Number.isFinite(amt) || amt <= 0) return;
-    addSaving({ label: label || 'Savings', amount: amt, currency: curr });
+    addSaving({ label: label || t('savings.defaultLabel'), amount: amt, currency: curr });
     setLabel('');
     setAmount('');
   }
@@ -45,10 +47,10 @@ export default function SavingsPanel() {
 
   return (
     <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: theme.space(3) }}>
-      <PanelHeader icon={<Wallet size={16} />} title="Savings & Net Worth" />
+      <PanelHeader icon={<Wallet size={16} />} title={t('savings.title')} />
 
       <div>
-        <div style={labelStyle}>Net Worth</div>
+        <div style={labelStyle}>{t('savings.netWorth')}</div>
         <div style={{ fontSize: 30, fontWeight: 800, fontFamily: theme.mono, color: theme.colors.text, lineHeight: 1.1 }}>
           {fmtMoney(net, displayCurrency)}
         </div>
@@ -57,21 +59,21 @@ export default function SavingsPanel() {
       {/* Allocation bar */}
       <div>
         <div style={{ display: 'flex', height: 10, borderRadius: 999, overflow: 'hidden', background: theme.colors.bgElev }}>
-          <div style={{ width: `${invPct}%`, background: theme.colors.accent }} title="Investments" />
-          <div style={{ width: `${fundsPct}%`, background: theme.colors.crypto }} title="Thai funds" />
-          <div style={{ width: `${cashPct}%`, background: theme.colors.up }} title="Cash / savings" />
+          <div style={{ width: `${invPct}%`, background: theme.colors.accent }} title={t('savings.investments')} />
+          <div style={{ width: `${fundsPct}%`, background: theme.colors.crypto }} title={t('savings.thaiFunds')} />
+          <div style={{ width: `${cashPct}%`, background: theme.colors.up }} title={t('savings.cashSavings')} />
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: theme.space(2), marginTop: theme.space(1), fontSize: 12 }}>
           <span style={{ color: theme.colors.accent, fontWeight: 600 }}>
-            ● Investments {fmtMoney(investments, displayCurrency)} ({invPct.toFixed(0)}%)
+            ● {t('savings.investments')} {fmtMoney(investments, displayCurrency)} ({invPct.toFixed(0)}%)
           </span>
           {funds > 0 && (
             <span style={{ color: theme.colors.crypto, fontWeight: 600 }}>
-              ● Funds {fmtMoney(funds, displayCurrency)} ({fundsPct.toFixed(0)}%)
+              ● {t('savings.funds')} {fmtMoney(funds, displayCurrency)} ({fundsPct.toFixed(0)}%)
             </span>
           )}
           <span style={{ color: theme.colors.up, fontWeight: 600 }}>
-            ● Cash {fmtMoney(cash, displayCurrency)} ({cashPct.toFixed(0)}%)
+            ● {t('savings.cash')} {fmtMoney(cash, displayCurrency)} ({cashPct.toFixed(0)}%)
           </span>
         </div>
       </div>
@@ -101,7 +103,7 @@ export default function SavingsPanel() {
                 <button
                   type="button"
                   className="btn-ghost"
-                  aria-label={`Remove ${s.label}`}
+                  aria-label={t('savings.remove', { label: s.label })}
                   onClick={() => removeSaving(s.id)}
                   style={{ padding: 4, lineHeight: 0, color: theme.colors.down }}
                 >
@@ -116,14 +118,14 @@ export default function SavingsPanel() {
       {/* Add cash form */}
       <form onSubmit={handleAdd} style={{ display: 'flex', gap: theme.space(2), flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <label style={{ flex: '2 1 120px' }}>
-          <span style={{ ...labelStyle, display: 'block', marginBottom: 4 }}>Label</span>
-          <input className="input" placeholder="e.g. Bank savings" value={label} onChange={(e) => setLabel(e.target.value)} />
+          <span style={{ ...labelStyle, display: 'block', marginBottom: 4 }}>{t('savings.label')}</span>
+          <input className="input" placeholder={t('savings.labelPlaceholder')} value={label} onChange={(e) => setLabel(e.target.value)} />
         </label>
         <label style={{ flex: '1 1 90px' }}>
-          <span style={{ ...labelStyle, display: 'block', marginBottom: 4 }}>Amount</span>
+          <span style={{ ...labelStyle, display: 'block', marginBottom: 4 }}>{t('savings.amount')}</span>
           <input className="input" type="number" inputMode="decimal" step="any" min="0" placeholder="0" value={amount} onChange={(e) => setAmount(e.target.value)} />
         </label>
-        <div className="segmented" role="group" aria-label="Currency">
+        <div className="segmented" role="group" aria-label={t('savings.currency')}>
           {['USD', 'THB'].map((c) => (
             <button
               key={c}
@@ -138,7 +140,7 @@ export default function SavingsPanel() {
           ))}
         </div>
         <button type="submit" className="btn btn-primary" style={{ flex: '0 0 auto' }}>
-          <Plus size={15} /> Add
+          <Plus size={15} /> {t('savings.add')}
         </button>
       </form>
     </div>

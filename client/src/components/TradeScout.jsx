@@ -3,6 +3,7 @@ import { Crosshair, Loader2, RefreshCw } from 'lucide-react';
 import { theme } from '../lib/theme.js';
 import { getHealth, getTradeIdea } from '../api/client.js';
 import AiMarkdown, { SourceList } from './AiMarkdown.jsx';
+import { useT } from '../lib/i18n.js';
 
 /**
  * AI Trade Scout — short-term (days-to-weeks) research dossier for one symbol,
@@ -15,6 +16,7 @@ import AiMarkdown, { SourceList } from './AiMarkdown.jsx';
  * Renders nothing unless GEMINI_API_KEY is configured (via /api/health).
  */
 export default function TradeScout({ symbol }) {
+  const t = useT();
   const [enabled, setEnabled] = useState(false);
   const [loading, setLoading] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -54,7 +56,7 @@ export default function TradeScout({ symbol }) {
       const res = await getTradeIdea({ symbol });
       setResult(res || null);
     } catch (e) {
-      setError((e && e.message) || 'Failed to generate the dossier');
+      setError((e && e.message) || t('scout.error_generate'));
     } finally {
       clearInterval(timerRef.current);
       setLoading(false);
@@ -89,18 +91,18 @@ export default function TradeScout({ symbol }) {
           >
             <Crosshair size={13} />
           </span>
-          AI Trade Scout — short-term read on {symbol}
+          {t('scout.title', { symbol })}
         </div>
         <button
           type="button"
           className="btn-ghost"
           onClick={run}
           disabled={loading}
-          title="Deep-researches fresh news, catalysts and technicals for a short-term scenario"
+          title={t('scout.button_tooltip')}
           style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: theme.colors.accent }}
         >
           {loading ? <Loader2 size={14} style={{ animation: 'pulse 1s linear infinite' }} /> : <RefreshCw size={14} />}
-          {loading ? `Researching… ${elapsed}s` : result ? 'Refresh' : 'Scout this symbol'}
+          {loading ? t('scout.researching', { elapsed }) : result ? t('scout.refresh') : t('scout.scout_symbol')}
         </button>
       </div>
 
@@ -113,21 +115,16 @@ export default function TradeScout({ symbol }) {
         </>
       ) : loading ? (
         <div style={{ fontSize: 12.5, color: theme.colors.textDim, lineHeight: 1.6 }}>
-          Combining the live quote, a technical snapshot and the news feed with multi-round web research
-          (latest catalysts, earnings dates, analyst moves, sector momentum, this week's macro events).
-          Usually takes 30–90 seconds.
+          {t('scout.loading_detail')}
         </div>
       ) : (
         <div style={{ fontSize: 12.5, color: theme.colors.textDim, lineHeight: 1.6 }}>
-          Ask the AI whether there's a credible <b>short-term</b> (days-to-weeks) opportunity in {symbol} right
-          now: dated catalysts with sources, technical read, a hypothetical entry/stop/target scenario, the
-          bear case, and what to watch next.
+          {t('scout.pitch_lead')} <b>{t('scout.pitch_strong')}</b> {t('scout.pitch_rest', { symbol })}
         </div>
       )}
 
       <div style={{ fontSize: 10, color: theme.colors.textFaint }}>
-        AI-generated with live web research · educational scenario, not financial advice — short-term trading
-        carries a high risk of loss
+        {t('scout.disclaimer')}
       </div>
     </div>
   );
