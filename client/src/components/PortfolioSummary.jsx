@@ -12,6 +12,7 @@ import { computeDividendIncome } from '../lib/dividends.js';
 import { DIVIDEND_ERROR, isDividendError } from '../lib/dividendState.js';
 import marketSocket from '../api/socket.js';
 import { realizedByCurrency, dividendsByCurrency } from '../lib/trades.js';
+import { useT } from '../lib/i18n.js';
 import CountUp from './fx/CountUp.jsx';
 import SpotlightCard from './fx/SpotlightCard.jsx';
 import Reveal from './fx/Reveal.jsx';
@@ -36,6 +37,7 @@ export default function PortfolioSummary() {
   const holdings = usePortfolioStore((s) => s.holdings);
   const transactions = usePortfolioStore((s) => s.transactions);
   const displayCurrency = useSettingsStore((s) => s.displayCurrency);
+  const t = useT();
   const symbols = useMemo(() => holdings.map((h) => h.symbol), [holdings]);
   const { quotes, loading, error } = useQuotes(symbols);
   const { convert, rate, fx } = useFx();
@@ -221,13 +223,13 @@ export default function PortfolioSummary() {
   const cards = [
     {
       key: 'mv',
-      label: 'Market Value',
+      label: t('summary.marketValue'),
       icon: <Wallet size={16} />,
       value: totals.marketValue,
       format: fmtCur,
       sub: partial
-        ? `Cost ${fmtMoney(totals.cost, cur)} · ${quotedCount}/${holdings.length} priced live`
-        : `Cost ${fmtMoney(totals.cost, cur)}`,
+        ? `${t('summary.cost')} ${fmtMoney(totals.cost, cur)} · ${quotedCount}/${holdings.length} priced live`
+        : `${t('summary.cost')} ${fmtMoney(totals.cost, cur)}`,
       subTitle: partial
         ? 'Holdings without a live quote are valued at your average cost'
         : undefined,
@@ -236,7 +238,7 @@ export default function PortfolioSummary() {
     },
     {
       key: 'pl',
-      label: 'Total P/L',
+      label: t('summary.totalPL'),
       icon: totals.pl >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />,
       value: totals.pl,
       format: fmtCur,
@@ -246,7 +248,7 @@ export default function PortfolioSummary() {
     },
     {
       key: 'today',
-      label: "Today's Change",
+      label: t('summary.todaysChange'),
       icon: <Activity size={16} />,
       value: totals.todayChange,
       format: fmtCur,
@@ -256,11 +258,11 @@ export default function PortfolioSummary() {
     },
     {
       key: 'div',
-      label: 'Annual Dividends',
+      label: t('summary.annualDividends'),
       icon: <Coins size={16} />,
       value: totals.annualDividend,
       format: fmtCur,
-      sub: `${totals.yieldPct.toFixed(2)}% yield`,
+      sub: t('summary.yield', { pct: totals.yieldPct.toFixed(2) }),
       color: totals.annualDividend > 0 ? theme.colors.gold : theme.colors.textDim,
       accent: theme.colors.gold,
     },
@@ -269,11 +271,11 @@ export default function PortfolioSummary() {
       ? [
           {
             key: 'realized',
-            label: 'Realized P/L',
+            label: t('summary.realizedPL'),
             icon: <BadgeDollarSign size={16} />,
             value: realized,
             format: fmtCur,
-            sub: 'from recorded sells',
+            sub: t('summary.fromSells'),
             color: colorForChange(realized),
             accent: colorForChange(realized),
           },
@@ -284,11 +286,11 @@ export default function PortfolioSummary() {
       ? [
           {
             key: 'dividends-received',
-            label: 'Dividends Received',
+            label: t('summary.dividendsReceived'),
             icon: <Coins size={16} />,
             value: dividendsReceived,
             format: fmtCur,
-            sub: 'logged, net of withholding',
+            sub: t('summary.loggedNetWht'),
             color: theme.colors.gold,
             accent: theme.colors.gold,
           },

@@ -13,6 +13,7 @@ import { ArrowUp, ArrowDown } from 'lucide-react';
 import { theme } from '../lib/theme.js';
 import { usePortfolioStore } from '../store/portfolioStore.js';
 import { useSettingsStore } from '../store/settingsStore.js';
+import { useT } from '../lib/i18n.js';
 import useQuotes from '../hooks/useQuotes.js';
 import useFx from '../hooks/useFx.js';
 import AssetCard from './AssetCard.jsx';
@@ -37,6 +38,7 @@ export default function HoldingsSection({ onOpenChart }) {
   const holdings = usePortfolioStore((s) => s.holdings);
   const holdingsSort = useSettingsStore((s) => s.holdingsSort) || { key: 'added', dir: 'asc' };
   const setHoldingsSort = useSettingsStore((s) => s.setHoldingsSort);
+  const t = useT();
 
   const symbols = useMemo(() => holdings.map((h) => h.symbol), [holdings]);
   const { quotes } = useQuotes(symbols);
@@ -99,7 +101,7 @@ export default function HoldingsSection({ onOpenChart }) {
             letterSpacing: 0.4,
           }}
         >
-          Holdings ({holdings.length})
+          {t('holdings.title', { n: holdings.length })}
         </span>
         <div style={{ flex: 1 }} />
         <div className="segmented" role="group" aria-label="Sort holdings">
@@ -126,7 +128,7 @@ export default function HoldingsSection({ onOpenChart }) {
                   }
                 }}
               >
-                {opt.label}
+                {t(`holdings.sort.${opt.key}`)}
                 {active ? (
                   dir === 'asc' ? (
                     <ArrowUp size={11} aria-hidden="true" style={{ marginLeft: 4, verticalAlign: 'middle' }} />

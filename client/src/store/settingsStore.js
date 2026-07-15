@@ -6,6 +6,7 @@ export const useSettingsStore = create(
   persist(
     (set, get) => ({
       displayCurrency: 'USD',
+      language: 'en', // UI language: 'en' | 'th' (lib/i18n.js). Tax panels are Thai regardless.
       refreshMs: 5000,
       analysisGoal: '', // user's stated objective for the AI Insights panel
       analysisAge: '', // optional age -> lets the AI reason about risk capacity / horizon
@@ -34,6 +35,15 @@ export const useSettingsStore = create(
        */
       toggleCurrency() {
         set({ displayCurrency: get().displayCurrency === 'USD' ? 'THB' : 'USD' });
+      },
+
+      /** Set the UI language ('en' | 'th'). */
+      setLanguage(l) {
+        set({ language: l === 'th' ? 'th' : 'en' });
+      },
+      /** Toggle between English and Thai. */
+      toggleLanguage() {
+        set({ language: get().language === 'th' ? 'en' : 'th' });
       },
 
       /**
@@ -83,11 +93,12 @@ export const useSettingsStore = create(
     }),
     {
       name: 'pt-settings',
-      version: 3,
+      version: 4,
       // v1 -> v2: effects now default ON (the user wants animations even on
       // machines whose OS asks for reduced motion). Users who explicitly chose
       // 'off' keep it; everyone still on the old 'auto' default is upgraded.
       // v2 -> v3: holdingsSort added with a safe default.
+      // v3 -> v4: UI language added, defaulting to English.
       // NOTE: never bump `version` without a migrate fn — persist would
       // otherwise DISCARD the saved state.
       migrate(persisted, version) {
@@ -99,6 +110,7 @@ export const useSettingsStore = create(
         if (!state.holdingsSort || typeof state.holdingsSort !== 'object' || typeof state.holdingsSort.key !== 'string') {
           state.holdingsSort = { key: 'added', dir: 'asc' };
         }
+        if (state.language !== 'th' && state.language !== 'en') state.language = 'en';
         return state;
       },
     }
