@@ -27,10 +27,11 @@ function fmtDate(sec) {
  *
  * Props:
  *   historyDates / historyCloses — tail of actual daily closes
- *   forecasts — [{ key, label, color, dates[], closes[], band?: {lower[], upper[]} }]
+ *   forecasts — [{ key, label, color, dates[], closes[], band?: {lower[], upper[]}, dash?, opacity? }]
+ *   events — [{ date (unix sec), score (-1..1), title }] news flags on the timeline
  *   currency, height
  */
-export default function ForecastChart({ historyDates = [], historyCloses = [], forecasts = [], currency = 'USD', height = 300 }) {
+export default function ForecastChart({ historyDates = [], historyCloses = [], forecasts = [], events = [], currency = 'USD', height = 300 }) {
   const t = useT();
   const wrapRef = useRef(null);
   const [width, setWidth] = useState(800);
@@ -121,15 +122,48 @@ export default function ForecastChart({ historyDates = [], historyCloses = [], f
     } else {
       const fi = hover - nHist;
       for (const f of forecasts) {
-        if (fi < f.closes.length) tipRows.push({ label: f.label, color: f.color, value: f.closes[fi] });
+        // Illustrative scenario branches aren't model predictions — keep them
+        // out of the value tooltip (they're summarised in the News panel).
+        if (f.kind === 'scenario') continue;
+        if (fi < f.closes.length && Number.isFinite(f.closes[fi])) tipRows.push({ label: f.label, color: f.color, value: f.closes[fi] });
       }
     }
   }
   const tipLeft = hover != null ? Math.min(x(hover) + 12, width - 190) : 0;
 
+  // News flags: snap each event to the nearest plotted history date. Colored by
+  // headline tone (green up / red down / faint neutral), drawn near the top with
+  // a faint stem to the price line; hover shows the headline via native <title>.
+  // Events that snap to the SAME index (distinct calendar days often collapse
+  // near "today") are merged into one flag so none hides another's tooltip.
+  const evColor = (s) => (s > 0.05 ? theme.colors.up : s < -0.05 ? theme.colors.down : theme.colors.textFaint);
+  const byIdx = new Map();
+  for (const ev of events || []) {
+    if (!Number.isFinite(ev.date) || nHist === 0) continue;
+    let best = 0;
+    let bestD = Infinity;
+    for (let i = 0; i < nHist; i += 1) {
+      const d = Math.abs((allDates[i] || 0) - ev.date);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    const g = byIdx.get(best) || { idx: best, scoreSum: 0, n: 0, titles: [] };
+    g.scoreSum += Number.isFinite(ev.score) ? ev.score : 0;
+    g.n += 1;
+    if (ev.title) g.titles.push(ev.title);
+    byIdx.set(best, g);
+  }
+  const eventMarkers = [...byIdx.values()].map((g) => ({
+    idx: g.idx,
+    score: g.n ? g.scoreSum / g.n : 0,
+    title: g.titles.slice(0, 6).join('\n') + (g.titles.length > 6 ? `\n(+${g.titles.length - 6} more)` : ''),
+  }));
+
   return (
     <div ref={wrapRef} style={{ position: 'relative', width: '100%' }}>
-      <svg width={width} height={height} role="img" aria-label={t('fchart.aria_label')} style={{ display: 'block' }}>
+      <svg width={width} height={height} role="img" aria-label={t('fchart.aria_label')} style={{ display: 'block' }} onMouseLeave={() => setHover(null)}>
         {/* grid */}
         {ticks.map((v, i) => (
           <g key={i}>
@@ -170,9 +204,10 @@ export default function ForecastChart({ historyDates = [], historyCloses = [], f
             d={linePath(nHist - 1, [historyCloses[nHist - 1], ...f.closes])}
             fill="none"
             stroke={f.color}
-            strokeWidth="2"
-            strokeDasharray="5,4"
+            strokeWidth={f.width || 2}
+            strokeDasharray={f.dash || '5,4'}
             strokeLinejoin="round"
+            opacity={f.opacity ?? 1}
           />
         ))}
 
@@ -204,8 +239,20 @@ export default function ForecastChart({ historyDates = [], historyCloses = [], f
           height={height - PAD.top - PAD.bottom}
           fill="transparent"
           onMouseMove={onMove}
-          onMouseLeave={() => setHover(null)}
         />
+
+        {/* news flags (on top of the capture rect so each stays hoverable) */}
+        {eventMarkers.map((ev, i) => {
+          const cx = x(ev.idx);
+          const col = evColor(ev.score);
+          return (
+            <g key={`ev-${i}`} style={{ cursor: 'help' }}>
+              <title>{ev.title}</title>
+              <line x1={cx} x2={cx} y1={PAD.top + 10} y2={y(historyCloses[ev.idx])} stroke={col} strokeWidth="1" opacity="0.25" style={{ pointerEvents: 'none' }} />
+              <circle cx={cx} cy={PAD.top + 7} r="3.5" fill={col} stroke={theme.colors.panelElev} strokeWidth="1" />
+            </g>
+          );
+        })}
       </svg>
 
       {/* tooltip */}
@@ -242,15 +289,15 @@ export default function ForecastChart({ historyDates = [], historyCloses = [], f
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: theme.colors.textDim }}>
           <span style={{ width: 14, height: 2, background: SERIES_COLORS.history, display: 'inline-block' }} /> {t('fchart.actual_price')}
         </span>
-        {forecasts.map((f) => {
+        {forecasts.filter((f) => f.kind !== 'scenario').map((f) => {
           const last = f.closes[f.closes.length - 1];
           const first = historyCloses[historyCloses.length - 1];
-          const pct = first > 0 ? ((last / first - 1) * 100).toFixed(1) : '—';
+          const pct = first > 0 && Number.isFinite(last) ? ((last / first - 1) * 100).toFixed(1) : null;
           return (
             <span key={f.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: theme.colors.textDim }}>
               <span style={{ width: 14, height: 2, background: f.color, display: 'inline-block', backgroundImage: `linear-gradient(90deg, ${f.color} 60%, transparent 40%)`, backgroundSize: '7px 2px' }} />
               {f.label}
-              <b style={{ fontFamily: theme.mono, color: theme.colors.text }}>{pct > 0 ? '+' : ''}{pct}%</b>
+              <b style={{ fontFamily: theme.mono, color: theme.colors.text }}>{pct == null ? '—' : `${pct > 0 ? '+' : ''}${pct}%`}</b>
             </span>
           );
         })}
