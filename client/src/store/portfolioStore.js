@@ -10,10 +10,27 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { createSafeStorage } from '../lib/safeStorage.js';
 import { classify } from '../lib/assetType.js';
-import { applyBuy, applySell } from '../lib/trades.js';
+import { replayPosition } from '../lib/trades.js';
 
 function nativeCurrencyForType(type) {
   return type === 'th_stock' ? 'THB' : 'USD';
+}
+
+/**
+ * Recompute one symbol's position + its entries' realized/snapshot fields by
+ * replaying its ledger chronologically (lib/trades.replayPosition), keeping the
+ * transactions array's existing ORDER (only the per-entry fields change) so the
+ * insertion-order LIFO undo stays valid. This is the single consistency path for
+ * backdated / edited / deleted trades. Returns { transactions, holdings }.
+ */
+function replayInto(transactions, holdings, symbol) {
+  const symTxs = transactions.filter((t) => t && t.symbol === symbol);
+  const { shares, avgCost, transactions: replayed } = replayPosition(symTxs);
+  const byId = new Map(replayed.map((t) => [t.id, t]));
+  return {
+    transactions: transactions.map((t) => (t && t.symbol === symbol ? byId.get(t.id) || t : t)),
+    holdings: holdings.map((h) => (h.symbol === symbol ? { ...h, shares, avgCost } : h)),
+  };
 }
 
 function makeId(symbol) {
@@ -148,7 +165,6 @@ export const usePortfolioStore = create(
         const fee = Number(t.fee) || 0;
         if (qty <= 0 || price <= 0 || fee < 0) return null;
 
-        const prev = { shares: Number(h.shares) || 0, avgCost: Number(h.avgCost) || 0 };
         const tx = {
           id: `tx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           symbol: h.symbol,
@@ -159,36 +175,60 @@ export const usePortfolioStore = create(
           fee,
           currency: h.currency || nativeCurrencyForType(h.type),
           at: t.at || new Date().toISOString(),
-          prevShares: prev.shares,
-          prevAvgCost: prev.avgCost,
         };
 
-        let next;
-        if (side === 'buy') {
-          next = applyBuy(prev, { qty, price, fee });
-        } else {
-          const sale = applySell(prev, { qty, price, fee });
-          if (sale.soldQty <= 0) return null;
-          next = { shares: sale.shares, avgCost: sale.avgCost };
-          tx.qty = sale.soldQty; // clamped to what was actually held
-          tx.realized = sale.realized;
-          tx.costBasis = sale.costBasis;
-        }
+        // Append, then replay the symbol chronologically — so a BACKDATED `at`
+        // blends into avg cost / realizes at the right point, not "as of now".
+        const nextTxs = [...get().transactions, tx];
+        const replayed = replayInto(nextTxs, get().holdings, h.symbol);
+        set(replayed);
+        return replayed.transactions.find((x) => x.id === tx.id) || tx;
+      },
 
-        set((state) => ({
-          holdings: state.holdings.map((x) =>
-            x.id === holdingId ? { ...x, shares: next.shares, avgCost: next.avgCost } : x
-          ),
-          transactions: [...state.transactions, tx],
-        }));
-        return tx;
+      /**
+       * Edit a recorded buy/sell (qty / price / fee / date / side), then replay
+       * the symbol so avg cost and every downstream sell's realized P/L are
+       * recomputed — fixing an old typo without undoing everything after it.
+       * @param {string} txId
+       * @param {{ qty?:number, price?:number, fee?:number, at?:string, side?:'buy'|'sell' }} patch
+       * @returns {boolean}
+       */
+      editTransaction(txId, patch = {}) {
+        const txs = get().transactions;
+        const tx = txs.find((x) => x.id === txId);
+        if (!tx || (tx.side !== 'buy' && tx.side !== 'sell')) return false;
+        const clean = {};
+        if ('qty' in patch) clean.qty = Number(patch.qty) || 0;
+        if ('price' in patch) clean.price = Number(patch.price) || 0;
+        if ('fee' in patch) clean.fee = Math.max(0, Number(patch.fee) || 0);
+        if ('at' in patch && patch.at) clean.at = patch.at;
+        if ('side' in patch && (patch.side === 'buy' || patch.side === 'sell')) clean.side = patch.side;
+        if ((clean.qty != null && clean.qty <= 0) || (clean.price != null && clean.price <= 0)) return false;
+        const nextTxs = txs.map((x) => (x.id === txId ? { ...x, ...clean } : x));
+        set(replayInto(nextTxs, get().holdings, tx.symbol));
+        return true;
+      },
+
+      /**
+       * Delete any ledger entry (trade or dividend), then replay its symbol so the
+       * position and realized P/L stay consistent — no LIFO restriction.
+       * @param {string} txId
+       * @returns {boolean}
+       */
+      deleteTransaction(txId) {
+        const txs = get().transactions;
+        const tx = txs.find((x) => x.id === txId);
+        if (!tx) return false;
+        const nextTxs = txs.filter((x) => x.id !== txId);
+        set(replayInto(nextTxs, get().holdings, tx.symbol));
+        return true;
       },
 
       /**
        * Record a dividend the user RECEIVED for a holding (income, not a trade).
-       * It never moves the position, so the snapshot equals the current position
-       * — undoTransaction then restores a safe no-op. Returns the ledger entry,
-       * or null if invalid (unknown holding, amount <= 0, negative withholding).
+       * It never moves the position (deleteTransaction just removes the row and a
+       * replay leaves the position untouched). Returns the ledger entry, or null
+       * if invalid (unknown holding, amount <= 0, negative withholding).
        * @param {string} holdingId
        * @param {{ amount:number, wht?:number, at?:string }} d  amounts in native currency
        */
@@ -255,35 +295,6 @@ export const usePortfolioStore = create(
           else skipped.push(`${t.symbol} ${t.side} ${t.qty} @ ${t.price}: invalid (selling more than held?)`);
         }
         return { applied, skipped };
-      },
-
-      /**
-       * Undo a ledger entry — only allowed for the LAST-RECORDED entry of its
-       * symbol (LIFO by INSERTION ORDER, not by `at`: dividends are stamped at
-       * local-noon and trades at the real instant, so `at` order ≠ record order).
-       * A buy/sell restores the position snapshot; a dividend never moved the
-       * position, so its undo only removes the ledger row. Returns true if undone.
-       */
-      undoTransaction(txId) {
-        const { transactions } = get();
-        const idx = transactions.findIndex((x) => x.id === txId);
-        if (idx === -1) return false;
-        const tx = transactions[idx];
-        // Reversible only if nothing for this symbol was recorded after it.
-        const laterSameSymbol = transactions.slice(idx + 1).some((x) => x.symbol === tx.symbol);
-        if (laterSameSymbol) return false;
-        set((state) => ({
-          holdings:
-            tx.side === 'dividend'
-              ? state.holdings // income never changed the position — don't touch it
-              : state.holdings.map((x) =>
-                  x.symbol === tx.symbol
-                    ? { ...x, shares: tx.prevShares, avgCost: tx.prevAvgCost }
-                    : x
-                ),
-          transactions: state.transactions.filter((x) => x.id !== tx.id),
-        }));
-        return true;
       },
 
       /**

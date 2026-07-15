@@ -91,3 +91,53 @@ test('realizedBySymbol groups by symbol with native currency', () => {
     'PTT.BK': { realized: -200, currency: 'THB' },
   });
 });
+
+// ── replayPosition (backdate / edit / delete) ────────────────────────────────
+
+import { replayPosition } from '../src/lib/trades.js';
+
+test('replayPosition: chronological replay recomputes avg cost regardless of entry order', () => {
+  // Entered out of order: the 200-priced buy recorded first but dated LATER.
+  const txs = [
+    { id: 't2', side: 'buy', qty: 10, price: 200, fee: 0, at: '2026-03-01T12:00:00.000Z' },
+    { id: 't1', side: 'buy', qty: 10, price: 100, fee: 0, at: '2026-01-01T12:00:00.000Z' },
+  ];
+  const r = replayPosition(txs);
+  assert.equal(r.shares, 20);
+  assert.equal(r.avgCost, 150); // (10·100 + 10·200)/20 — order-independent blend
+  assert.equal(r.transactions[0].id, 't1'); // sorted chronologically
+});
+
+test('replayPosition: backdated sell realizes against the avg cost held at its date', () => {
+  const txs = [
+    { id: 'b1', side: 'buy', qty: 10, price: 100, fee: 0, at: '2026-01-01T12:00:00.000Z' },
+    { id: 's1', side: 'sell', qty: 4, price: 130, fee: 0, at: '2026-02-01T12:00:00.000Z' },
+  ];
+  const r = replayPosition(txs);
+  assert.equal(r.shares, 6);
+  const sell = r.transactions.find((t) => t.id === 's1');
+  assert.equal(sell.realized, 120); // (130−100)·4
+  assert.equal(sell.prevShares, 10);
+});
+
+test('replayPosition: a sell is clamped to shares held at that time', () => {
+  const txs = [
+    { id: 'b1', side: 'buy', qty: 5, price: 100, fee: 0, at: '2026-01-01T12:00:00.000Z' },
+    { id: 's1', side: 'sell', qty: 10, price: 120, fee: 0, at: '2026-02-01T12:00:00.000Z' },
+  ];
+  const r = replayPosition(txs);
+  const sell = r.transactions.find((t) => t.id === 's1');
+  assert.equal(sell.qty, 5); // clamped
+  assert.equal(r.shares, 0);
+});
+
+test('replayPosition: dividends pass through and do not affect the position', () => {
+  const txs = [
+    { id: 'b1', side: 'buy', qty: 10, price: 100, fee: 0, at: '2026-01-01T12:00:00.000Z' },
+    { id: 'd1', side: 'dividend', amount: 20, wht: 2, at: '2026-02-01T12:00:00.000Z' },
+  ];
+  const r = replayPosition(txs);
+  assert.equal(r.shares, 10);
+  assert.equal(r.avgCost, 100);
+  assert.ok(r.transactions.find((t) => t.id === 'd1'));
+});

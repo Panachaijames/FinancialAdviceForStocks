@@ -144,6 +144,52 @@ export function dividendsBySymbol(transactions = []) {
   return out;
 }
 
+/**
+ * Replay ONE symbol's ledger in chronological order into its final position,
+ * recomputing each buy/sell's snapshot + each sell's realized P/L and cost basis
+ * against the shares actually held AT THAT TIME. This is what makes backdating,
+ * editing, and deleting a past trade correct: order is derived from `at`, not
+ * from when the row was entered. Dividends pass through untouched (they don't
+ * move the position). Chronological order is by `at` (stable for ties).
+ * @param {Array} txs all ledger entries for a single symbol
+ * @returns {{ shares:number, avgCost:number, transactions:Array }} corrected entries (chronological)
+ */
+export function replayPosition(txs = []) {
+  const sorted = [...(txs || [])]
+    .filter(Boolean)
+    .sort((a, b) => (Date.parse(a.at) || 0) - (Date.parse(b.at) || 0));
+  let shares = 0;
+  let avgCost = 0;
+  const out = [];
+  for (const t of sorted) {
+    if (t.side === 'buy') {
+      const prevShares = shares;
+      const prevAvgCost = avgCost;
+      const r = applyBuy({ shares, avgCost }, t);
+      shares = r.shares;
+      avgCost = r.avgCost;
+      out.push({ ...t, prevShares, prevAvgCost });
+    } else if (t.side === 'sell') {
+      const prevShares = shares;
+      const prevAvgCost = avgCost;
+      const sale = applySell({ shares, avgCost }, t);
+      shares = sale.shares;
+      avgCost = sale.avgCost;
+      out.push({
+        ...t,
+        qty: sale.soldQty, // clamped to what was held at that point in time
+        realized: sale.realized,
+        costBasis: sale.costBasis,
+        prevShares,
+        prevAvgCost,
+      });
+    } else {
+      out.push({ ...t }); // dividend — position unchanged
+    }
+  }
+  return { shares, avgCost, transactions: out };
+}
+
 export default {
   applyBuy,
   applySell,
@@ -152,4 +198,5 @@ export default {
   dividendNet,
   dividendsByCurrency,
   dividendsBySymbol,
+  replayPosition,
 };
