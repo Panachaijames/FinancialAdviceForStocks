@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { LineChart, Loader2, RefreshCw } from 'lucide-react';
 import { theme } from '../lib/theme.js';
 import { fmtSignedPct } from '../lib/format.js';
+import { useT } from '../lib/i18n.js';
 import { usePortfolioStore } from '../store/portfolioStore.js';
 import useQuotes from '../hooks/useQuotes.js';
 import useFx from '../hooks/useFx.js';
@@ -23,6 +24,7 @@ const BENCHMARKS = [
  * loads on demand to keep the API quiet.
  */
 export default function BenchmarkPanel() {
+  const t = useT();
   const holdings = usePortfolioStore((s) => s.holdings);
   const symbols = useMemo(
     () => holdings.filter((h) => (Number(h.shares) || 0) > 0).map((h) => h.symbol),
@@ -72,12 +74,12 @@ export default function BenchmarkPanel() {
       );
       const portfolio = blendIndexed(portfolioCloses, weights);
       if (portfolio.length < 2) {
-        throw new Error('Not enough overlapping history for the current holdings.');
+        throw new Error(t('benchmark.errorNoHistory'));
       }
 
       const series = [
         {
-          label: 'Your mix',
+          label: t('benchmark.yourMix'),
           color: theme.colors.accent,
           values: portfolio,
           returnPct: totalReturnPct(portfolio),
@@ -91,7 +93,7 @@ export default function BenchmarkPanel() {
       }
       setResult({ range: nextRange, series, missing: missingBench.map((b) => b.label) });
     } catch (e) {
-      setError((e && e.message) || 'Failed to load benchmark data');
+      setError((e && e.message) || t('benchmark.errorFallback'));
     } finally {
       setLoading(false);
     }
@@ -104,10 +106,10 @@ export default function BenchmarkPanel() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: theme.space(2), flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: theme.space(1), fontWeight: 700, fontSize: 13, color: theme.colors.text }}>
           <LineChart size={15} style={{ color: theme.colors.accent }} />
-          Benchmark — your mix vs the index
+          {t('benchmark.title')}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: theme.space(2) }}>
-          <div className="segmented" role="group" aria-label="Range">
+          <div className="segmented" role="group" aria-label={t('benchmark.rangeAria')}>
             {RANGES.map((r) => (
               <button
                 key={r}
@@ -131,7 +133,7 @@ export default function BenchmarkPanel() {
             style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: theme.colors.accent }}
           >
             {loading ? <Loader2 size={14} style={{ animation: 'pulse 1s linear infinite' }} /> : <RefreshCw size={14} />}
-            {loading ? 'Loading…' : result ? 'Refresh' : 'Compare'}
+            {loading ? t('benchmark.loading') : result ? t('benchmark.refresh') : t('benchmark.compare')}
           </button>
         </div>
       </div>
@@ -154,18 +156,17 @@ export default function BenchmarkPanel() {
           </div>
           {result.missing && result.missing.length > 0 && (
             <div style={{ fontSize: 11, color: theme.colors.warn }}>
-              ⚠ No data for: {result.missing.join(', ')} (source throttled — try Refresh in a minute)
+              {t('benchmark.noData', { list: result.missing.join(', ') })}
             </div>
           )}
           <div style={{ fontSize: 10.5, color: theme.colors.textFaint }}>
-            Indexed to 100 at the start of the range · blends your <b>current</b> weights (doesn't replay past
-            trades) · overlapping trading days only
+            {t('benchmark.footnotePre')} <b>{t('benchmark.footnoteCurrent')}</b> {t('benchmark.footnotePost')}
           </div>
         </>
       ) : (
         <div style={{ fontSize: 12.5, color: theme.colors.textDim }}>
-          See whether your current portfolio mix beat the <b>S&amp;P 500</b> and the <b>SET Index</b> over the
-          selected period. Click <b>Compare</b> to load the data.
+          {t('benchmark.emptyStatePre')} <b>S&amp;P 500</b> {t('benchmark.emptyStateMid')} <b>SET Index</b>{' '}
+          {t('benchmark.emptyStatePost')} <b>{t('benchmark.compare')}</b> {t('benchmark.emptyStateEnd')}
         </div>
       )}
     </div>

@@ -8,6 +8,7 @@ import useFx from '../hooks/useFx.js';
 import { realizedByCurrency, dividendsByCurrency } from '../lib/trades.js';
 import { tradesToCsv } from '../lib/csvImport.js';
 import { downloadTextFile } from '../lib/backup.js';
+import { useT } from '../lib/i18n.js';
 import CsvImportDialog from './CsvImportDialog.jsx';
 import TradeDialog from './TradeDialog.jsx';
 
@@ -27,6 +28,7 @@ function colorForChange(v) {
  * trade was recorded). Renders nothing until there is at least one trade.
  */
 export default function TransactionsPanel() {
+  const t = useT();
   const transactions = usePortfolioStore((s) => s.transactions);
   const deleteTransaction = usePortfolioStore((s) => s.deleteTransaction);
   const holdings = usePortfolioStore((s) => s.holdings);
@@ -43,17 +45,17 @@ export default function TransactionsPanel() {
 
   // Open the editor for a trade, pairing it with its holding (or a minimal
   // holding-like built from the entry, for a symbol no longer held).
-  const openEdit = (t) => {
+  const openEdit = (tx) => {
     const holding =
-      holdings.find((h) => h.symbol === t.symbol) || {
+      holdings.find((h) => h.symbol === tx.symbol) || {
         id: null,
-        symbol: t.symbol,
-        type: t.type || 'other',
-        currency: t.currency || 'USD',
+        symbol: tx.symbol,
+        type: tx.type || 'other',
+        currency: tx.currency || 'USD',
         shares: 0,
         avgCost: 0,
       };
-    setEditing({ tx: t, holding });
+    setEditing({ tx, holding });
   };
 
   const totalRealized = useMemo(() => {
@@ -81,37 +83,37 @@ export default function TransactionsPanel() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: theme.space(2), flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: theme.space(1), fontWeight: 700, fontSize: 13, color: theme.colors.text }}>
           <History size={15} style={{ color: theme.colors.accent }} />
-          Activity ({rows.length})
+          {t('activity.title', { count: rows.length })}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: theme.space(3) }}>
           <button
             type="button"
             className="btn-ghost"
             onClick={() => setImporting(true)}
-            title="Import a broker CSV of trades"
+            title={t('activity.importCsvTitle')}
             style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: theme.colors.accent }}
           >
-            <Upload size={14} /> Import CSV
+            <Upload size={14} /> {t('activity.importCsv')}
           </button>
           {rows.length > 0 && (
             <button
               type="button"
               className="btn-ghost"
               onClick={() => downloadTextFile('pt-trades.csv', tradesToCsv(transactions), 'text/csv')}
-              title="Export your trades as a CSV (re-importable)"
+              title={t('activity.exportCsvTitle')}
               style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: theme.colors.accent }}
             >
-              <Download size={14} /> Export CSV
+              <Download size={14} /> {t('activity.exportCsv')}
             </button>
           )}
           {hasDividends && (
             <div style={{ display: 'flex', alignItems: 'baseline', gap: theme.space(1) }}>
               <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4, color: theme.colors.textDim }}>
-                Dividends
+                {t('activity.dividends')}
               </span>
               <span
                 style={{ fontSize: 15, fontWeight: 800, fontFamily: theme.mono, color: theme.colors.gold }}
-                title="Net dividends received (after withholding), converted to your display currency"
+                title={t('activity.dividendsChipTitle')}
               >
                 {fmtMoney(totalDividends, displayCurrency)}
               </span>
@@ -120,11 +122,11 @@ export default function TransactionsPanel() {
           {rows.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'baseline', gap: theme.space(1) }}>
               <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4, color: theme.colors.textDim }}>
-                Realized P/L
+                {t('activity.realizedPl')}
               </span>
               <span
                 style={{ fontSize: 15, fontWeight: 800, fontFamily: theme.mono, color: colorForChange(totalRealized) }}
-                title="Realized capital gains from recorded sells (average-cost)"
+                title={t('activity.realizedPlChipTitle')}
               >
                 {fmtMoney(totalRealized, displayCurrency)}
               </span>
@@ -145,16 +147,15 @@ export default function TransactionsPanel() {
 
       {rows.length === 0 ? (
         <div style={{ fontSize: 12.5, color: theme.colors.textDim }}>
-          Record buys/sells with the <b>Buy / Sell</b> buttons on your asset cards — or import your broker's
-          CSV — to track realized profit &amp; loss here. Received dividends can be logged from the
-          <b> Dividend Income</b> panel and show up here too.
+          {t('activity.emptyBefore')}<b>{t('activity.emptyBuySell')}</b>{t('activity.emptyMiddle')}
+          <b>{t('activity.emptyDividendIncome')}</b>{t('activity.emptyAfter')}
         </div>
       ) : (
       <div style={{ overflowX: 'auto', border: `1px solid ${theme.colors.border}`, borderRadius: theme.radius.sm }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: theme.colors.bgElev }}>
-              {['Date', 'Side', 'Symbol', 'Qty', 'Price', 'Fee', 'Realized P/L', ''].map((h, i) => (
+              {[t('activity.colDate'), t('activity.colSide'), t('activity.colSymbol'), t('activity.colQty'), t('activity.colPrice'), t('activity.colFee'), t('activity.colRealizedPl'), ''].map((h, i) => (
                 <th
                   key={i}
                   style={{
@@ -172,18 +173,18 @@ export default function TransactionsPanel() {
             </tr>
           </thead>
           <tbody>
-            {visible.map((t) => {
-              const isSell = t.side === 'sell';
-              const isDividend = t.side === 'dividend';
+            {visible.map((tx) => {
+              const isSell = tx.side === 'sell';
+              const isDividend = tx.side === 'dividend';
               const badge = isDividend
                 ? { bg: theme.colors.gold, fg: theme.colors.gold, text: 'DIV' }
                 : isSell
                 ? { bg: theme.colors.down, fg: theme.colors.down, text: 'SELL' }
                 : { bg: theme.colors.up, fg: theme.colors.up, text: 'BUY' };
-              const net = isDividend ? Number(t.amount || 0) - Number(t.wht || 0) : 0;
+              const net = isDividend ? Number(tx.amount || 0) - Number(tx.wht || 0) : 0;
               return (
-                <tr key={t.id}>
-                  <td style={{ ...td, color: theme.colors.textDim }}>{String(t.at).slice(0, 10)}</td>
+                <tr key={tx.id}>
+                  <td style={{ ...td, color: theme.colors.textDim }}>{String(tx.at).slice(0, 10)}</td>
                   <td style={td}>
                     <span
                       className="badge"
@@ -192,7 +193,7 @@ export default function TransactionsPanel() {
                       {badge.text}
                     </span>
                   </td>
-                  <td style={{ ...td, fontFamily: theme.mono, fontWeight: 700, color: theme.colors.text }}>{t.symbol}</td>
+                  <td style={{ ...td, fontFamily: theme.mono, fontWeight: 700, color: theme.colors.text }}>{tx.symbol}</td>
                   {isDividend ? (
                     <>
                       {/* Qty / per-share Price don't apply to a cash dividend. */}
@@ -200,28 +201,37 @@ export default function TransactionsPanel() {
                       <td style={{ ...td, ...right, color: theme.colors.textFaint }}>—</td>
                       <td
                         style={{ ...td, ...right, color: theme.colors.textDim }}
-                        title="Withholding tax deducted"
+                        title={t('activity.whtTitle')}
                       >
-                        {Number(t.wht) > 0 ? fmtMoney(t.wht, t.currency) : '—'}
+                        {Number(tx.wht) > 0 ? fmtMoney(tx.wht, tx.currency) : '—'}
                       </td>
                       <td
                         style={{ ...td, ...right, fontWeight: 700, color: theme.colors.gold }}
-                        title={`Dividend received: gross ${fmtMoney(t.amount, t.currency)}${Number(t.wht) > 0 ? `, net of ${fmtMoney(t.wht, t.currency)} withholding` : ''}`}
+                        title={
+                          Number(tx.wht) > 0
+                            ? t('activity.dividendCellTitleNet', {
+                                gross: fmtMoney(tx.amount, tx.currency),
+                                wht: fmtMoney(tx.wht, tx.currency),
+                              })
+                            : t('activity.dividendCellTitleGross', {
+                                gross: fmtMoney(tx.amount, tx.currency),
+                              })
+                        }
                       >
-                        {fmtMoney(net, t.currency)}
+                        {fmtMoney(net, tx.currency)}
                       </td>
                     </>
                   ) : (
                     <>
                       <td style={{ ...td, ...right, color: theme.colors.text }}>
-                        {fmtNumber(t.qty, Number.isInteger(t.qty) ? 0 : 4)}
+                        {fmtNumber(tx.qty, Number.isInteger(tx.qty) ? 0 : 4)}
                       </td>
-                      <td style={{ ...td, ...right, color: theme.colors.text }}>{fmtMoney(t.price, t.currency)}</td>
+                      <td style={{ ...td, ...right, color: theme.colors.text }}>{fmtMoney(tx.price, tx.currency)}</td>
                       <td style={{ ...td, ...right, color: theme.colors.textDim }}>
-                        {t.fee > 0 ? fmtMoney(t.fee, t.currency) : '—'}
+                        {tx.fee > 0 ? fmtMoney(tx.fee, tx.currency) : '—'}
                       </td>
-                      <td style={{ ...td, ...right, fontWeight: 700, color: isSell ? colorForChange(t.realized) : theme.colors.textFaint }}>
-                        {isSell ? fmtMoney(t.realized, t.currency) : '—'}
+                      <td style={{ ...td, ...right, fontWeight: 700, color: isSell ? colorForChange(tx.realized) : theme.colors.textFaint }}>
+                        {isSell ? fmtMoney(tx.realized, tx.currency) : '—'}
                       </td>
                     </>
                   )}
@@ -230,9 +240,9 @@ export default function TransactionsPanel() {
                       <button
                         type="button"
                         className="btn-ghost"
-                        onClick={() => openEdit(t)}
-                        title="Edit this trade (qty / price / fee / date) — recomputes your position"
-                        aria-label={`Edit ${t.side} ${t.symbol}`}
+                        onClick={() => openEdit(tx)}
+                        title={t('activity.editTradeTitle')}
+                        aria-label={t('activity.editAria', { side: tx.side, symbol: tx.symbol })}
                         style={{ padding: 4, lineHeight: 0, color: theme.colors.textDim }}
                       >
                         <Pencil size={14} />
@@ -241,9 +251,9 @@ export default function TransactionsPanel() {
                     <button
                       type="button"
                       className="btn-ghost"
-                      onClick={() => deleteTransaction(t.id)}
-                      title={isDividend ? 'Delete this dividend entry' : 'Delete this trade — recomputes your position'}
-                      aria-label={`Delete ${t.side} ${t.symbol}`}
+                      onClick={() => deleteTransaction(tx.id)}
+                      title={isDividend ? t('activity.deleteDividendTitle') : t('activity.deleteTradeTitle')}
+                      aria-label={t('activity.deleteAria', { side: tx.side, symbol: tx.symbol })}
                       style={{ padding: 4, lineHeight: 0, color: theme.colors.down }}
                     >
                       <Trash2 size={14} />
@@ -265,15 +275,13 @@ export default function TransactionsPanel() {
           style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: theme.colors.accent }}
         >
           {showAll ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          {showAll ? 'Show recent only' : `Show all ${rows.length} trades`}
+          {showAll ? t('activity.showRecent') : t('activity.showAll', { count: rows.length })}
         </button>
       )}
 
       {rows.length > 0 && (
         <div style={{ fontSize: 10.5, color: theme.colors.textFaint }}>
-          Records of what you did at your broker — realized P/L uses the average-cost method; dividends are
-          shown net of withholding. Edit or delete any entry — your position and every later sell's realized P/L
-          recompute in date order. CSV export covers trades only.
+          {t('activity.footnote')}
         </div>
       )}
     </div>

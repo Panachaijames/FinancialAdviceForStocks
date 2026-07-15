@@ -21,6 +21,7 @@ import HoldingEditor from './HoldingEditor.jsx';
 import TradeDialog from './TradeDialog.jsx';
 import AlertDialog from './AlertDialog.jsx';
 import { realizedBySymbol } from '../lib/trades.js';
+import { useT } from '../lib/i18n.js';
 
 const DIV_TYPES = new Set(['us_stock', 'etf', 'th_stock']);
 
@@ -60,6 +61,7 @@ function extendedQuote(q) {
  *   onOpen():  called when the card body (not a button) is clicked.
  */
 export default function AssetCard({ holding, onOpen }) {
+  const t = useT();
   const { symbol, type, name, shares, avgCost } = holding;
   const native = holding.currency || (type === 'th_stock' ? 'THB' : 'USD');
   const meta = assetMeta(type);
@@ -171,7 +173,7 @@ export default function AssetCard({ holding, onOpen }) {
         className={`panel ${cardStyles.card}`}
         role="button"
         tabIndex={0}
-        aria-label={`Open ${symbol} chart`}
+        aria-label={t('card.openChartAria', { symbol })}
         onClick={() => onOpen && onOpen()}
         onKeyDown={(e) => {
           if (e.target !== e.currentTarget) return; // let inner buttons handle their own keys
@@ -222,8 +224,8 @@ export default function AssetCard({ holding, onOpen }) {
             <button
               type="button"
               className="btn-ghost"
-              aria-label="Set price alert"
-              title="Set a price alert"
+              aria-label={t('card.setPriceAlertAria')}
+              title={t('card.setPriceAlertTitle')}
               onClick={(e) => {
                 stop(e);
                 setAlerting(true);
@@ -235,8 +237,8 @@ export default function AssetCard({ holding, onOpen }) {
             <button
               type="button"
               className="btn-ghost"
-              aria-label="Edit holding"
-              title="Edit"
+              aria-label={t('card.editHoldingAria')}
+              title={t('card.editTitle')}
               onClick={(e) => {
                 stop(e);
                 setEditing(true);
@@ -248,15 +250,15 @@ export default function AssetCard({ holding, onOpen }) {
             <button
               type="button"
               className="btn-ghost"
-              aria-label="Remove holding"
-              title="Remove"
+              aria-label={t('card.removeHoldingAria')}
+              title={t('card.removeTitle')}
               onClick={(e) => {
                 stop(e);
                 removeHolding(holding.id);
                 snackbar.push({
                   id: 'undo-remove', // single-level: consecutive removes replace it
-                  message: `Removed ${symbol}`,
-                  actionLabel: 'Undo',
+                  message: t('card.removedMsg', { symbol }),
+                  actionLabel: t('card.undo'),
                   onAction: () => restoreRemoved(),
                   duration: 8000,
                 });
@@ -274,7 +276,7 @@ export default function AssetCard({ holding, onOpen }) {
             <span
               className="skeleton"
               style={{ display: 'inline-block', width: 90, height: 20 }}
-              aria-label="Loading price"
+              aria-label={t('card.loadingPriceAria')}
             />
           ) : (
             <span
@@ -302,7 +304,7 @@ export default function AssetCard({ holding, onOpen }) {
         {ext && (
           <div
             style={{ display: 'flex', alignItems: 'baseline', gap: theme.space(1), marginTop: -theme.space(1) }}
-            title={`${ext.label === 'Pre-mkt' ? 'Pre-market' : 'After hours'} price`}
+            title={ext.label === 'Pre-mkt' ? t('card.preMarketPriceTitle') : t('card.afterHoursPriceTitle')}
           >
             <span
               style={{
@@ -313,7 +315,11 @@ export default function AssetCard({ holding, onOpen }) {
                 color: theme.colors.textFaint,
               }}
             >
-              {ext.label}
+              {ext.label === 'Pre-mkt'
+                ? t('card.extPreMkt')
+                : ext.label === 'After hrs'
+                  ? t('card.extAfterHrs')
+                  : t('card.extOvernight')}
             </span>
             <span style={{ fontSize: 13, fontWeight: 700, fontFamily: theme.mono, color: theme.colors.text }}>
               {fmtMoney(convert(ext.price, native), displayCurrency)}
@@ -340,7 +346,7 @@ export default function AssetCard({ holding, onOpen }) {
         {/* Live-quote failure: values below fall back to cost basis */}
         {priceMissing && (
           <div style={{ fontSize: 11, color: theme.colors.textDim }}>
-            Live price unavailable — showing cost basis
+            {t('card.livePriceUnavailable')}
           </div>
         )}
 
@@ -355,7 +361,7 @@ export default function AssetCard({ holding, onOpen }) {
         >
           <div style={{ color: theme.colors.textDim }}>
             <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.4 }}>
-              Holdings
+              {t('card.holdings')}
             </div>
             <div style={{ color: theme.colors.text, fontFamily: theme.mono, fontWeight: 600 }}>
               {fmtNumber(Number(shares) || 0, Number.isInteger(Number(shares)) ? 0 : 4)} @{' '}
@@ -371,7 +377,7 @@ export default function AssetCard({ holding, onOpen }) {
                 color: theme.colors.textDim,
               }}
             >
-              Market Value
+              {t('card.marketValue')}
             </div>
             <div style={{ color: theme.colors.text, fontFamily: theme.mono, fontWeight: 700 }}>
               {priceLoading ? (
@@ -379,7 +385,7 @@ export default function AssetCard({ holding, onOpen }) {
               ) : priceMissing ? (
                 <div
                   style={{ color: theme.colors.textDim }}
-                  title="No live price — valued at your cost"
+                  title={t('card.noLivePriceTitle')}
                 >
                   <CountUp value={mvDisplay} format={(n) => fmtMoney(n, displayCurrency)} />
                 </div>
@@ -407,7 +413,7 @@ export default function AssetCard({ holding, onOpen }) {
               color: theme.colors.textDim,
             }}
           >
-            Total P/L
+            {t('card.totalPL')}
           </span>
           {priceLoading ? (
             <span className="skeleton" style={{ display: 'inline-block', width: 70, height: 13 }} />
@@ -429,7 +435,7 @@ export default function AssetCard({ holding, onOpen }) {
         {realized && Math.abs(realized.realized) > 0.005 && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: -theme.space(1) }}>
             <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.4, color: theme.colors.textDim }}>
-              Realized
+              {t('card.realized')}
             </span>
             <span style={{ fontSize: 12, fontWeight: 700, fontFamily: theme.mono, color: colorForChange(realized.realized) }}>
               {fmtMoney(convert(realized.realized, realized.currency), displayCurrency)}
@@ -444,9 +450,9 @@ export default function AssetCard({ holding, onOpen }) {
             className="btn"
             onClick={() => setTrading('buy')}
             style={{ flex: 1, justifyContent: 'center', fontSize: 12, fontWeight: 700, color: theme.colors.up, borderColor: theme.colors.up + '55' }}
-            title="Record a buy you made at your broker"
+            title={t('card.buyTitle')}
           >
-            Buy
+            {t('card.buy')}
           </button>
           <button
             type="button"
@@ -454,9 +460,9 @@ export default function AssetCard({ holding, onOpen }) {
             onClick={() => setTrading('sell')}
             disabled={(Number(shares) || 0) <= 0}
             style={{ flex: 1, justifyContent: 'center', fontSize: 12, fontWeight: 700, color: theme.colors.down, borderColor: theme.colors.down + '55', opacity: (Number(shares) || 0) > 0 ? 1 : 0.45 }}
-            title="Record a sell — realized P/L is calculated against your average cost"
+            title={t('card.sellTitle')}
           >
-            Sell
+            {t('card.sell')}
           </button>
         </div>
 
@@ -473,8 +479,8 @@ export default function AssetCard({ holding, onOpen }) {
             }}
           >
             <span aria-hidden="true">💰</span>
-            Div: {divLine.yieldPct != null ? `${Number(divLine.yieldPct).toFixed(2)}%` : '—'} ·{' '}
-            {fmtMoney(divLine.annual, displayCurrency)}/yr
+            {t('card.divLabel')} {divLine.yieldPct != null ? `${Number(divLine.yieldPct).toFixed(2)}%` : '—'} ·{' '}
+            {fmtMoney(divLine.annual, displayCurrency)}{t('card.perYear')}
           </div>
         )}
       </SpotlightCard>

@@ -8,6 +8,7 @@ import useFunds from '../../hooks/useFunds.js';
 import useFx from '../../hooks/useFx.js';
 import { searchFunds } from '../../api/client.js';
 import { PanelHeader } from './SavingsPanel.jsx';
+import { useT } from '../../lib/i18n.js';
 
 const dim = { fontSize: 11, color: theme.colors.textDim, textTransform: 'uppercase', letterSpacing: 0.4 };
 
@@ -16,6 +17,7 @@ const dim = { fontSize: 11, color: theme.colors.textDim, textTransform: 'upperca
  * units, and see daily NAV + value (in the display currency). NAV is in THB.
  */
 export default function FundsPanel() {
+  const t = useT();
   const { funds } = useFunds();
   const addFund = useFundsStore((s) => s.addFund);
   const updateFund = useFundsStore((s) => s.updateFund);
@@ -63,7 +65,7 @@ export default function FundsPanel() {
 
   return (
     <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: theme.space(3) }}>
-      <PanelHeader icon={<PiggyBank size={16} />} title="Thai Funds (RMF / LTF / SSF)" />
+      <PanelHeader icon={<PiggyBank size={16} />} title={t('funds.title')} />
 
       {/* Search */}
       <div style={{ position: 'relative' }}>
@@ -75,7 +77,7 @@ export default function FundsPanel() {
           <input
             className="input"
             style={{ paddingLeft: 32 }}
-            placeholder="Search a fund (e.g. K-BLRMF, RMF, SCB…)"
+            placeholder={t('funds.searchPlaceholder')}
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
@@ -123,7 +125,7 @@ export default function FundsPanel() {
                   </span>
                 </span>
                 {tracked.has(f.projId) ? (
-                  <span style={{ fontSize: 11, color: theme.colors.textFaint }}>added</span>
+                  <span style={{ fontSize: 11, color: theme.colors.textFaint }}>{t('funds.added')}</span>
                 ) : (
                   <Plus size={15} style={{ color: theme.colors.accent, flexShrink: 0 }} />
                 )}
@@ -131,13 +133,13 @@ export default function FundsPanel() {
             ))}
           </div>
         )}
-        {searching && <div style={{ fontSize: 11, color: theme.colors.textFaint, marginTop: 4 }}>Searching…</div>}
+        {searching && <div style={{ fontSize: 11, color: theme.colors.textFaint, marginTop: 4 }}>{t('funds.searching')}</div>}
       </div>
 
       {/* Tracked funds */}
       {funds.length === 0 ? (
         <div style={{ fontSize: 13, color: theme.colors.textDim }}>
-          Search and add your RMF/LTF/SSF funds to track daily NAV and value here (counts toward Net Worth).
+          {t('funds.emptyState')}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: theme.space(2) }}>
@@ -150,7 +152,7 @@ export default function FundsPanel() {
                     <span style={{ fontWeight: 700, fontFamily: theme.mono, color: theme.colors.text }}>{f.abbr}</span>
                     <span style={{ display: 'block', fontSize: 11, color: theme.colors.textDim, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 220 }}>{f.name}</span>
                   </div>
-                  <button type="button" className="btn-ghost" aria-label={`Remove ${f.abbr}`} onClick={() => removeFund(f.id)} style={{ padding: 4, lineHeight: 0, color: theme.colors.down }}>
+                  <button type="button" className="btn-ghost" aria-label={t('funds.removeAria', { abbr: f.abbr })} onClick={() => removeFund(f.id)} style={{ padding: 4, lineHeight: 0, color: theme.colors.down }}>
                     <Trash2 size={14} />
                   </button>
                 </div>
@@ -169,7 +171,7 @@ export default function FundsPanel() {
                     {f.navDate && <span style={{ fontSize: 10, color: theme.colors.textFaint }}> · {f.navDate}</span>}
                   </span>
                   <span style={{ marginLeft: 'auto', textAlign: 'right' }}>
-                    <span style={dim}>Value</span>{' '}
+                    <span style={dim}>{t('funds.value')}</span>{' '}
                     <span style={{ fontFamily: theme.mono, fontWeight: 800, color: theme.colors.text }}>{fmtMoney(valueDisplay, displayCurrency)}</span>
                     {f.plPct != null && (
                       <span style={{ fontSize: 12, fontWeight: 700, marginLeft: 6, color: f.plPct >= 0 ? theme.colors.up : theme.colors.down }}>
@@ -181,11 +183,11 @@ export default function FundsPanel() {
 
                 <div style={{ display: 'flex', gap: theme.space(2) }}>
                   <label style={{ flex: 1 }}>
-                    <span style={{ ...dim, display: 'block', marginBottom: 2 }}>Units</span>
+                    <span style={{ ...dim, display: 'block', marginBottom: 2 }}>{t('funds.units')}</span>
                     <input className="input" type="number" inputMode="decimal" step="any" min="0" value={f.units || ''} placeholder="0" onChange={(e) => updateFund(f.id, { units: e.target.value })} />
                   </label>
                   <label style={{ flex: 1 }}>
-                    <span style={{ ...dim, display: 'block', marginBottom: 2 }}>Avg cost (฿/unit)</span>
+                    <span style={{ ...dim, display: 'block', marginBottom: 2 }}>{t('funds.avgCost')}</span>
                     <input className="input" type="number" inputMode="decimal" step="any" min="0" value={f.avgCost || ''} placeholder="0" onChange={(e) => updateFund(f.id, { avgCost: e.target.value })} />
                   </label>
                 </div>
@@ -195,7 +197,7 @@ export default function FundsPanel() {
         </div>
       )}
       <div style={{ fontSize: 10, color: theme.colors.textFaint }}>
-        NAV from the Thai SEC (updated once per business day). Values shown in {displayCurrency}.
+        {t('funds.footer', { currency: displayCurrency })}
       </div>
     </div>
   );

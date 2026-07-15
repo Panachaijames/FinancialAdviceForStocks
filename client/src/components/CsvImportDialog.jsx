@@ -4,6 +4,7 @@ import { theme } from '../lib/theme.js';
 import { fmtNumber } from '../lib/format.js';
 import { parseTradesCsv } from '../lib/csvImport.js';
 import { usePortfolioStore } from '../store/portfolioStore.js';
+import { useT } from '../lib/i18n.js';
 
 /**
  * Import a broker CSV of trades into the ledger. Accepts a picked file or
@@ -14,6 +15,7 @@ import { usePortfolioStore } from '../store/portfolioStore.js';
  * Sell buttons; unknown symbols become new holdings automatically.
  */
 export default function CsvImportDialog({ onClose }) {
+  const t = useT();
   const importTrades = usePortfolioStore((s) => s.importTrades);
   const [text, setText] = useState('');
   const [fileName, setFileName] = useState('');
@@ -44,13 +46,13 @@ export default function CsvImportDialog({ onClose }) {
         if (e.target === e.currentTarget) onClose && onClose();
       }}
     >
-      <div className="modal-card" role="dialog" aria-modal="true" aria-label="Import trades CSV" style={{ maxWidth: 640, width: '100%', maxHeight: '86vh', overflow: 'auto' }} onMouseDown={(e) => e.stopPropagation()}>
+      <div className="modal-card" role="dialog" aria-modal="true" aria-label={t('csv.dialogLabel')} style={{ maxWidth: 640, width: '100%', maxHeight: '86vh', overflow: 'auto' }} onMouseDown={(e) => e.stopPropagation()}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: theme.space(3) }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: theme.space(1), fontWeight: 700, fontSize: 15, color: theme.colors.text }}>
             <Upload size={16} style={{ color: theme.colors.accent }} />
-            Import trades from CSV
+            {t('csv.title')}
           </div>
-          <button type="button" className="btn-ghost" onClick={() => onClose && onClose()} aria-label="Close" style={{ padding: theme.space(1), lineHeight: 0 }}>
+          <button type="button" className="btn-ghost" onClick={() => onClose && onClose()} aria-label={t('csv.close')} style={{ padding: theme.space(1), lineHeight: 0 }}>
             <X size={18} />
           </button>
         </div>
@@ -59,33 +61,33 @@ export default function CsvImportDialog({ onClose }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: theme.space(3) }}>
             <div style={{ padding: theme.space(3), borderRadius: theme.radius.md, background: theme.colors.bgElev, borderLeft: `3px solid ${result.skipped.length ? theme.colors.warn : theme.colors.up}` }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: theme.colors.text }}>
-                ✅ Imported {result.applied} trade{result.applied === 1 ? '' : 's'}
+                ✅ {t('csv.imported', { count: result.applied })}
               </div>
               {result.skipped.length > 0 && (
                 <div style={{ fontSize: 12, color: theme.colors.warn, marginTop: theme.space(1) }}>
-                  Skipped {result.skipped.length}:{' '}
+                  {t('csv.skipped', { count: result.skipped.length })}{' '}
                   {result.skipped.slice(0, 5).map((s, i) => (
                     <div key={i}>· {s}</div>
                   ))}
-                  {result.skipped.length > 5 ? `…and ${result.skipped.length - 5} more` : ''}
+                  {result.skipped.length > 5 ? t('csv.andMore', { count: result.skipped.length - 5 }) : ''}
                 </div>
               )}
             </div>
             <button type="button" className="btn btn-primary" onClick={() => onClose && onClose()} style={{ alignSelf: 'flex-end' }}>
-              Done
+              {t('csv.done')}
             </button>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: theme.space(3) }}>
             <div style={{ fontSize: 12, color: theme.colors.textDim, lineHeight: 1.6 }}>
-              Needs columns for <b>date, side (buy/sell), symbol, quantity, price</b> — fee/commission optional.
-              Header names are matched flexibly (e.g. "Trade Date", "Action", "Ticker", "Shares", "Commission").
-              Trades apply oldest-first with the same average-cost math as the Buy/Sell buttons.
+              {t('csv.needsColumnsPre')} <b>{t('csv.needsColumnsBold')}</b> {t('csv.needsColumnsPost')}{' '}
+              {t('csv.headerFlexible')}{' '}
+              {t('csv.tradesOldestFirst')}
             </div>
 
             <label className="btn" style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12.5 }}>
               <FileUp size={14} />
-              {fileName || 'Choose CSV file…'}
+              {fileName || t('csv.chooseFile')}
               <input type="file" accept=".csv,text/csv,text/plain" onChange={pickFile} style={{ display: 'none' }} />
             </label>
 
@@ -93,7 +95,7 @@ export default function CsvImportDialog({ onClose }) {
               className="input"
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder={'…or paste CSV here, e.g.\ndate,side,symbol,qty,price,fee\n2026-01-15,buy,AAPL,10,150.25,1.2'}
+              placeholder={t('csv.pastePlaceholder')}
               rows={6}
               style={{ width: '100%', resize: 'vertical', fontFamily: theme.mono, fontSize: 12 }}
             />
@@ -103,20 +105,20 @@ export default function CsvImportDialog({ onClose }) {
                 {parsed.errors.slice(0, 8).map((e, i) => (
                   <div key={i}>⚠ {e}</div>
                 ))}
-                {parsed.errors.length > 8 ? `…and ${parsed.errors.length - 8} more` : ''}
+                {parsed.errors.length > 8 ? t('csv.andMore', { count: parsed.errors.length - 8 }) : ''}
               </div>
             )}
 
             {parsed && parsed.trades.length > 0 && (
               <>
                 <div style={{ fontSize: 12.5, fontWeight: 700, color: theme.colors.text }}>
-                  Preview — {parsed.trades.length} trade{parsed.trades.length === 1 ? '' : 's'} ready
+                  {t('csv.previewReady', { count: parsed.trades.length })}
                 </div>
                 <div style={{ overflowX: 'auto', border: `1px solid ${theme.colors.border}`, borderRadius: theme.radius.sm, maxHeight: 200, overflowY: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr style={{ background: theme.colors.bgElev }}>
-                        {['Date', 'Side', 'Symbol', 'Qty', 'Price', 'Fee'].map((h, i) => (
+                        {[t('csv.colDate'), t('csv.colSide'), t('csv.colSymbol'), t('csv.colQty'), t('csv.colPrice'), t('csv.colFee')].map((h, i) => (
                           <th key={i} style={{ padding: '4px 8px', fontSize: 11, color: theme.colors.textDim, textAlign: i >= 3 ? 'right' : 'left' }}>{h}</th>
                         ))}
                       </tr>
@@ -140,7 +142,7 @@ export default function CsvImportDialog({ onClose }) {
 
             <div style={{ display: 'flex', gap: theme.space(2), justifyContent: 'flex-end' }}>
               <button type="button" className="btn btn-ghost" onClick={() => onClose && onClose()}>
-                Cancel
+                {t('csv.cancel')}
               </button>
               <button
                 type="button"
@@ -149,7 +151,7 @@ export default function CsvImportDialog({ onClose }) {
                 onClick={apply}
                 style={{ opacity: parsed && parsed.trades.length > 0 ? 1 : 0.55 }}
               >
-                Import {parsed && parsed.trades.length > 0 ? parsed.trades.length : ''} trade{parsed && parsed.trades.length === 1 ? '' : 's'}
+                {t('csv.importBtn', { count: parsed && parsed.trades.length > 0 ? parsed.trades.length : '' })}
               </button>
             </div>
           </div>

@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import { BrainCircuit, Play, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { theme } from '../../lib/theme.js';
 import { fmtMoney } from '../../lib/format.js';
+import { useT } from '../../lib/i18n.js';
 import { usePortfolioStore } from '../../store/portfolioStore.js';
 import { useForecastStore } from '../../store/forecastStore.js';
 import { getCandles, getNewsSentiment } from '../../api/client.js';
@@ -54,6 +55,7 @@ function businessDays(fromSec, n) {
  * naive baseline so you can see whether they beat "predict nothing".
  */
 export default function ForecastView() {
+  const t = useT();
   const holdings = usePortfolioStore((s) => s.holdings);
   const heldSymbols = useMemo(() => Array.from(new Set(holdings.map((h) => h.symbol))), [holdings]);
 
@@ -112,7 +114,7 @@ export default function ForecastView() {
     const runReturns = {};
     try {
       // ── 1. Data ──────────────────────────────────────────────────────────
-      const dataId = stageStart('Data', `${sym} · ${range} daily candles${feats.macro ? ' + macro series' : ''}…`);
+      const dataId = stageStart(t('forecast.stageData'), `${t('forecast.stageDataDetail', { sym, range })}${feats.macro ? t('forecast.macroSeriesSuffix') : ''}…`);
       const target = await getCandles(sym, range, '1d');
       let macro = null;
       if (feats.macro) {
@@ -124,26 +126,26 @@ export default function ForecastView() {
           macro[m.key] = fetched[i] || [];
         });
       }
-      stageDone(dataId, `${target.length} candles${macro ? ` · ${Object.values(macro).filter((c) => c.length > 9).length}/${MACRO_SERIES.length} macro series` : ''}`);
+      stageDone(dataId, `${t('forecast.candlesCount', { count: target.length })}${macro ? t('forecast.macroSeriesCount', { loaded: Object.values(macro).filter((c) => c.length > 9).length, total: MACRO_SERIES.length }) : ''}`);
 
       // Optional: historical daily news sentiment (US equities/ETFs only).
       let newsDaily = null;
       if (feats.news) {
-        const newsId = stageStart('News sentiment', 'fetching + scoring headlines (Finnhub)…');
+        const newsId = stageStart(t('forecast.stageNews'), t('forecast.stageNewsDetail'));
         try {
           const ns = await getNewsSentiment(sym, 365);
           if (ns && ns.supported && ns.daily && ns.daily.length) {
             newsDaily = ns.daily;
-            stageDone(newsId, `${ns.coverageDays} days covered · ${ns.articles} articles scored`);
+            stageDone(newsId, t('forecast.newsDone', { days: ns.coverageDays, articles: ns.articles }));
           } else {
-            stageDone(newsId, ns && !ns.supported ? 'not available for this symbol — feature skipped' : 'no news found — feature skipped');
+            stageDone(newsId, ns && !ns.supported ? t('forecast.newsNotAvailable') : t('forecast.newsNone'));
           }
         } catch {
-          stageDone(newsId, 'unavailable — feature skipped');
+          stageDone(newsId, t('forecast.newsUnavailable'));
         }
       }
 
-      const featId = stageStart('Features', 'building the feature matrix…');
+      const featId = stageStart(t('forecast.stageFeatures'), t('forecast.stageFeaturesDetail'));
       await new Promise((r) => setTimeout(r, 20));
       const ds = buildDataset(
         target,
@@ -156,10 +158,10 @@ export default function ForecastView() {
         },
         newsDaily
       );
-      stageDone(featId, `${ds.names.length} features × ${ds.rows.length} samples${newsDaily ? ' (incl. news)' : ''}`);
+      stageDone(featId, `${t('forecast.featuresDone', { features: ds.names.length, samples: ds.rows.length })}${newsDaily ? t('forecast.inclNews') : ''}`);
 
       const nRows = ds.rows.length;
-      if (nRows <= TEST_DAYS + 120) throw new Error('Not enough history after warmup — pick a longer range.');
+      if (nRows <= TEST_DAYS + 120) throw new Error(t('forecast.errNotEnoughHistory'));
       const trainRows = ds.rows.slice(0, nRows - TEST_DAYS);
       const trainY = ds.targets.slice(0, nRows - TEST_DAYS);
       const testRows = ds.rows.slice(nRows - TEST_DAYS);
@@ -168,7 +170,7 @@ export default function ForecastView() {
       const fDates = businessDays(ds.dates[ds.dates.length - 1], horizon);
 
       const forecasts = [];
-      const metrics = [{ model: 'Naive (no change)', color: theme.colors.textFaint, ...evaluateOneStep(testY.map(() => 0), testY) }];
+      const metrics = [{ model: t('forecast.naiveNoChange'), color: theme.colors.textFaint, ...evaluateOneStep(testY.map(() => 0), testY) }];
       let importance = null;
       let lstmHistory = null;
 
@@ -184,20 +186,20 @@ export default function ForecastView() {
         if (params.arimaAuto) {
           const maxP = Math.max(0, Math.min(8, Math.round(Number(params.arimaMaxP)) || 5));
           const maxQ = Math.max(0, Math.min(8, Math.round(Number(params.arimaMaxQ)) || 5));
-          const autoId = stageStart('Auto-ARIMA', `grid p≤${maxP}, q≤${maxQ} — selecting by AIC…`);
+          const autoId = stageStart(t('forecast.stageAutoArima'), t('forecast.autoArimaDetail', { maxP, maxQ }));
           await new Promise((r) => setTimeout(r, 20));
           // Search on the TRAIN portion so the order isn't chosen using holdout data.
           const auto = autoArima(logAll.slice(0, logAll.length - TEST_DAYS), { maxP, maxQ, criterion: 'aic' });
           p = auto.best.p;
           q = auto.best.q;
-          selectDetail = `auto-selected (${p},1,${q}) from ${auto.table.filter((r) => r.ok).length} candidates`;
+          selectDetail = t('forecast.autoSelected', { p, q, count: auto.table.filter((r) => r.ok).length });
           stageDone(autoId, selectDetail);
         } else {
           p = Math.max(0, Math.round(Number(params.arimaP)) || 0);
           q = Math.max(0, Math.round(Number(params.arimaQ)) || 0);
         }
 
-        const arimaId = stageStart(`ARIMA(${p},1,${q})`, 'fitting (Hannan–Rissanen)…');
+        const arimaId = stageStart(`ARIMA(${p},1,${q})`, t('forecast.arimaFitting'));
         await new Promise((r) => setTimeout(r, 20));
         const mTrain = fitArima(logAll.slice(0, logAll.length - TEST_DAYS), { p, q });
         const preds = arimaOneStepPreds(mTrain, returnsAll, returnsAll.length - TEST_DAYS);
@@ -213,7 +215,7 @@ export default function ForecastView() {
           closes: fc.mean.map(Math.exp),
           band: { lower: fc.lower95.map(Math.exp), upper: fc.upper95.map(Math.exp) },
         });
-        stageDone(arimaId, `fitted on ${returnsAll.length} returns · holdout direction ${m.dirAcc.toFixed(0)}%`);
+        stageDone(arimaId, t('forecast.arimaFitted', { returns: returnsAll.length, dir: m.dirAcc.toFixed(0) }));
         runModels.push({
           key: 'arima',
           short: `ARIMA(${p},1,${q})${params.arimaAuto ? '*' : ''}`,
@@ -235,11 +237,11 @@ export default function ForecastView() {
           gamma: Number(params.gamma) >= 0 ? Number(params.gamma) : 0,
           colsample: Number(params.colsample) > 0 && Number(params.colsample) <= 1 ? Number(params.colsample) : 1,
         };
-        const regDetail = `depth ${opts.maxDepth}, lr ${opts.learningRate}, λ ${opts.regLambda}, γ ${opts.gamma}, colsample ${opts.colsample}`;
+        const regDetail = t('forecast.regDetail', { depth: opts.maxDepth, lr: opts.learningRate, lambda: opts.regLambda, gamma: opts.gamma, colsample: opts.colsample });
 
         // Holdout model — early-stops on a validation tail to AUTO-PICK the
         // tree count (bestIteration), then scores the 60-day test window.
-        const g1 = stageStart('XGBoost — holdout model', `${maxTrees} trees max, ${regDetail}${earlyStop ? ` · early stop ${earlyStop}` : ''}`);
+        const g1 = stageStart(t('forecast.stageXgbHoldout'), `${t('forecast.xgbHoldoutDetail', { trees: maxTrees, reg: regDetail })}${earlyStop ? t('forecast.earlyStopSuffix', { n: earlyStop }) : ''}`);
         const mdl = await trainGBDT(trainRows, trainY, {
           ...opts,
           valFraction: earlyStop ? 0.15 : 0,
@@ -250,12 +252,12 @@ export default function ForecastView() {
         const m = evaluateOneStep(preds, testY);
         metrics.push({ model: 'XGBoost-style GBDT', color: SERIES_COLORS.gbdt, ...m });
         const chosenTrees = earlyStop ? mdl.bestIteration : maxTrees;
-        const valNote = earlyStop && mdl.bestScore != null ? ` · min val RMSE ${(mdl.bestScore * 100).toFixed(2)}%` : '';
-        stageDone(g1, `${earlyStop ? `best ${chosenTrees}/${maxTrees} trees (early-stopped)` : `${maxTrees} trees`}${valNote} · holdout direction ${m.dirAcc.toFixed(0)}%`);
+        const valNote = earlyStop && mdl.bestScore != null ? t('forecast.minValRmse', { v: (mdl.bestScore * 100).toFixed(2) }) : '';
+        stageDone(g1, `${earlyStop ? t('forecast.xgbBestTrees', { chosen: chosenTrees, max: maxTrees }) : t('forecast.xgbTrees', { max: maxTrees })}${valNote}${t('forecast.holdoutDirectionSuffix', { dir: m.dirAcc.toFixed(0) })}`);
 
         // Full model on ALL data, using the auto-tuned tree count so the
         // forecast isn't over/under-fit.
-        const g2 = stageStart('XGBoost — full model + forecast', `retraining ${chosenTrees} trees on all data…`);
+        const g2 = stageStart(t('forecast.stageXgbFull'), t('forecast.xgbFullDetail', { trees: chosenTrees }));
         const full = await trainGBDT(ds.rows, ds.targets, {
           ...opts,
           nTrees: chosenTrees,
@@ -274,11 +276,11 @@ export default function ForecastView() {
           closes: path.closes,
           band: bandFor(path.closes, m.rmse),
         });
-        stageDone(g2, `${chosenTrees} trees · top feature: ${importance[0]?.name || '—'} · ${horizon}-day path done`);
+        stageDone(g2, t('forecast.xgbFullDone', { trees: chosenTrees, feature: importance[0]?.name || '—', horizon }));
         runModels.push({
           key: 'gbdt',
           short: `XGB ${chosenTrees}t`,
-          detail: `${chosenTrees}${earlyStop ? `/${maxTrees} (early-stop)` : ''} trees, ${regDetail}`,
+          detail: `${chosenTrees}${earlyStop ? t('forecast.earlyStopFrac', { max: maxTrees }) : ''} ${t('forecast.treesWithReg', { reg: regDetail })}`,
           dirAcc: m.dirAcc,
           rmse: m.rmse,
         });
@@ -286,18 +288,18 @@ export default function ForecastView() {
 
       // ── 4. LSTM (TensorFlow.js — trained in the browser) ────────────────
       if (models.lstm) {
-        const tfId = stageStart('TensorFlow.js', 'loading (separate chunk)…');
+        const tfId = stageStart('TensorFlow.js', t('forecast.tfLoading'));
         const tf = await import('@tensorflow/tfjs');
         await tf.ready();
         const { trainLSTM } = await import('../../lib/forecast/lstm.js');
-        stageDone(tfId, `ready · backend: ${tf.getBackend()}`);
+        stageDone(tfId, t('forecast.tfReady', { backend: tf.getBackend() }));
         const lopts = {
           window: Math.max(10, Math.round(Number(params.window)) || 30),
           units: Math.max(4, Math.round(Number(params.units)) || 32),
           epochs: Math.min(500, Math.max(5, Math.round(Number(params.epochs)) || 60)),
           layers: 1, // single tuned layer — fast + reliable in-browser (see lstm.js)
         };
-        const lId = stageStart('LSTM — training', `${lopts.units} units · window ${lopts.window} · ${lopts.epochs} epochs`);
+        const lId = stageStart(t('forecast.stageLstmTraining'), t('forecast.lstmTrainDetail', { units: lopts.units, window: lopts.window, epochs: lopts.epochs }));
         let lastLoss = null;
         const l = await trainLSTM(tf, trainRows, trainY, {
           ...lopts,
@@ -309,12 +311,12 @@ export default function ForecastView() {
         lstmHistory = l.history;
         const ranEpochs = l.history.epochs || lopts.epochs;
         const bestNote = l.history.bestEpoch
-          ? ` · kept best epoch ${l.history.bestEpoch} (val ${l.history.bestValLoss != null ? l.history.bestValLoss.toFixed(3) : '—'})`
+          ? t('forecast.keptBestEpoch', { epoch: l.history.bestEpoch, val: l.history.bestValLoss != null ? l.history.bestValLoss.toFixed(3) : '—' })
           : '';
-        const stopped = l.history.stoppedEpoch ? ' (early-stopped)' : '';
-        stageDone(lId, `${ranEpochs}/${lopts.epochs} epochs${stopped}${bestNote}`);
+        const stopped = l.history.stoppedEpoch ? t('forecast.earlyStoppedParen') : '';
+        stageDone(lId, `${t('forecast.lstmEpochsDone', { ran: ranEpochs, total: lopts.epochs })}${stopped}${bestNote}`);
 
-        const sId = stageStart('LSTM — scoring + forecast', `${TEST_DAYS}-day holdout, then ${horizon}-day rollout…`);
+        const sId = stageStart(t('forecast.stageLstmScoring'), t('forecast.lstmScoringDetail', { days: TEST_DAYS, horizon }));
         const preds = [];
         for (let i = nRows - TEST_DAYS; i < nRows; i += 1) {
           preds.push(l.predictOne(ds.rows.slice(0, i + 1)));
@@ -332,11 +334,11 @@ export default function ForecastView() {
           closes: path.closes,
           band: bandFor(path.closes, m.rmse),
         });
-        stageDone(sId, `holdout direction ${m.dirAcc.toFixed(0)}% · path done`);
-        runModels.push({ key: 'lstm', short: `LSTM ${l.history.epochs || lopts.epochs}ep`, detail: `${lopts.layers >= 2 ? '2-layer ' : ''}${lopts.units} units, window ${lopts.window}, ${l.history.epochs || lopts.epochs}/${lopts.epochs} epochs${l.history.stoppedEpoch ? ' (early stop)' : ''}, final loss ${lastLoss != null ? lastLoss.toExponential(2) : '—'}`, dirAcc: m.dirAcc, rmse: m.rmse });
+        stageDone(sId, t('forecast.lstmScoringDone', { dir: m.dirAcc.toFixed(0) }));
+        runModels.push({ key: 'lstm', short: `LSTM ${l.history.epochs || lopts.epochs}ep`, detail: `${lopts.layers >= 2 ? t('forecast.twoLayerPrefix') : ''}${t('forecast.lstmRunDetail', { units: lopts.units, window: lopts.window, ran: l.history.epochs || lopts.epochs, total: lopts.epochs })}${l.history.stoppedEpoch ? t('forecast.earlyStopParen') : ''}${t('forecast.finalLoss', { loss: lastLoss != null ? lastLoss.toExponential(2) : '—' })}`, dirAcc: m.dirAcc, rmse: m.rmse });
       }
 
-      if (forecasts.length === 0) throw new Error('Enable at least one model.');
+      if (forecasts.length === 0) throw new Error(t('forecast.errEnableModel'));
 
       // ── 5. Ensemble (equal-weight mean of the enabled models) ───────────
       if (forecasts.length > 1) {
@@ -373,7 +375,7 @@ export default function ForecastView() {
         returns: runReturns,
       });
     } catch (e) {
-      setError((e && e.message) || 'Forecast failed');
+      setError((e && e.message) || t('forecast.errForecastFailed'));
       failRunningStages();
     } finally {
       runningRef.current = false;
@@ -393,19 +395,19 @@ export default function ForecastView() {
       <div className="panel" style={{ padding: theme.space(3), display: 'flex', flexDirection: 'column', gap: theme.space(3) }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: theme.space(1), fontWeight: 700, fontSize: 13, color: theme.colors.text }}>
           <BrainCircuit size={16} style={{ color: theme.colors.accent }} />
-          Forecast lab — LSTM · ARIMA · XGBoost-style boosting
+          {t('forecast.labTitle')}
           <span style={{ marginLeft: 'auto', fontSize: 10.5, fontWeight: 400, color: theme.colors.textFaint }}>
-            trains in your browser · nothing leaves your machine
+            {t('forecast.privacyNote')}
           </span>
         </div>
 
         <div style={{ display: 'flex', gap: theme.space(2), flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <label style={{ flex: '0 0 160px' }}>
-            <span style={field}>Symbol</span>
+            <span style={field}>{t('forecast.symbol')}</span>
             <input className="input" value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="AAPL, PTT.BK, BTC-USD…" onKeyDown={(e) => { if (e.key === 'Enter') run(); }} />
           </label>
           <div>
-            <span style={field}>History</span>
+            <span style={field}>{t('forecast.history')}</span>
             <div className="segmented" role="group">
               {RANGES.map((r) => (
                 <button key={r} className={`segmented-item${r === range ? ' active' : ''}`} onClick={() => setRange(r)} style={r === range ? { color: theme.colors.text } : undefined}>{r}</button>
@@ -413,7 +415,7 @@ export default function ForecastView() {
             </div>
           </div>
           <div>
-            <span style={field}>Horizon (days)</span>
+            <span style={field}>{t('forecast.horizonDays')}</span>
             <div className="segmented" role="group">
               {HORIZONS.map((h) => (
                 <button key={h} className={`segmented-item${h === horizon ? ' active' : ''}`} onClick={() => setHorizon(h)} style={h === horizon ? { color: theme.colors.text } : undefined}>{h}</button>
@@ -428,13 +430,13 @@ export default function ForecastView() {
             style={{ display: 'flex', alignItems: 'center', gap: 6, opacity: busy ? 0.6 : 1, marginLeft: 'auto' }}
           >
             {busy ? <Loader2 size={15} style={{ animation: 'pulse 1s linear infinite' }} /> : <Play size={15} />}
-            {busy ? 'Working…' : 'Run forecast'}
+            {busy ? t('forecast.working') : t('forecast.runForecast')}
           </button>
         </div>
 
         {heldSymbols.length > 0 && (
           <div style={{ display: 'flex', gap: theme.space(1), flexWrap: 'wrap', alignItems: 'center' }}>
-            <span style={{ fontSize: 11, color: theme.colors.textFaint }}>Your holdings:</span>
+            <span style={{ fontSize: 11, color: theme.colors.textFaint }}>{t('forecast.yourHoldings')}</span>
             {heldSymbols.slice(0, 10).map((s) => (
               <button key={s} type="button" className="chip" onClick={() => setSymbol(s)} style={chip(s === symbol.trim().toUpperCase())}>{s}</button>
             ))}
@@ -443,9 +445,9 @@ export default function ForecastView() {
 
         <div style={{ display: 'flex', gap: theme.space(4), flexWrap: 'wrap' }}>
           <div>
-            <span style={field}>Models</span>
+            <span style={field}>{t('forecast.models')}</span>
             <div style={{ display: 'flex', gap: theme.space(2), flexWrap: 'wrap' }}>
-              {[['arima', 'ARIMA', SERIES_COLORS.arima], ['gbdt', 'XGBoost-style', SERIES_COLORS.gbdt], ['lstm', 'LSTM (deep learning)', SERIES_COLORS.lstm]].map(([k, label, color]) => (
+              {[['arima', 'ARIMA', SERIES_COLORS.arima], ['gbdt', t('forecast.modelXgboostStyle'), SERIES_COLORS.gbdt], ['lstm', t('forecast.modelLstmDeep'), SERIES_COLORS.lstm]].map(([k, label, color]) => (
                 <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: models[k] ? theme.colors.text : theme.colors.textDim, cursor: 'pointer' }}>
                   <input type="checkbox" checked={models[k]} onChange={() => toggleModel(k)} style={{ accentColor: color }} />
                   <span style={{ width: 8, height: 8, borderRadius: 4, background: color, display: 'inline-block' }} />
@@ -455,10 +457,10 @@ export default function ForecastView() {
             </div>
           </div>
           <div>
-            <span style={field}>Feature groups</span>
+            <span style={field}>{t('forecast.featureGroups')}</span>
             <div style={{ display: 'flex', gap: theme.space(2), flexWrap: 'wrap' }}>
-              {[['technical', 'Technical indicators (13)'], ['macro', `Macro-economic (${MACRO_SERIES.length})`], ['news', 'News sentiment (3)'], ['calendar', 'Calendar (2)']].map(([k, label]) => (
-                <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: feats[k] ? theme.colors.text : theme.colors.textDim, cursor: 'pointer' }} title={k === 'news' ? 'Historical daily headline sentiment (Finnhub) — US stocks/ETFs only, ~1 year of coverage' : undefined}>
+              {[['technical', t('forecast.featTechnical')], ['macro', t('forecast.featMacro', { count: MACRO_SERIES.length })], ['news', t('forecast.featNews')], ['calendar', t('forecast.featCalendar')]].map(([k, label]) => (
+                <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: feats[k] ? theme.colors.text : theme.colors.textDim, cursor: 'pointer' }} title={k === 'news' ? t('forecast.newsTitle') : undefined}>
                   <input type="checkbox" checked={!!feats[k]} onChange={() => toggleFeat(k)} style={{ accentColor: theme.colors.accent }} />
                   {label}
                 </label>
@@ -468,36 +470,36 @@ export default function ForecastView() {
         </div>
 
         <button type="button" className="btn-ghost" onClick={() => setShowAdvanced((s) => !s)} style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: theme.colors.accent }}>
-          {showAdvanced ? <ChevronUp size={14} /> : <ChevronDown size={14} />} Hyperparameters
+          {showAdvanced ? <ChevronUp size={14} /> : <ChevronDown size={14} />} {t('forecast.hyperparameters')}
         </button>
         {showAdvanced && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: theme.space(2) }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: theme.colors.text, cursor: 'pointer' }}>
               <input type="checkbox" checked={!!params.arimaAuto} onChange={(e) => store.patchSetting('params', { arimaAuto: e.target.checked })} style={{ accentColor: SERIES_COLORS.arima }} />
-              Auto-ARIMA — grid-search the order and keep the best by AIC
+              {t('forecast.autoArimaToggle')}
             </label>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: theme.space(2) }}>
               {params.arimaAuto ? (
                 <>
-                  <label><span style={field}>Auto max p</span><input className="input" type="number" value={params.arimaMaxP} onChange={setP('arimaMaxP')} /></label>
-                  <label><span style={field}>Auto max q</span><input className="input" type="number" value={params.arimaMaxQ} onChange={setP('arimaMaxQ')} /></label>
+                  <label><span style={field}>{t('forecast.autoMaxP')}</span><input className="input" type="number" value={params.arimaMaxP} onChange={setP('arimaMaxP')} /></label>
+                  <label><span style={field}>{t('forecast.autoMaxQ')}</span><input className="input" type="number" value={params.arimaMaxQ} onChange={setP('arimaMaxQ')} /></label>
                 </>
               ) : (
                 <>
-                  <label><span style={field}>ARIMA p (AR lags)</span><input className="input" type="number" value={params.arimaP} onChange={setP('arimaP')} /></label>
-                  <label><span style={field}>ARIMA q (MA lags)</span><input className="input" type="number" value={params.arimaQ} onChange={setP('arimaQ')} /></label>
+                  <label><span style={field}>{t('forecast.arimaP')}</span><input className="input" type="number" value={params.arimaP} onChange={setP('arimaP')} /></label>
+                  <label><span style={field}>{t('forecast.arimaQ')}</span><input className="input" type="number" value={params.arimaQ} onChange={setP('arimaQ')} /></label>
                 </>
               )}
-              <label><span style={field}>Boosting trees (max)</span><input className="input" type="number" value={params.trees} onChange={setP('trees')} /></label>
-              <label><span style={field}>Tree depth</span><input className="input" type="number" value={params.depth} onChange={setP('depth')} /></label>
-              <label><span style={field}>Learning rate</span><input className="input" type="number" step="0.01" value={params.lr} onChange={setP('lr')} /></label>
-              <label title="reg_lambda — L2 penalty on leaf weights (shrinks them toward 0)"><span style={field}>XGB L2 (λ)</span><input className="input" type="number" step="0.5" value={params.regLambda} onChange={setP('regLambda')} /></label>
-              <label title="gamma — minimum gain to make a split (prunes weak splits)"><span style={field}>XGB min-split (γ)</span><input className="input" type="number" step="0.01" value={params.gamma} onChange={setP('gamma')} /></label>
-              <label title="colsample_bytree — fraction of features each tree may use"><span style={field}>XGB feature frac</span><input className="input" type="number" step="0.1" value={params.colsample} onChange={setP('colsample')} /></label>
-              <label title="Stop adding trees when validation RMSE hasn't improved for this many rounds (0 = off). The chosen count also trains the forecast model."><span style={field}>XGB early stop</span><input className="input" type="number" value={params.earlyStop} onChange={setP('earlyStop')} /></label>
-              <label><span style={field}>LSTM window</span><input className="input" type="number" value={params.window} onChange={setP('window')} /></label>
-              <label><span style={field}>LSTM units</span><input className="input" type="number" value={params.units} onChange={setP('units')} /></label>
-              <label><span style={field}>LSTM epochs</span><input className="input" type="number" value={params.epochs} onChange={setP('epochs')} /></label>
+              <label><span style={field}>{t('forecast.boostingTrees')}</span><input className="input" type="number" value={params.trees} onChange={setP('trees')} /></label>
+              <label><span style={field}>{t('forecast.treeDepth')}</span><input className="input" type="number" value={params.depth} onChange={setP('depth')} /></label>
+              <label><span style={field}>{t('forecast.learningRate')}</span><input className="input" type="number" step="0.01" value={params.lr} onChange={setP('lr')} /></label>
+              <label title={t('forecast.xgbL2Title')}><span style={field}>{t('forecast.xgbL2')}</span><input className="input" type="number" step="0.5" value={params.regLambda} onChange={setP('regLambda')} /></label>
+              <label title={t('forecast.xgbMinSplitTitle')}><span style={field}>{t('forecast.xgbMinSplit')}</span><input className="input" type="number" step="0.01" value={params.gamma} onChange={setP('gamma')} /></label>
+              <label title={t('forecast.xgbFeatureFracTitle')}><span style={field}>{t('forecast.xgbFeatureFrac')}</span><input className="input" type="number" step="0.1" value={params.colsample} onChange={setP('colsample')} /></label>
+              <label title={t('forecast.xgbEarlyStopTitle')}><span style={field}>{t('forecast.xgbEarlyStop')}</span><input className="input" type="number" value={params.earlyStop} onChange={setP('earlyStop')} /></label>
+              <label><span style={field}>{t('forecast.lstmWindow')}</span><input className="input" type="number" value={params.window} onChange={setP('window')} /></label>
+              <label><span style={field}>{t('forecast.lstmUnits')}</span><input className="input" type="number" value={params.units} onChange={setP('units')} /></label>
+              <label><span style={field}>{t('forecast.lstmEpochs')}</span><input className="input" type="number" value={params.epochs} onChange={setP('epochs')} /></label>
             </div>
           </div>
         )}
@@ -513,10 +515,10 @@ export default function ForecastView() {
             <div style={{ display: 'flex', alignItems: 'baseline', gap: theme.space(2), flexWrap: 'wrap' }}>
               <span style={{ fontWeight: 800, fontSize: 15, fontFamily: theme.mono, color: theme.colors.text }}>{result.symbol}</span>
               <span style={{ fontSize: 12.5, color: theme.colors.textDim }}>
-                {result.horizon}-day forecast · last close <b style={{ fontFamily: theme.mono, color: theme.colors.text }}>{fmtMoney(result.lastClose, result.currency)}</b>
+                {t('forecast.horizonForecast', { horizon: result.horizon })} · {t('forecast.lastClose')} <b style={{ fontFamily: theme.mono, color: theme.colors.text }}>{fmtMoney(result.lastClose, result.currency)}</b>
               </span>
               <span style={{ marginLeft: 'auto', fontSize: 11, color: theme.colors.textFaint }}>
-                {result.nSamples} training days · {result.nFeatures} features
+                {t('forecast.trainingDaysFeatures', { samples: result.nSamples, features: result.nFeatures })}
               </span>
             </div>
             <ForecastChart
@@ -527,19 +529,19 @@ export default function ForecastView() {
               height={320}
             />
             <div style={{ fontSize: 10.5, color: theme.colors.textFaint }}>
-              Dashed = model forecast · shaded = 95% band from each model's holdout error (uncertainty grows with √days)
+              {t('forecast.chartLegend')}
             </div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: theme.space(5) }}>
             {/* Holdout metrics */}
             <div className="panel" style={{ padding: theme.space(3), display: 'flex', flexDirection: 'column', gap: theme.space(2) }}>
-              <div style={{ fontWeight: 700, fontSize: 13, color: theme.colors.text }}>Holdout accuracy — last {TEST_DAYS} days (1-step)</div>
+              <div style={{ fontWeight: 700, fontSize: 13, color: theme.colors.text }}>{t('forecast.holdoutAccuracy', { days: TEST_DAYS })}</div>
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: theme.colors.bgElev }}>
-                      {['Model', 'RMSE', 'MAE', 'Direction'].map((h, i) => (
+                      {[t('forecast.thModel'), 'RMSE', 'MAE', t('forecast.thDirection')].map((h, i) => (
                         <th key={h} style={{ padding: '4px 8px', fontSize: 11, color: theme.colors.textDim, textAlign: i === 0 ? 'left' : 'right' }}>{h}</th>
                       ))}
                     </tr>
@@ -560,16 +562,14 @@ export default function ForecastView() {
                 </table>
               </div>
               <div style={{ fontSize: 10.5, color: theme.colors.textFaint, lineHeight: 1.5 }}>
-                RMSE/MAE are on daily log returns. Direction = % of days the sign was right — ~50% is a coin
-                flip; beating the naive row consistently is hard, which is the honest headline of daily-horizon
-                prediction.
+                {t('forecast.metricsNote')}
               </div>
             </div>
 
             {/* Feature importance */}
             {result.importance && (
               <div className="panel" style={{ padding: theme.space(3), display: 'flex', flexDirection: 'column', gap: theme.space(2) }}>
-                <div style={{ fontWeight: 700, fontSize: 13, color: theme.colors.text }}>What the boosting model looked at</div>
+                <div style={{ fontWeight: 700, fontSize: 13, color: theme.colors.text }}>{t('forecast.importanceTitle')}</div>
                 {result.importance.map((f) => (
                   <div key={f.name} style={{ display: 'flex', alignItems: 'center', gap: theme.space(2) }}>
                     <span style={{ flex: '0 0 120px', fontSize: 11.5, color: theme.colors.textDim, fontFamily: theme.mono, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
@@ -579,36 +579,27 @@ export default function ForecastView() {
                     <span style={{ flex: '0 0 44px', textAlign: 'right', fontSize: 11, fontFamily: theme.mono, color: theme.colors.text }}>{(f.value * 100).toFixed(1)}%</span>
                   </div>
                 ))}
-                <div style={{ fontSize: 10.5, color: theme.colors.textFaint }}>Share of total split gain (top 10 of {result.nFeatures})</div>
+                <div style={{ fontSize: 10.5, color: theme.colors.textFaint }}>{t('forecast.importanceNote', { features: result.nFeatures })}</div>
               </div>
             )}
 
             {/* LSTM training curve */}
             {result.lstmHistory && result.lstmHistory.loss.length > 1 && (
               <div className="panel" style={{ padding: theme.space(3), display: 'flex', flexDirection: 'column', gap: theme.space(2) }}>
-                <div style={{ fontWeight: 700, fontSize: 13, color: theme.colors.text }}>LSTM training curve</div>
+                <div style={{ fontWeight: 700, fontSize: 13, color: theme.colors.text }}>{t('forecast.lstmCurveTitle')}</div>
                 <LossSparkline loss={result.lstmHistory.loss} valLoss={result.lstmHistory.valLoss} />
                 <div style={{ fontSize: 10.5, color: theme.colors.textFaint }}>
-                  MSE per epoch — <span style={{ color: SERIES_COLORS.lstm }}>▬</span> train
-                  {result.lstmHistory.valLoss.some((v) => v != null) ? <> · <span style={{ color: theme.colors.textDim }}>▬</span> validation</> : null}
+                  {t('forecast.msePerEpoch')} <span style={{ color: SERIES_COLORS.lstm }}>▬</span> {t('forecast.train')}
+                  {result.lstmHistory.valLoss.some((v) => v != null) ? <> · <span style={{ color: theme.colors.textDim }}>▬</span> {t('forecast.validation')}</> : null}
                 </div>
               </div>
             )}
           </div>
 
           <div className="panel" style={{ padding: theme.space(3), borderLeft: `3px solid ${theme.colors.warn}`, fontSize: 12, color: theme.colors.textDim, lineHeight: 1.6 }}>
-            ⚠️ <b style={{ color: theme.colors.text }}>Read before believing the lines:</b> daily stock returns are
-            mostly noise — even good models rarely beat ~55% directional accuracy, and multi-day paths are
-            recursive guesses whose uncertainty (shaded bands) grows fast. These models know nothing about
-            tomorrow's news. Treat this page as an <b>experiment lab</b> for understanding models and features —
-            educational only, not financial advice, never a reason on its own to trade.
+            ⚠️ <b style={{ color: theme.colors.text }}>{t('forecast.disclaimerHeading')}</b> {t('forecast.disclaimerBody1')}<b>{t('forecast.experimentLab')}</b>{t('forecast.disclaimerBody2')}
             <div style={{ marginTop: theme.space(2), color: theme.colors.textFaint }}>
-              <b>On loss &amp; early stopping:</b> the loss can't fall to zero — it bottoms out near the symbol's own
-              daily volatility (a ~2%/day stock floors around 2, a ~5%/day one around 5), because tomorrow's return
-              is mostly unpredictable. Early stopping watches <b>validation</b> loss (unseen data), not training
-              loss: it keeps the point that generalizes best, so a low <i>training</i> loss past that would just be
-              memorizing noise. To fit harder anyway, raise epochs/trees and the patience (XGB early-stop), lower
-              the learning rate, or set early-stop to 0 to train the full count.
+              <b>{t('forecast.lossHeading')}</b> {t('forecast.lossBody1')}<b>{t('forecast.lossValidation')}</b>{t('forecast.lossBody2')}<i>{t('forecast.lossTraining')}</i>{t('forecast.lossBody3')}
             </div>
           </div>
         </>

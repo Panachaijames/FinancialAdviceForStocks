@@ -3,6 +3,7 @@ import { Scale, ChevronDown, ChevronUp } from 'lucide-react';
 import { theme } from '../lib/theme.js';
 import { fmtMoney, fmtSignedPct } from '../lib/format.js';
 import { assetMeta } from '../lib/assetType.js';
+import { useT } from '../lib/i18n.js';
 import { useSettingsStore } from '../store/settingsStore.js';
 import { useTargetsStore } from '../store/targetsStore.js';
 import useNetWorth from '../hooks/useNetWorth.js';
@@ -20,6 +21,7 @@ export default function RebalancePanel() {
   const targets = useTargetsStore((s) => s.targets);
   const setTarget = useTargetsStore((s) => s.setTarget);
   const [open, setOpen] = useState(false);
+  const t = useT();
 
   const { rows, total, targetSum, maxDrift } = useMemo(
     () => computeRebalance(byType, targets),
@@ -40,7 +42,7 @@ export default function RebalancePanel() {
         style={{ display: 'flex', alignItems: 'center', gap: theme.space(1), fontWeight: 700, fontSize: 13, color: theme.colors.text, padding: 0, textAlign: 'left' }}
       >
         <Scale size={15} style={{ color: theme.colors.accent }} />
-        Target allocation &amp; rebalance
+        {t('rebalance.title')}
         {hasTargets && (
           <span
             className="badge"
@@ -51,7 +53,7 @@ export default function RebalancePanel() {
               fontWeight: 700,
             }}
           >
-            {maxDrift > 5 ? `drift ${maxDrift.toFixed(0)}%` : 'on target'}
+            {maxDrift > 5 ? t('rebalance.driftBadge', { pct: maxDrift.toFixed(0) }) : t('rebalance.onTargetBadge')}
           </span>
         )}
         <span style={{ marginLeft: 'auto', color: theme.colors.textDim, display: 'flex' }}>
@@ -63,14 +65,14 @@ export default function RebalancePanel() {
         <>
           {!sumOk && (
             <div style={{ fontSize: 12, color: theme.colors.warn }}>
-              ⚠ Targets sum to {targetSum.toFixed(0)}% — set them to add up to 100% for meaningful amounts.
+              {t('rebalance.sumWarning', { pct: targetSum.toFixed(0) })}
             </div>
           )}
           <div style={{ overflowX: 'auto', border: `1px solid ${theme.colors.border}`, borderRadius: theme.radius.sm }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: theme.colors.bgElev }}>
-                  {['Asset class', 'Now', 'Target %', 'Drift', 'To rebalance'].map((h, i) => (
+                  {[t('rebalance.colAssetClass'), t('rebalance.colNow'), t('rebalance.colTargetPct'), t('rebalance.colDrift'), t('rebalance.colToRebalance')].map((h, i) => (
                     <th key={i} style={{ padding: `${theme.space(1)}px ${theme.space(2)}px`, fontSize: 11, color: theme.colors.textDim, fontWeight: 600, textAlign: i === 0 ? 'left' : 'right', whiteSpace: 'nowrap' }}>
                       {h}
                     </th>
@@ -110,10 +112,10 @@ export default function RebalancePanel() {
                       <td style={{ padding: `${theme.space(1)}px ${theme.space(2)}px`, borderTop: `1px solid ${theme.colors.border}`, fontSize: 12.5, textAlign: 'right', fontFamily: theme.mono, fontWeight: 700, whiteSpace: 'nowrap', color: !hasTarget || !sumOk ? theme.colors.textFaint : r.amount > 0.5 ? theme.colors.up : r.amount < -0.5 ? theme.colors.down : theme.colors.textDim }}>
                         {hasTarget && sumOk
                           ? r.amount > 0.5
-                            ? `Buy ${fmtMoney(r.amount, displayCurrency)}`
+                            ? t('rebalance.buyAmount', { amount: fmtMoney(r.amount, displayCurrency) })
                             : r.amount < -0.5
-                              ? `Sell ${fmtMoney(-r.amount, displayCurrency)}`
-                              : '✓ on target'
+                              ? t('rebalance.sellAmount', { amount: fmtMoney(-r.amount, displayCurrency) })
+                              : t('rebalance.onTargetCell')
                           : '—'}
                       </td>
                     </tr>
@@ -123,9 +125,7 @@ export default function RebalancePanel() {
             </table>
           </div>
           <div style={{ fontSize: 10.5, color: theme.colors.textFaint }}>
-            Portfolio total {fmtMoney(total, displayCurrency)} · drift = current − target · amounts assume you
-            rebalance by trading, not by new contributions · tip: the AI Path Advisor (Plan tab) suggests a
-            target mix you can copy here
+            {t('rebalance.footnote', { total: fmtMoney(total, displayCurrency) })}
           </div>
         </>
       )}

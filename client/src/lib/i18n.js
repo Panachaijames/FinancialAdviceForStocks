@@ -7,6 +7,7 @@
 // Keys are dot-namespaced (e.g. 'summary.marketValue'). Interpolation: pass a
 // vars object and use {name} placeholders — t('x.y', { n: 3 }).
 import { useSettingsStore } from '../store/settingsStore.js';
+import generated from './i18nDict.js';
 
 const en = {
   'nav.portfolio': 'Portfolio',
@@ -80,7 +81,12 @@ const th = {
   'holdings.sort.symbol': 'สัญลักษณ์',
 };
 
-const DICTS = { en, th };
+// Merge the hand-authored high-traffic strings (above) with the generated
+// per-component dictionary (lib/i18nDict.js, from the coverage sweep).
+const DICTS = {
+  en: { ...en, ...generated.en },
+  th: { ...th, ...generated.th },
+};
 
 function interpolate(str, vars) {
   if (!vars) return str;

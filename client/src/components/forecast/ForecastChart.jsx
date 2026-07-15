@@ -1,6 +1,7 @@
 import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { theme } from '../../lib/theme.js';
 import { fmtMoney } from '../../lib/format.js';
+import { useT } from '../../lib/i18n.js';
 
 // Series palette — validated (dataviz six checks, dark surface): fixed slot
 // order; green/red are NOT used for series (reserved app-wide for up/down).
@@ -30,6 +31,7 @@ function fmtDate(sec) {
  *   currency, height
  */
 export default function ForecastChart({ historyDates = [], historyCloses = [], forecasts = [], currency = 'USD', height = 300 }) {
+  const t = useT();
   const wrapRef = useRef(null);
   const [width, setWidth] = useState(800);
   const [hover, setHover] = useState(null); // global index
@@ -115,7 +117,7 @@ export default function ForecastChart({ historyDates = [], historyCloses = [], f
   const tipRows = [];
   if (hover != null) {
     if (hover < nHist) {
-      tipRows.push({ label: 'Actual', color: SERIES_COLORS.history, value: historyCloses[hover] });
+      tipRows.push({ label: t('fchart.actual'), color: SERIES_COLORS.history, value: historyCloses[hover] });
     } else {
       const fi = hover - nHist;
       for (const f of forecasts) {
@@ -127,7 +129,7 @@ export default function ForecastChart({ historyDates = [], historyCloses = [], f
 
   return (
     <div ref={wrapRef} style={{ position: 'relative', width: '100%' }}>
-      <svg width={width} height={height} role="img" aria-label="Price forecast chart" style={{ display: 'block' }}>
+      <svg width={width} height={height} role="img" aria-label={t('fchart.aria_label')} style={{ display: 'block' }}>
         {/* grid */}
         {ticks.map((v, i) => (
           <g key={i}>
@@ -155,7 +157,7 @@ export default function ForecastChart({ historyDates = [], historyCloses = [], f
         {/* "today" divider */}
         <line x1={x(nHist - 1)} x2={x(nHist - 1)} y1={PAD.top} y2={height - PAD.bottom} stroke={theme.colors.textFaint} strokeWidth="1" strokeDasharray="2,4" />
         <text x={x(nHist - 1)} y={PAD.top + 2} textAnchor="middle" fontSize="9" fill={theme.colors.textFaint}>
-          today
+          {t('fchart.today')}
         </text>
 
         {/* history line (solid, neutral context) */}
@@ -238,7 +240,7 @@ export default function ForecastChart({ historyDates = [], historyCloses = [], f
       {/* legend (always present: >= 2 series) */}
       <div style={{ display: 'flex', gap: theme.space(3), flexWrap: 'wrap', marginTop: theme.space(1), fontSize: 11.5 }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: theme.colors.textDim }}>
-          <span style={{ width: 14, height: 2, background: SERIES_COLORS.history, display: 'inline-block' }} /> Actual price
+          <span style={{ width: 14, height: 2, background: SERIES_COLORS.history, display: 'inline-block' }} /> {t('fchart.actual_price')}
         </span>
         {forecasts.map((f) => {
           const last = f.closes[f.closes.length - 1];

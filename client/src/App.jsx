@@ -304,6 +304,7 @@ function ViewPane({ active, children }) {
 }
 
 function EmptyState({ onQuickAdd }) {
+  const t = useT();
   const wrap = {
     display: 'flex',
     flexDirection: 'column',
@@ -337,12 +338,8 @@ function EmptyState({ onQuickAdd }) {
     <div className="panel" style={{ padding: 0, background: theme.colors.panel }}>
       <div style={wrap}>
         <div style={{ fontSize: 48, lineHeight: 1 }}>📈</div>
-        <div style={titleStyle}>Build your multi-asset portfolio</div>
-        <div style={subStyle}>
-          Track Thai stocks, US stocks &amp; ETFs, crypto, and gold together in one
-          dashboard with live prices, real-time charts, dividends, and news. Search
-          above to add an asset, or start with a popular pick below.
-        </div>
+        <div style={titleStyle}>{t('empty.title')}</div>
+        <div style={subStyle}>{t('empty.body')}</div>
         <div style={chipsWrap}>
           {QUICK_ADD.map((sr) => {
             const meta = assetMeta(sr.type);

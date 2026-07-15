@@ -4,6 +4,7 @@ import theme from '../lib/theme.js';
 import { getNews } from '../api/client.js';
 import { usePortfolioStore } from '../store/portfolioStore.js';
 import { timeAgo } from '../lib/format.js';
+import { useT } from '../lib/i18n.js';
 
 const REFRESH_MS = 5 * 60 * 1000; // auto-refresh every 5 minutes
 
@@ -14,6 +15,7 @@ const REFRESH_MS = 5 * 60 * 1000; // auto-refresh every 5 minutes
  * filters the list to items mentioning that symbol. Auto-refreshes every 5 minutes.
  */
 export default function NewsPanel() {
+  const t = useT();
   const symbols = usePortfolioStore((s) =>
     Array.from(new Set(s.holdings.map((h) => h.symbol))),
   );
@@ -50,7 +52,7 @@ export default function NewsPanel() {
         })
         .catch((e) => {
           if (id !== reqId.current) return;
-          setError(e?.message || 'Failed to load news');
+          setError(e?.message || t('news.loadError'));
         })
         .finally(() => {
           if (id === reqId.current) setLoading(false);
@@ -103,7 +105,7 @@ export default function NewsPanel() {
       >
         <span style={{ fontSize: 18 }}>📰</span>
         <div style={{ fontSize: 15, fontWeight: 700, color: theme.colors.text }}>
-          Portfolio News
+          {t('news.title')}
         </div>
         <div style={{ flex: 1 }} />
         {lastUpdated ? (
@@ -114,8 +116,8 @@ export default function NewsPanel() {
         <button
           type="button"
           className="btn btn-ghost"
-          aria-label="Refresh news"
-          title="Refresh"
+          aria-label={t('news.refreshAria')}
+          title={t('news.refresh')}
           onClick={() => load(true)}
           disabled={loading}
           style={{ padding: theme.space(2) }}
@@ -147,7 +149,7 @@ export default function NewsPanel() {
                 : undefined
             }
           >
-            All
+            {t('news.filterAll')}
           </button>
           {filterChips.map((s) => (
             <button
@@ -186,6 +188,7 @@ export default function NewsPanel() {
 }
 
 function NewsRow({ item, onChip, activeFilter }) {
+  const t = useT();
   const related = Array.isArray(item.relatedSymbols) ? item.relatedSymbols : [];
   return (
     <a
@@ -243,7 +246,7 @@ function NewsRow({ item, onChip, activeFilter }) {
             overflow: 'hidden',
           }}
         >
-          {item.title || 'Untitled'}
+          {item.title || t('news.untitled')}
         </div>
 
         {item.summary ? (
@@ -336,6 +339,7 @@ function NewsSkeletons() {
 }
 
 function ErrorState({ message, onRetry }) {
+  const t = useT();
   return (
     <div
       style={{
@@ -351,24 +355,25 @@ function ErrorState({ message, onRetry }) {
       <span style={{ fontSize: 26, opacity: 0.7 }}>⚠️</span>
       <div style={{ fontSize: 13, color: theme.colors.down }}>{message}</div>
       <button type="button" className="btn btn-ghost" onClick={onRetry}>
-        Retry
+        {t('news.retry')}
       </button>
     </div>
   );
 }
 
 function EmptyState({ hasSymbols, filtered }) {
+  const t = useT();
   let title;
   let body;
   if (filtered) {
-    title = 'No matching stories';
-    body = 'No recent news mentions the selected symbol. Clear the filter to see everything.';
+    title = t('news.emptyFilteredTitle');
+    body = t('news.emptyFilteredBody');
   } else if (hasSymbols) {
-    title = 'No news right now';
-    body = 'There are no recent stories for your holdings. Check back later.';
+    title = t('news.emptyNoNewsTitle');
+    body = t('news.emptyNoNewsBody');
   } else {
-    title = 'No holdings yet';
-    body = 'Add assets to your portfolio to see related market news here.';
+    title = t('news.emptyNoHoldingsTitle');
+    body = t('news.emptyNoHoldingsBody');
   }
   return (
     <div

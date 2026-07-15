@@ -6,6 +6,7 @@ import { assetMeta } from '../lib/assetType.js';
 import { applyBuy, applySell } from '../lib/trades.js';
 import { usePortfolioStore } from '../store/portfolioStore.js';
 import { snackbar } from '../store/snackbarStore.js';
+import { useT } from '../lib/i18n.js';
 
 /**
  * Record a buy or sell the user made at their broker (the app never places
@@ -24,6 +25,7 @@ import { snackbar } from '../store/snackbarStore.js';
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
 export default function TradeDialog({ holding, side, livePrice, editTx, onClose }) {
+  const t = useT();
   const recordTrade = usePortfolioStore((s) => s.recordTrade);
   const editTransaction = usePortfolioStore((s) => s.editTransaction);
   const isEdit = !!editTx;
@@ -76,16 +78,23 @@ export default function TradeDialog({ holding, side, livePrice, editTx, onClose 
     if (isSell) {
       const s = applySell(pos, { qty: qtyNum, price: priceNum, fee: feeNum });
       preview = {
-        headline: `Realized P/L: ${fmtMoney(s.realized, native)}`,
+        headline: t('trade.realizedPl', { value: fmtMoney(s.realized, native) }),
         color: s.realized >= 0 ? theme.colors.up : theme.colors.down,
-        detail: `Proceeds ${fmtMoney(qtyNum * priceNum - feeNum, native)} · left ${fmtNumber(s.shares, Number.isInteger(s.shares) ? 0 : 4)} @ ${fmtMoney(s.avgCost, native)}`,
+        detail: t('trade.sellDetail', {
+          proceeds: fmtMoney(qtyNum * priceNum - feeNum, native),
+          shares: fmtNumber(s.shares, Number.isInteger(s.shares) ? 0 : 4),
+          avg: fmtMoney(s.avgCost, native),
+        }),
       };
     } else {
       const b = applyBuy(pos, { qty: qtyNum, price: priceNum, fee: feeNum });
       preview = {
-        headline: `Cost: ${fmtMoney(qtyNum * priceNum + feeNum, native)}`,
+        headline: t('trade.cost', { value: fmtMoney(qtyNum * priceNum + feeNum, native) }),
         color: theme.colors.text,
-        detail: `New position ${fmtNumber(b.shares, Number.isInteger(b.shares) ? 0 : 4)} @ ${fmtMoney(b.avgCost, native)} avg`,
+        detail: t('trade.buyDetail', {
+          shares: fmtNumber(b.shares, Number.isInteger(b.shares) ? 0 : 4),
+          avg: fmtMoney(b.avgCost, native),
+        }),
       };
     }
   }
@@ -97,22 +106,23 @@ export default function TradeDialog({ holding, side, livePrice, editTx, onClose 
     // Same-day trades keep the real instant (preserves intraday order); a
     // backdated date is anchored at noon UTC so the calendar day is stable.
     const at = date === todayStr() ? new Date().toISOString() : `${date}T12:00:00.000Z`;
-    const verb = isEdit ? 'Updated' : 'Recorded';
+    const verb = isEdit ? t('trade.verbUpdated') : t('trade.verbRecorded');
     const saved = isEdit
       ? editTransaction(editTx.id, { qty: qtyNum, price: priceNum, fee: feeNum, at })
       : recordTrade(holding.id, { side: isSell ? 'sell' : 'buy', qty: qtyNum, price: priceNum, fee: feeNum, at });
     if (saved) {
       const shownQty = fmtNumber(saved.qty, Number.isInteger(saved.qty) ? 0 : 4);
+      const sideWord = saved.side === 'sell' ? t('trade.actionSell') : t('trade.actionBuy');
       // Replay may clamp a sell to the shares actually held at that date — tell the user.
       const clamped = saved.side === 'sell' && saved.qty < qtyNum;
       snackbar.push({
         message: clamped
-          ? `${verb} sell ${shownQty} ${holding.symbol} — clamped (only ${shownQty} held on that date)`
-          : `${verb} ${saved.side} ${shownQty} ${holding.symbol}`,
+          ? t('trade.snackClamped', { verb, qty: shownQty, symbol: holding.symbol })
+          : t('trade.snackSaved', { verb, side: sideWord, qty: shownQty, symbol: holding.symbol }),
         tone: clamped ? 'error' : 'default',
       });
     } else if (isSell) {
-      snackbar.push({ message: `Nothing was held to sell for ${holding.symbol} on that date`, tone: 'error' });
+      snackbar.push({ message: t('trade.snackNothingHeld', { symbol: holding.symbol }), tone: 'error' });
     }
     onClose && onClose();
   }
@@ -136,7 +146,7 @@ export default function TradeDialog({ holding, side, livePrice, editTx, onClose 
         className="modal-card"
         role="dialog"
         aria-modal="true"
-        aria-label={`${isSell ? 'Sell' : 'Buy'} ${holding.symbol}`}
+        aria-label={t('trade.dialogAriaLabel', { action: isSell ? t('trade.sell') : t('trade.buy'), symbol: holding.symbol })}
         style={{ maxWidth: 420, width: '100%' }}
         onMouseDown={(e) => e.stopPropagation()}
       >
@@ -145,26 +155,26 @@ export default function TradeDialog({ holding, side, livePrice, editTx, onClose 
             <span style={{ fontSize: 24 }} aria-hidden="true">{meta.emoji}</span>
             <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
               <span style={{ fontSize: 16, fontWeight: 700, color: theme.colors.text }}>
-                {isEdit ? 'Edit ' : ''}
-                <span style={{ color: accent }}>{isSell ? 'Sell' : 'Buy'}</span> {holding.symbol}
+                {isEdit ? t('trade.editPrefix') : ''}
+                <span style={{ color: accent }}>{isSell ? t('trade.sell') : t('trade.buy')}</span> {holding.symbol}
               </span>
               <span style={{ fontSize: 12, color: theme.colors.textDim }}>
-                Holding {fmtNumber(held, Number.isInteger(held) ? 0 : 4)} @ {fmtMoney(pos.avgCost, native)} avg
+                {t('trade.holdingLine', { shares: fmtNumber(held, Number.isInteger(held) ? 0 : 4), avg: fmtMoney(pos.avgCost, native) })}
               </span>
             </div>
           </div>
-          <button type="button" className="btn-ghost" onClick={() => onClose && onClose()} aria-label="Close" style={{ padding: theme.space(1), lineHeight: 0 }}>
+          <button type="button" className="btn-ghost" onClick={() => onClose && onClose()} aria-label={t('trade.close')} style={{ padding: theme.space(1), lineHeight: 0 }}>
             <X size={18} />
           </button>
         </div>
 
         <div style={{ fontSize: 11.5, color: theme.colors.textFaint, marginBottom: theme.space(3), lineHeight: 1.5 }}>
-          Records what you did at your broker so P/L is tracked — no real order is placed.
+          {t('trade.brokerNote')}
         </div>
 
         <form onSubmit={handleSubmit}>
           <label style={{ display: 'block', marginBottom: theme.space(3) }}>
-            {label(`Quantity${isSell ? ` (max ${fmtNumber(held, Number.isInteger(held) ? 0 : 4)})` : ''}`)}
+            {label(isSell ? t('trade.quantityMax', { max: fmtNumber(held, Number.isInteger(held) ? 0 : 4) }) : t('trade.quantity'))}
             <input
               ref={firstFieldRef}
               className="input"
@@ -172,36 +182,36 @@ export default function TradeDialog({ holding, side, livePrice, editTx, onClose 
               inputMode="decimal"
               step="any"
               min="0"
-              placeholder="e.g. 10"
+              placeholder={t('trade.qtyPlaceholder')}
               value={qty}
               onChange={(e) => setQty(e.target.value)}
               style={{ borderColor: touched && !qtyValid ? theme.colors.down : theme.colors.border }}
             />
             {touched && !qtyValid && (
               <span style={errStyle}>
-                {isSell && qtyNum > held ? `You only hold ${fmtNumber(held, 4)}.` : 'Enter a positive quantity.'}
+                {isSell && qtyNum > held ? t('trade.errOnlyHold', { held: fmtNumber(held, 4) }) : t('trade.errPositiveQty')}
               </span>
             )}
           </label>
 
           <label style={{ display: 'block', marginBottom: theme.space(3) }}>
-            {label(`Price per unit (${native})${livePrice != null ? ' — prefilled with live price' : ''}`)}
+            {label(livePrice != null ? t('trade.pricePerUnitLive', { currency: native }) : t('trade.pricePerUnit', { currency: native }))}
             <input
               className="input"
               type="number"
               inputMode="decimal"
               step="any"
               min="0"
-              placeholder={`e.g. 150.25 ${native}`}
+              placeholder={t('trade.pricePlaceholder', { currency: native })}
               value={price}
               onChange={(e) => setPrice(e.target.value)}
               style={{ borderColor: touched && !priceValid ? theme.colors.down : theme.colors.border }}
             />
-            {touched && !priceValid && <span style={errStyle}>Enter the executed price.</span>}
+            {touched && !priceValid && <span style={errStyle}>{t('trade.errPrice')}</span>}
           </label>
 
           <label style={{ display: 'block', marginBottom: theme.space(3) }}>
-            {label(`Fee / commission (${native}, optional)`)}
+            {label(t('trade.fee', { currency: native }))}
             <input
               className="input"
               type="number"
@@ -215,7 +225,7 @@ export default function TradeDialog({ holding, side, livePrice, editTx, onClose 
           </label>
 
           <label style={{ display: 'block', marginBottom: theme.space(3) }}>
-            {label('Trade date')}
+            {label(t('trade.tradeDate'))}
             <input
               className="input"
               type="date"
@@ -225,7 +235,7 @@ export default function TradeDialog({ holding, side, livePrice, editTx, onClose 
             />
             {backdated && (
               <span style={{ fontSize: 11, color: theme.colors.textFaint, marginTop: 4, display: 'block' }}>
-                Backdated — your position &amp; realized P/L are recomputed in date order.
+                {t('trade.backdatedNote')}
               </span>
             )}
           </label>
@@ -248,13 +258,13 @@ export default function TradeDialog({ holding, side, livePrice, editTx, onClose 
           )}
           {valid && backdated && (
             <div style={{ fontSize: 11.5, color: theme.colors.textDim, marginBottom: theme.space(3) }}>
-              Your position and every later sell's realized P/L are recomputed in date order when you save.
+              {t('trade.recomputeNote')}
             </div>
           )}
 
           <div style={{ display: 'flex', gap: theme.space(2), justifyContent: 'flex-end' }}>
             <button type="button" className="btn btn-ghost" onClick={() => onClose && onClose()}>
-              Cancel
+              {t('trade.cancel')}
             </button>
             <button
               type="submit"
@@ -262,7 +272,7 @@ export default function TradeDialog({ holding, side, livePrice, editTx, onClose 
               disabled={!valid}
               style={{ background: accent, borderColor: accent, opacity: valid ? 1 : 0.55, cursor: valid ? 'pointer' : 'not-allowed' }}
             >
-              {isEdit ? 'Save changes' : `Record ${isSell ? 'sell' : 'buy'}`}
+              {isEdit ? t('trade.saveChanges') : isSell ? t('trade.recordSell') : t('trade.recordBuy')}
             </button>
           </div>
         </form>

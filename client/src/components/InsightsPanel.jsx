@@ -9,6 +9,7 @@ import useFx from '../hooks/useFx.js';
 import useFunds from '../hooks/useFunds.js';
 import useMagnetic from '../hooks/useMagnetic.js';
 import { getAnalysis } from '../api/client.js';
+import { useT } from '../lib/i18n.js';
 import AiMarkdown from './AiMarkdown.jsx';
 
 /**
@@ -16,15 +17,16 @@ import AiMarkdown from './AiMarkdown.jsx';
  * news the app already fetched. Renders nothing unless a GEMINI_API_KEY is set
  * (detected via /api/health). On-demand (button) to keep API usage minimal.
  */
-const GOAL_EXAMPLES = [
-  'Steady dividend income',
-  'Long-term growth, high risk tolerance',
-  'Preserve capital, low volatility',
-  'Retire in 10 years',
-  'Reduce single-stock concentration',
+const GOAL_EXAMPLE_KEYS = [
+  'goalDividend',
+  'goalGrowth',
+  'goalPreserve',
+  'goalRetire',
+  'goalConcentration',
 ];
 
 export default function InsightsPanel() {
+  const t = useT();
   const holdings = usePortfolioStore((s) => s.holdings);
   const displayCurrency = useSettingsStore((s) => s.displayCurrency);
   const analysisGoal = useSettingsStore((s) => s.analysisGoal);
@@ -105,7 +107,7 @@ export default function InsightsPanel() {
       const res = await getAnalysis(payload);
       setText((res && res.text) || '');
     } catch (e) {
-      setError((e && e.message) || 'Failed to generate insights');
+      setError((e && e.message) || t('insights.errorFailed'));
     } finally {
       setLoading(false);
     }
@@ -149,7 +151,7 @@ export default function InsightsPanel() {
           >
             <Sparkles size={13} />
           </span>
-          AI Insights
+          {t('insights.title')}
         </div>
         <button
           type="button"
@@ -159,7 +161,7 @@ export default function InsightsPanel() {
           onPointerLeave={genMagnet.onPointerLeave}
           onClick={run}
           disabled={loading}
-          title="Generate an AI summary of your portfolio"
+          title={t('insights.generateTitle')}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -175,43 +177,46 @@ export default function InsightsPanel() {
           ) : (
             <RefreshCw size={14} />
           )}
-          {loading ? 'Analyzing…' : text ? 'Refresh' : 'Generate'}
+          {loading ? t('insights.analyzing') : text ? t('insights.refresh') : t('insights.generate')}
         </button>
       </div>
 
       {/* Goal input — tailors the whole analysis + suggested plan. */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: theme.space(1) }}>
         <label style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4, color: theme.colors.textDim }}>
-          Your goal for this portfolio <span style={{ textTransform: 'none', fontWeight: 400, color: theme.colors.textFaint }}>(optional — makes the analysis specific to you)</span>
+          {t('insights.goalLabel')} <span style={{ textTransform: 'none', fontWeight: 400, color: theme.colors.textFaint }}>{t('insights.goalLabelHint')}</span>
         </label>
         <textarea
           className="input"
           value={analysisGoal}
           onChange={(e) => setAnalysisGoal(e.target.value)}
-          placeholder="e.g. I want steady dividend income with low volatility, holding 5+ years"
+          placeholder={t('insights.goalPlaceholder')}
           rows={2}
           style={{ width: '100%', resize: 'vertical', fontSize: 13, lineHeight: 1.5 }}
         />
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-          {GOAL_EXAMPLES.map((g) => (
-            <button
-              key={g}
-              type="button"
-              className="chip"
-              onClick={() => setAnalysisGoal(g)}
-              style={{ fontSize: 11, color: analysisGoal === g ? '#fff' : theme.colors.textDim, background: analysisGoal === g ? theme.colors.accent : undefined }}
-            >
-              {g}
-            </button>
-          ))}
+          {GOAL_EXAMPLE_KEYS.map((k) => {
+            const g = t('insights.' + k);
+            return (
+              <button
+                key={k}
+                type="button"
+                className="chip"
+                onClick={() => setAnalysisGoal(g)}
+                style={{ fontSize: 11, color: analysisGoal === g ? '#fff' : theme.colors.textDim, background: analysisGoal === g ? theme.colors.accent : undefined }}
+              >
+                {g}
+              </button>
+            );
+          })}
           {analysisGoal ? (
             <button type="button" className="chip" onClick={() => setAnalysisGoal('')} style={{ fontSize: 11, color: theme.colors.textFaint }}>
-              Clear
+              {t('insights.clear')}
             </button>
           ) : null}
           {/* Age — lets the AI reason about risk capacity & time horizon. */}
           <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: theme.colors.textDim }}>
-            Your age
+            {t('insights.ageLabel')}
             <input
               type="number"
               inputMode="numeric"
@@ -219,8 +224,8 @@ export default function InsightsPanel() {
               max="119"
               value={analysisAge}
               onChange={(e) => setAnalysisAge(e.target.value)}
-              placeholder={planAge && !analysisAge ? `${planAge}*` : 'e.g. 30'}
-              title={planAge && !analysisAge ? `Using ${planAge} from your retirement plan — type to override` : 'Optional — the AI factors risk capacity by age'}
+              placeholder={planAge && !analysisAge ? `${planAge}*` : t('insights.agePlaceholder')}
+              title={planAge && !analysisAge ? t('insights.ageTitleFromPlan', { age: planAge }) : t('insights.ageTitleDefault')}
               className="input"
               style={{ width: 68, padding: '4px 8px', fontSize: 12 }}
             />
@@ -234,14 +239,12 @@ export default function InsightsPanel() {
         <AiMarkdown text={text} />
       ) : (
         <div style={{ fontSize: 13, color: theme.colors.textDim }}>
-          Get a deep AI read on your portfolio — today's movers, allocation &amp; concentration,
-          dividend income, risks, and a suggested plan. <b>Add a goal above</b> and the analysis
-          judges how well your holdings fit it and tailors the plan to reach it.
+          {t('insights.introLead')} <b>{t('insights.introAddGoal')}</b> {t('insights.introTail')}
         </div>
       )}
 
       <div style={{ fontSize: 10, color: theme.colors.textFaint }}>
-        AI-generated · informational only, not financial advice
+        {t('insights.disclaimer')}
       </div>
     </div>
   );

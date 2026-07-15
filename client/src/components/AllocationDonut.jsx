@@ -9,6 +9,7 @@ import useQuotes from '../hooks/useQuotes.js';
 import useFx from '../hooks/useFx.js';
 import useFunds from '../hooks/useFunds.js';
 import { motionEnabled } from '../lib/motion.js';
+import { useT } from '../lib/i18n.js';
 
 /**
  * AllocationDonut — the portfolio's asset-type mix as an animated SVG donut.
@@ -42,8 +43,8 @@ const SWEEP_MS = 900; // total clockwise paint time
 
 // assetMeta has no 'thai_fund' entry (it would fall back to "Other"), so the
 // donut supplies its own meta for that bucket. Pink is unused by other types.
-function metaFor(type) {
-  if (type === 'thai_fund') return { label: 'Thai Fund', color: '#ec4899' };
+function metaFor(type, t) {
+  if (type === 'thai_fund') return { label: t('allocation.thaiFund'), color: '#ec4899' };
   const m = assetMeta(type);
   return { label: m.label, color: m.color || theme.colors.accent };
 }
@@ -55,6 +56,7 @@ export default function AllocationDonut() {
   const { quotes } = useQuotes(symbols);
   const { convert } = useFx();
   const { funds } = useFunds();
+  const t = useT();
 
   const [hovered, setHovered] = useState(null); // asset type or null
   // Sweep state. When motion is off, both start true => slices render complete
@@ -111,7 +113,7 @@ export default function AllocationDonut() {
     const segs = entries.map(([type, value]) => {
       const frac = value / sum;
       const arcFrac = Math.max(frac - gapFrac, 0.002);
-      const meta = metaFor(type);
+      const meta = metaFor(type, t);
       const seg = {
         type,
         value,
@@ -134,9 +136,9 @@ export default function AllocationDonut() {
 
   const totalStr = fmtMoney(total, displayCurrency);
   const totalFontSize = totalStr.length > 12 ? 13 : totalStr.length > 9 ? 15 : 17;
-  const donutLabel = `Portfolio allocation: ${segments
-    .map((s) => `${s.label} ${s.pct.toFixed(1)}%`)
-    .join(', ')}`;
+  const donutLabel = t('allocation.donutAria', {
+    list: segments.map((s) => `${s.label} ${s.pct.toFixed(1)}%`).join(', '),
+  });
 
   return (
     <div
@@ -159,7 +161,7 @@ export default function AllocationDonut() {
         }}
       >
         <PieChart size={15} style={{ color: theme.colors.accent }} />
-        Allocation
+        {t('allocation.title')}
       </div>
 
       <div
@@ -258,7 +260,7 @@ export default function AllocationDonut() {
                   marginTop: 2,
                 }}
               >
-                total
+                {t('allocation.total')}
               </div>
             </div>
           </div>
@@ -281,10 +283,11 @@ export default function AllocationDonut() {
                 key={s.type}
                 type="button"
                 className="alloc-legend-row"
-                aria-label={`${s.label}: ${s.pct.toFixed(1)} percent of portfolio, ${fmtMoney(
-                  s.value,
-                  displayCurrency
-                )}`}
+                aria-label={t('allocation.legendRowAria', {
+                  label: s.label,
+                  pct: s.pct.toFixed(1),
+                  value: fmtMoney(s.value, displayCurrency),
+                })}
                 onMouseEnter={() => setHovered(s.type)}
                 onMouseLeave={() => setHovered(null)}
                 onFocus={() => setHovered(s.type)}
