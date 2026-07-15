@@ -6,7 +6,7 @@ import { useSettingsStore } from '../store/settingsStore.js';
 import useFx from '../hooks/useFx.js';
 import useQuotes from '../hooks/useQuotes.js';
 import { assetMeta } from '../lib/assetType.js';
-import { computeDividendIncome } from '../lib/dividends.js';
+import { computeDividendIncome, nextDividendDate } from '../lib/dividends.js';
 import { dividendsByCurrency, dividendsBySymbol } from '../lib/trades.js';
 import { fmtMoney, fmtNumber, fmtPct } from '../lib/format.js';
 
@@ -152,6 +152,19 @@ export default function DividendPanel() {
     });
   }, [payerHoldings, divs, quotes, convert, period]);
 
+  // Upcoming ex-dividend dates (confirmed from the provider, or estimated from
+  // history cadence on cloud where quoteSummary is blocked), soonest first.
+  const upcoming = useMemo(() => {
+    const out = [];
+    for (const h of payerHoldings) {
+      const d = divs[h.symbol];
+      if (!d) continue;
+      const next = nextDividendDate(d);
+      if (next) out.push({ holding: h, ...next });
+    }
+    return out.sort((a, b) => Date.parse(a.exDate) - Date.parse(b.exDate));
+  }, [payerHoldings, divs]);
+
   const payerRows = rows.filter((r) => r.isPayer);
   const totalForPeriod = payerRows.reduce(
     (acc, r) => acc + (r.income ? r.income[period] || 0 : 0),
@@ -235,6 +248,9 @@ export default function DividendPanel() {
           }}
         />
       )}
+
+      {/* Upcoming ex-dividend dates */}
+      {upcoming.length > 0 && <UpcomingStrip items={upcoming} />}
 
       {/* Body */}
       {payerHoldings.length === 0 ? (
@@ -454,6 +470,74 @@ function Row({ row, period, displayCurrency, received }) {
         )}
       </Td>
     </tr>
+  );
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Horizontal strip of upcoming ex-dividend dates with days-until badges. */
+function UpcomingStrip({ items }) {
+  const now = Date.now();
+  return (
+    <div style={{ marginBottom: theme.space(3) }}>
+      <div
+        style={{
+          fontSize: 11,
+          textTransform: 'uppercase',
+          letterSpacing: 0.4,
+          color: theme.colors.textDim,
+          fontWeight: 600,
+          marginBottom: theme.space(1),
+        }}
+      >
+        Upcoming ex-dividends
+      </div>
+      <div className="scroll-area" style={{ display: 'flex', gap: theme.space(2), overflowX: 'auto', paddingBottom: 4 }}>
+        {items.map(({ holding, exDate, payDate, estimated }) => {
+          const days = Math.max(0, Math.ceil((Date.parse(exDate) - now) / DAY_MS));
+          const exLabel = new Date(exDate).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+          const meta = assetMeta(holding.type);
+          const soon = days <= 7;
+          return (
+            <div
+              key={holding.id}
+              title={
+                (estimated ? 'Estimated from payment history — ' : 'Confirmed ex-dividend date — ') +
+                `ex-date ${exLabel}${payDate ? `, pays ${new Date(payDate).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}` : ''}`
+              }
+              style={{
+                flex: '0 0 auto',
+                minWidth: 118,
+                border: `1px solid ${soon ? theme.colors.gold : theme.colors.border}`,
+                borderRadius: theme.radius.md,
+                background: theme.colors.bgElev,
+                padding: `${theme.space(2)}px ${theme.space(2)}px`,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 2,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ fontSize: 12 }}>{meta.emoji}</span>
+                <span style={{ fontWeight: 700, fontSize: 12.5, color: theme.colors.text }}>{holding.symbol}</span>
+                {estimated && (
+                  <span
+                    style={{ fontSize: 9, fontWeight: 700, color: theme.colors.textFaint, border: `1px solid ${theme.colors.border}`, borderRadius: 4, padding: '0 3px' }}
+                  >
+                    EST
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 12, fontFamily: theme.mono, color: theme.colors.text }}>{exLabel}</div>
+              <div style={{ fontSize: 10.5, fontWeight: 600, color: soon ? theme.colors.gold : theme.colors.textDim }}>
+                {days === 0 ? 'today' : `in ${days} day${days === 1 ? '' : 's'}`}
+                {payDate ? ` · pays ${new Date(payDate).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}` : ''}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
