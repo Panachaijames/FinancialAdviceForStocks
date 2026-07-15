@@ -190,6 +190,18 @@ export default function PortfolioSummary() {
     ready: quotesReady && fx != null && fx.source !== 'default',
   });
 
+  // Record today's value once per session (same real-quote + real-fx guard as the
+  // ATH ledger) for the performance history — the cheap fallback for holdings that
+  // have no trade ledger. Ref-guarded so it fires once, not on every price tick.
+  const snapshotDoneRef = useRef(false);
+  useEffect(() => {
+    if (snapshotDoneRef.current) return;
+    if (quotesReady && fx != null && fx.source !== 'default' && usdTotal > 0) {
+      usePortfolioStore.getState().recordSnapshot(usdTotal);
+      snapshotDoneRef.current = true;
+    }
+  }, [quotesReady, fx, usdTotal]);
+
   // Honest number states: skeleton while the first batch is in flight; once
   // settled (or the fetch gave up), flag any holdings still valued at cost.
   const showSkeleton = loading && !error && !quotesReady; // first load in flight

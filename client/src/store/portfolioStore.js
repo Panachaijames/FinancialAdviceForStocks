@@ -28,6 +28,7 @@ export const usePortfolioStore = create(
       transactions: [], // trade: { id, symbol, side:'buy'|'sell', qty, price, fee, currency, at, realized?, costBasis?, prevShares, prevAvgCost }
                         // dividend: { id, symbol, side:'dividend', amount, wht, currency, at, prevShares, prevAvgCost }
       watchlist: [], // [{ id, symbol, type, name, currency, addedAt }] — symbols to track WITHOUT a position
+      snapshots: [], // [{ d:'YYYY-MM-DD', usd:number }] — cheap daily portfolio-value history (see recordSnapshot)
       lastRemoved: null, // { holding, index, at } — most recent removeHolding, for undo (not persisted)
 
       /**
@@ -292,6 +293,30 @@ export const usePortfolioStore = create(
         return Array.from(new Set(get().holdings.map((h) => h.symbol)));
       },
 
+      /**
+       * Record today's total portfolio value (USD) for the performance history.
+       * One entry per calendar day (later values overwrite the same day); capped
+       * to ~2 years. This is the cheap fallback that gives EVERY user a value
+       * history — including holdings added without a trade ledger — but it only
+       * accrues on days the app is open. See lib/performance.js for the (more
+       * precise) ledger-replay path.
+       * @param {number} usdValue total portfolio market value in USD
+       */
+      recordSnapshot(usdValue) {
+        const v = Number(usdValue);
+        if (!Number.isFinite(v) || v <= 0) return;
+        const d = new Date().toISOString().slice(0, 10);
+        const snaps = get().snapshots || [];
+        const last = snaps.length ? snaps[snaps.length - 1] : null;
+        if (last && last.d === d) {
+          if (last.usd === v) return; // unchanged — skip the write
+          set({ snapshots: [...snaps.slice(0, -1), { d, usd: v }] });
+          return;
+        }
+        const next = [...snaps, { d, usd: v }];
+        set({ snapshots: next.length > 730 ? next.slice(next.length - 730) : next });
+      },
+
       // ── watchlist ───────────────────────────────────────────────────────────
       // A watchlist entry tracks a symbol WITHOUT a position. It's a separate
       // collection (not a flag on holdings) on purpose: `holdings` stays purely
@@ -347,7 +372,7 @@ export const usePortfolioStore = create(
     }),
     {
       name: 'pt-portfolio',
-      version: 3,
+      version: 4,
       // Corruption-safe storage: quarantines unparseable JSON to pt-portfolio.corrupt
       // and keeps a one-deep pt-portfolio.bak, so a bad write can't silently wipe
       // the only copy of the user's holdings/ledger.
@@ -357,13 +382,15 @@ export const usePortfolioStore = create(
         holdings: state.holdings,
         transactions: state.transactions,
         watchlist: state.watchlist,
+        snapshots: state.snapshots,
       }),
-      // v1 -> v2: the trade ledger arrived. v2 -> v3: the watchlist arrived.
-      // Both defaults are just empty arrays, so this stays version-agnostic.
+      // v1 -> v2: trade ledger. v2 -> v3: watchlist. v3 -> v4: value snapshots.
+      // All defaults are empty arrays, so this stays version-agnostic.
       migrate(persisted) {
         const state = persisted || {};
         if (!Array.isArray(state.transactions)) state.transactions = [];
         if (!Array.isArray(state.watchlist)) state.watchlist = [];
+        if (!Array.isArray(state.snapshots)) state.snapshots = [];
         return state;
       },
     }

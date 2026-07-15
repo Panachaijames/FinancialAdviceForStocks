@@ -11,6 +11,7 @@ import PortfolioSummary from './components/PortfolioSummary.jsx';
 import AllocationDonut from './components/AllocationDonut.jsx';
 import HoldingsSection from './components/HoldingsSection.jsx';
 import WatchlistStrip from './components/WatchlistStrip.jsx';
+import PerformancePanel from './components/PerformancePanel.jsx';
 import DividendPanel from './components/DividendPanel.jsx';
 import NewsPanel from './components/NewsPanel.jsx';
 import ChartModal from './components/ChartModal.jsx';
@@ -140,6 +141,10 @@ export default function App() {
 
               <Reveal blur={0} distance={16}>
                 <RebalancePanel />
+              </Reveal>
+
+              <Reveal blur={0} distance={16}>
+                <PerformancePanel />
               </Reveal>
 
               <Reveal blur={0} distance={16}>
