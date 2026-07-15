@@ -16,6 +16,7 @@ import CountUp from './fx/CountUp.jsx';
 import SpotlightCard from './fx/SpotlightCard.jsx';
 import Reveal from './fx/Reveal.jsx';
 import Odometer from './fx/Odometer.jsx';
+import styles from './PortfolioSummary.module.css';
 import CelebrationBurst from './fx/CelebrationBurst.jsx';
 import useAllTimeHigh from '../hooks/useAllTimeHigh.js';
 
@@ -300,43 +301,19 @@ export default function PortfolioSummary() {
       {celebrating && (
         <CelebrationBurst value={totals.marketValue} currency={displayCurrency} onDone={dismiss} />
       )}
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-        gap: theme.space(3),
-      }}
-    >
+    <div className={styles.grid}>
       {cards.map((c, i) => {
         // Realized P/L and dividends derive from recorded transactions, not quotes — no skeleton.
         const skel = showSkeleton && c.key !== 'realized' && c.key !== 'dividends-received';
         return (
         <Reveal key={c.key} delay={Math.min(i * 70, 350)} style={{ minWidth: 0 }}>
           <SpotlightCard
-            className="panel"
+            className={`panel ${styles.card}`}
             glowColor={c.accent + '26'}
-            style={{
-              height: '100%',
-              padding: theme.space(3),
-              display: 'flex',
-              flexDirection: 'column',
-              gap: theme.space(1),
-              borderLeft: `3px solid ${c.accent}`,
-            }}
+            style={{ '--card-accent': c.accent }}
           >
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: theme.space(1),
-                color: theme.colors.textDim,
-                fontSize: 12,
-                fontWeight: 600,
-                textTransform: 'uppercase',
-                letterSpacing: 0.4,
-              }}
-            >
-              <span style={{ color: c.accent, display: 'flex' }}>{c.icon}</span>
+            <div className={styles.label}>
+              <span className={styles.labelIcon}>{c.icon}</span>
               {c.label}
             </div>
             {skel ? (
@@ -344,31 +321,9 @@ export default function PortfolioSummary() {
               <div className="skeleton" style={{ height: 26, width: '70%' }} />
             ) : c.key === 'mv' ? (
               /* Market Value gets the mechanical rolling-digit odometer */
-              <Odometer
-                value={c.value}
-                format={c.format}
-                style={{
-                  fontSize: 24,
-                  fontWeight: 800,
-                  color: c.color,
-                  fontFamily: theme.mono,
-                  lineHeight: 1.1,
-                  display: 'block',
-                }}
-              />
+              <Odometer value={c.value} format={c.format} className={styles.value} style={{ color: c.color }} />
             ) : (
-              <CountUp
-                value={c.value}
-                format={c.format}
-                style={{
-                  fontSize: 24,
-                  fontWeight: 800,
-                  color: c.color,
-                  fontFamily: theme.mono,
-                  lineHeight: 1.1,
-                  display: 'block',
-                }}
-              />
+              <CountUp value={c.value} format={c.format} className={styles.value} style={{ color: c.color }} />
             )}
             <div style={{ fontSize: 13, color: c.color, fontWeight: 600 }} title={c.subTitle}>
               {skel ? ' ' : c.sub}
