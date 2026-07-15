@@ -58,6 +58,8 @@ export const usePortfolioStore = create(
                   }
                 : h
             ),
+            // A symbol is never both held and watched — drop any watch entry.
+            watchlist: state.watchlist.filter((w) => w.symbol !== symbol),
           }));
           return;
         }
@@ -72,7 +74,11 @@ export const usePortfolioStore = create(
           avgCost,
           addedAt: new Date().toISOString(),
         };
-        set((state) => ({ holdings: [...state.holdings, holding] }));
+        set((state) => ({
+          holdings: [...state.holdings, holding],
+          // A symbol is never both held and watched — drop any watch entry.
+          watchlist: state.watchlist.filter((w) => w.symbol !== symbol),
+        }));
       },
 
       /**
@@ -251,25 +257,29 @@ export const usePortfolioStore = create(
       },
 
       /**
-       * Undo a ledger entry — only allowed for the LATEST transaction of its
-       * symbol (LIFO), restoring the position snapshot taken when it was
-       * recorded. Returns true if undone.
+       * Undo a ledger entry — only allowed for the LAST-RECORDED entry of its
+       * symbol (LIFO by INSERTION ORDER, not by `at`: dividends are stamped at
+       * local-noon and trades at the real instant, so `at` order ≠ record order).
+       * A buy/sell restores the position snapshot; a dividend never moved the
+       * position, so its undo only removes the ledger row. Returns true if undone.
        */
       undoTransaction(txId) {
-        const { transactions, holdings } = get();
-        const tx = transactions.find((x) => x.id === txId);
-        if (!tx) return false;
-        const laterSameSymbol = transactions.some(
-          (x) => x.symbol === tx.symbol && x.id !== tx.id && x.at > tx.at
-        );
-        if (laterSameSymbol) return false; // only the most recent per symbol is reversible
-        const h = holdings.find((x) => x.symbol === tx.symbol);
+        const { transactions } = get();
+        const idx = transactions.findIndex((x) => x.id === txId);
+        if (idx === -1) return false;
+        const tx = transactions[idx];
+        // Reversible only if nothing for this symbol was recorded after it.
+        const laterSameSymbol = transactions.slice(idx + 1).some((x) => x.symbol === tx.symbol);
+        if (laterSameSymbol) return false;
         set((state) => ({
-          holdings: h
-            ? state.holdings.map((x) =>
-                x.id === h.id ? { ...x, shares: tx.prevShares, avgCost: tx.prevAvgCost } : x
-              )
-            : state.holdings,
+          holdings:
+            tx.side === 'dividend'
+              ? state.holdings // income never changed the position — don't touch it
+              : state.holdings.map((x) =>
+                  x.symbol === tx.symbol
+                    ? { ...x, shares: tx.prevShares, avgCost: tx.prevAvgCost }
+                    : x
+                ),
           transactions: state.transactions.filter((x) => x.id !== tx.id),
         }));
         return true;

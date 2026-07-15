@@ -148,7 +148,10 @@ if (fs.existsSync(clientDist)) {
     })
   );
   // SPA fallback for non-API GET routes.
-  app.get(/^(?!\/api\/|\/ws).*/, (req, res, next) => {
+  // Exclude the API/WS namespaces — including the bare `/api` (no trailing slash),
+  // which must return the JSON 404 below, not the HTML shell. \b matches at both
+  // `/api` end-of-string and the `/api/` slash.
+  app.get(/^(?!\/api\b|\/ws\b).*/, (req, res, next) => {
     if (req.method !== 'GET') return next();
     const indexHtml = path.join(clientDist, 'index.html');
     if (fs.existsSync(indexHtml)) {

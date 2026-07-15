@@ -245,7 +245,6 @@ export default function AddAssetBar() {
               padding: theme.space(1),
               boxShadow: theme.shadow,
             }}
-            role="listbox"
           >
             {loading && results.length === 0 && (
               <div style={{ padding: theme.space(3), color: theme.colors.textDim, fontSize: 13 }}>
@@ -266,12 +265,13 @@ export default function AddAssetBar() {
               const watched = watchedSymbols.has(r.symbol);
               const active = i === highlight;
               return (
-                // A div (not a button) so it can hold the nested Watch button;
-                // arrow-key highlight + Enter selection still runs via the input.
+                // A plain div row with two real buttons (Add + Watch). We dropped
+                // the listbox/option roles: they were never wired to the input via
+                // aria-activedescendant, and nesting the Watch button inside a
+                // role="option" is an ARIA violation. Arrow-key highlight + Enter
+                // selection still runs through the input's keydown handler.
                 <div
                   key={`${r.symbol}-${i}`}
-                  role="option"
-                  aria-selected={active}
                   onMouseEnter={() => setHighlight(i)}
                   onClick={() => selectResult(r)}
                   style={{

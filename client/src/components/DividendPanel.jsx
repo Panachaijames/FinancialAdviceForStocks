@@ -482,9 +482,14 @@ function Row({ row, period, displayCurrency, received }) {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+// Ex-/pay-dates are calendar dates anchored at 00:00 UTC — format and count in
+// UTC so viewers west of UTC don't see the previous day / an off-by-one countdown.
+const fmtDay = (iso) =>
+  new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' });
+
 /** Horizontal strip of upcoming ex-dividend dates with days-until badges. */
 function UpcomingStrip({ items }) {
-  const now = Date.now();
+  const utcMidnightToday = Math.floor(Date.now() / DAY_MS) * DAY_MS;
   return (
     <div style={{ marginBottom: theme.space(3) }}>
       <div
@@ -501,8 +506,8 @@ function UpcomingStrip({ items }) {
       </div>
       <div className="scroll-area" style={{ display: 'flex', gap: theme.space(2), overflowX: 'auto', paddingBottom: 4 }}>
         {items.map(({ holding, exDate, payDate, estimated }) => {
-          const days = Math.max(0, Math.ceil((Date.parse(exDate) - now) / DAY_MS));
-          const exLabel = new Date(exDate).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+          const days = Math.max(0, Math.round((Date.parse(exDate) - utcMidnightToday) / DAY_MS));
+          const exLabel = fmtDay(exDate);
           const meta = assetMeta(holding.type);
           const soon = days <= 7;
           return (
@@ -510,7 +515,7 @@ function UpcomingStrip({ items }) {
               key={holding.id}
               title={
                 (estimated ? 'Estimated from payment history — ' : 'Confirmed ex-dividend date — ') +
-                `ex-date ${exLabel}${payDate ? `, pays ${new Date(payDate).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}` : ''}`
+                `ex-date ${exLabel}${payDate ? `, pays ${fmtDay(payDate)}` : ''}`
               }
               style={{
                 flex: '0 0 auto',
@@ -538,7 +543,7 @@ function UpcomingStrip({ items }) {
               <div style={{ fontSize: 12, fontFamily: theme.mono, color: theme.colors.text }}>{exLabel}</div>
               <div style={{ fontSize: 10.5, fontWeight: 600, color: soon ? theme.colors.gold : theme.colors.textDim }}>
                 {days === 0 ? 'today' : `in ${days} day${days === 1 ? '' : 's'}`}
-                {payDate ? ` · pays ${new Date(payDate).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}` : ''}
+                {payDate ? ` · pays ${fmtDay(payDate)}` : ''}
               </div>
             </div>
           );

@@ -11,11 +11,13 @@ function SnackItem({ snack }) {
   const dismiss = useSnackbarStore((s) => s.dismiss);
 
   // Auto-dismiss after `duration` ms (0 = persist until dismissed/actioned).
+  // `snack.nonce` is in the deps so a replace (same id, new push) restarts the
+  // timer instead of inheriting the previous snack's remaining time.
   useEffect(() => {
     if (!snack.duration) return undefined;
     const t = setTimeout(() => dismiss(snack.id), snack.duration);
     return () => clearTimeout(t);
-  }, [snack.id, snack.duration, dismiss]);
+  }, [snack.id, snack.nonce, snack.duration, dismiss]);
 
   const toneColor =
     snack.tone === 'error'

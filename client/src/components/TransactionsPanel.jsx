@@ -38,18 +38,14 @@ export default function TransactionsPanel() {
     [transactions]
   );
 
-  // Latest transaction per symbol -> the only ones that may be undone.
+  // Last-RECORDED entry per symbol -> the only ones that may be undone. Keyed on
+  // insertion order (not the `at`-sorted display rows), matching the store's LIFO
+  // — dividends are stamped at local-noon so `at` order ≠ record order.
   const undoable = useMemo(() => {
-    const latest = new Set();
-    const seen = new Set();
-    for (const t of rows) {
-      if (!seen.has(t.symbol)) {
-        latest.add(t.id);
-        seen.add(t.symbol);
-      }
-    }
-    return latest;
-  }, [rows]);
+    const lastIdBySymbol = new Map();
+    for (const t of transactions || []) if (t && t.symbol) lastIdBySymbol.set(t.symbol, t.id);
+    return new Set(lastIdBySymbol.values());
+  }, [transactions]);
 
   const totalRealized = useMemo(() => {
     const byCur = realizedByCurrency(transactions);
@@ -60,7 +56,12 @@ export default function TransactionsPanel() {
     const byCur = dividendsByCurrency(transactions);
     return Object.entries(byCur).reduce((sum, [cur, v]) => sum + convert(v, cur), 0);
   }, [transactions, convert]);
-  const hasDividends = totalDividends !== 0;
+  // Presence-based (not `!== 0`), so a fully-withheld $0.00-net dividend still
+  // shows the chip — matching PortfolioSummary's "Dividends Received" card.
+  const hasDividends = useMemo(
+    () => (transactions || []).some((t) => t && t.side === 'dividend'),
+    [transactions]
+  );
 
   const visible = showAll ? rows : rows.slice(0, SHOW_COLLAPSED);
   const td = { padding: `${theme.space(1)}px ${theme.space(2)}px`, borderTop: `1px solid ${theme.colors.border}`, fontSize: 12.5, whiteSpace: 'nowrap' };

@@ -15,9 +15,14 @@ export const useSnackbarStore = create((set) => ({
    * @param {{ id?:string, message:string, actionLabel?:string, onAction?:Function, tone?:'default'|'success'|'error', duration?:number }} snack
    */
   push(snack = {}) {
-    const id = snack.id || `snk-${(seq += 1)}`;
+    seq += 1;
+    const id = snack.id || `snk-${seq}`;
     const entry = {
       id,
+      // Bumps on EVERY push, even when `id` is reused — the host keys its
+      // auto-dismiss timer off this, so replacing a snack resets its clock
+      // (a 2nd quick "Removed — Undo" gets a full undo window, not the leftover).
+      nonce: seq,
       message: snack.message || '',
       actionLabel: snack.actionLabel || null,
       onAction: typeof snack.onAction === 'function' ? snack.onAction : null,
