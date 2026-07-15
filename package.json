@@ -20,8 +20,8 @@
     "test": "node --test",
     "electron:start": "npm run build && electron .",
     "pack:win": "npm run build && electron-packager . --platform=win32 --arch=x64 --out=release --overwrite --no-asar --prune=true --name=\"PT Financial Advisor\" --executable-name=\"PT Financial Advisor\" --ignore=\"/release\" --ignore=\"/android\" --ignore=\"/capacitor\\.config\\.json\" --ignore=\"/\\.git\" --ignore=\"/\\.claude\" --ignore=\"/\\.env\\.example\" --ignore=\"/\\.env\\.local\" --ignore=\"/\\.env$\" --ignore=\"/client/src\" --ignore=\"/client/node_modules\" --ignore=\"/client/index.html\" --ignore=\"/client/vite.config.js\"",
-    "dist": "npm run build && electron-builder --win",
-    "dist:dir": "npm run build && electron-builder --win --dir"
+    "dist": "electron-builder --win",
+    "dist:dir": "electron-builder --win --dir"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.1",
@@ -42,30 +42,34 @@
   "build": {
     "appId": "com.ptfinancial.advisor",
     "productName": "PT Financial Advisor",
-    "asar": false,
+    "asar": true,
     "extraMetadata": {
       "main": "electron/main.cjs"
     },
     "files": [
       "electron/**/*",
-      "server/**/*",
-      "client/dist/**/*",
       "package.json",
-      ".env"
+      "!node_modules/**/*"
     ],
     "directories": {
       "output": "release"
     },
     "win": {
       "target": [
-        "portable",
-        "nsis"
-      ]
+        "nsis",
+        "portable"
+      ],
+      "icon": "client/public/pwa-512x512.png",
+      "signAndEditExecutable": false
     },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "PT Financial Advisor",
+      "artifactName": "PT-Financial-Advisor-Setup-${version}.${ext}"
     },
     "portable": {
       "artifactName": "PT-Financial-Advisor-Portable.exe"
