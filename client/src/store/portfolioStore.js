@@ -10,10 +10,34 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { createSafeStorage } from '../lib/safeStorage.js';
 import { classify } from '../lib/assetType.js';
-import { applyBuy, applySell } from '../lib/trades.js';
+import { replayPosition } from '../lib/trades.js';
 
 function nativeCurrencyForType(type) {
   return type === 'th_stock' ? 'THB' : 'USD';
+}
+
+/**
+ * Recompute one symbol's position + its entries' realized/snapshot fields by
+ * replaying its ledger chronologically (lib/trades.replayPosition), keeping the
+ * transactions array's existing ORDER (only the per-entry fields change) so the
+ * insertion-order LIFO undo stays valid. This is the single consistency path for
+ * backdated / edited / deleted trades. Returns { transactions, holdings }.
+ */
+function replayInto(transactions, holdings, symbol) {
+  const symTxs = transactions.filter((t) => t && t.symbol === symbol);
+  // Only the ledger's buy/sell entries define a position. If a symbol has none
+  // (e.g. a holding entered manually via "Add asset", or one that only has a
+  // logged dividend), its position is NOT ledger-derived — leave the holding's
+  // shares/avgCost untouched so a replay can't wipe manually-entered shares.
+  const hasTrades = symTxs.some((t) => t.side === 'buy' || t.side === 'sell');
+  const { shares, avgCost, transactions: replayed } = replayPosition(symTxs);
+  const byId = new Map(replayed.map((t) => [t.id, t]));
+  return {
+    transactions: transactions.map((t) => (t && t.symbol === symbol ? byId.get(t.id) || t : t)),
+    holdings: hasTrades
+      ? holdings.map((h) => (h.symbol === symbol ? { ...h, shares, avgCost } : h))
+      : holdings,
+  };
 }
 
 function makeId(symbol) {
@@ -28,6 +52,7 @@ export const usePortfolioStore = create(
       transactions: [], // trade: { id, symbol, side:'buy'|'sell', qty, price, fee, currency, at, realized?, costBasis?, prevShares, prevAvgCost }
                         // dividend: { id, symbol, side:'dividend', amount, wht, currency, at, prevShares, prevAvgCost }
       watchlist: [], // [{ id, symbol, type, name, currency, addedAt }] — symbols to track WITHOUT a position
+      snapshots: [], // [{ d:'YYYY-MM-DD', usd:number }] — cheap daily portfolio-value history (see recordSnapshot)
       lastRemoved: null, // { holding, index, at } — most recent removeHolding, for undo (not persisted)
 
       /**
@@ -147,7 +172,40 @@ export const usePortfolioStore = create(
         const fee = Number(t.fee) || 0;
         if (qty <= 0 || price <= 0 || fee < 0) return null;
 
-        const prev = { shares: Number(h.shares) || 0, avgCost: Number(h.avgCost) || 0 };
+        const currency = h.currency || nativeCurrencyForType(h.type);
+        const at = t.at || new Date().toISOString();
+        const txs = get().transactions;
+        const symTxs = txs.filter((x) => x.symbol === h.symbol);
+        const hasTrades = symTxs.some((x) => x.side === 'buy' || x.side === 'sell');
+
+        // Preserve a manually-entered base position (added via "Add asset", not the
+        // ledger) as an OPENING lot the first time a trade is recorded — otherwise
+        // the replay (which knows only the ledger) would discard those shares.
+        const additions = [];
+        const heldShares = Number(h.shares) || 0;
+        if (!hasTrades && heldShares > 0) {
+          const newMs = Date.parse(at) || Date.now();
+          const addedMs = Date.parse(h.addedAt);
+          const openMs = Math.min(Number.isFinite(addedMs) ? addedMs : newMs - 1000, newMs - 1000);
+          additions.push({
+            id: `tx-open-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            symbol: h.symbol,
+            type: h.type,
+            side: 'buy',
+            qty: heldShares,
+            price: Number(h.avgCost) || 0,
+            fee: 0,
+            currency,
+            at: new Date(openMs).toISOString(),
+            opening: true, // synthetic opening balance for a manually-entered position
+          });
+        }
+
+        // A sell records nothing if there's nothing held once the opening lot is
+        // accounted for — return null so callers (import) skip/report it rather
+        // than persisting a phantom qty-0 row.
+        if (side === 'sell' && replayPosition([...symTxs, ...additions]).shares <= 0) return null;
+
         const tx = {
           id: `tx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           symbol: h.symbol,
@@ -156,38 +214,63 @@ export const usePortfolioStore = create(
           qty,
           price,
           fee,
-          currency: h.currency || nativeCurrencyForType(h.type),
-          at: t.at || new Date().toISOString(),
-          prevShares: prev.shares,
-          prevAvgCost: prev.avgCost,
+          currency,
+          at,
         };
+        additions.push(tx);
 
-        let next;
-        if (side === 'buy') {
-          next = applyBuy(prev, { qty, price, fee });
-        } else {
-          const sale = applySell(prev, { qty, price, fee });
-          if (sale.soldQty <= 0) return null;
-          next = { shares: sale.shares, avgCost: sale.avgCost };
-          tx.qty = sale.soldQty; // clamped to what was actually held
-          tx.realized = sale.realized;
-          tx.costBasis = sale.costBasis;
-        }
+        // Append, then replay the symbol chronologically — so a BACKDATED `at`
+        // blends into avg cost / realizes at the right point, not "as of now".
+        const replayed = replayInto([...txs, ...additions], get().holdings, h.symbol);
+        set(replayed);
+        return replayed.transactions.find((x) => x.id === tx.id) || tx;
+      },
 
-        set((state) => ({
-          holdings: state.holdings.map((x) =>
-            x.id === holdingId ? { ...x, shares: next.shares, avgCost: next.avgCost } : x
-          ),
-          transactions: [...state.transactions, tx],
-        }));
-        return tx;
+      /**
+       * Edit a recorded buy/sell (qty / price / fee / date / side), then replay
+       * the symbol so avg cost and every downstream sell's realized P/L are
+       * recomputed — fixing an old typo without undoing everything after it.
+       * @param {string} txId
+       * @param {{ qty?:number, price?:number, fee?:number, at?:string, side?:'buy'|'sell' }} patch
+       * @returns {object|null} the replayed (possibly clamped) entry, or null if invalid
+       */
+      editTransaction(txId, patch = {}) {
+        const txs = get().transactions;
+        const tx = txs.find((x) => x.id === txId);
+        if (!tx || (tx.side !== 'buy' && tx.side !== 'sell')) return null;
+        const clean = {};
+        if ('qty' in patch) clean.qty = Number(patch.qty) || 0;
+        if ('price' in patch) clean.price = Number(patch.price) || 0;
+        if ('fee' in patch) clean.fee = Math.max(0, Number(patch.fee) || 0);
+        if ('at' in patch && patch.at) clean.at = patch.at;
+        if ('side' in patch && (patch.side === 'buy' || patch.side === 'sell')) clean.side = patch.side;
+        if ((clean.qty != null && clean.qty <= 0) || (clean.price != null && clean.price <= 0)) return null;
+        const nextTxs = txs.map((x) => (x.id === txId ? { ...x, ...clean } : x));
+        const replayed = replayInto(nextTxs, get().holdings, tx.symbol);
+        set(replayed);
+        return replayed.transactions.find((x) => x.id === txId) || null;
+      },
+
+      /**
+       * Delete any ledger entry (trade or dividend), then replay its symbol so the
+       * position and realized P/L stay consistent — no LIFO restriction.
+       * @param {string} txId
+       * @returns {boolean}
+       */
+      deleteTransaction(txId) {
+        const txs = get().transactions;
+        const tx = txs.find((x) => x.id === txId);
+        if (!tx) return false;
+        const nextTxs = txs.filter((x) => x.id !== txId);
+        set(replayInto(nextTxs, get().holdings, tx.symbol));
+        return true;
       },
 
       /**
        * Record a dividend the user RECEIVED for a holding (income, not a trade).
-       * It never moves the position, so the snapshot equals the current position
-       * — undoTransaction then restores a safe no-op. Returns the ledger entry,
-       * or null if invalid (unknown holding, amount <= 0, negative withholding).
+       * It never moves the position (deleteTransaction just removes the row and a
+       * replay leaves the position untouched). Returns the ledger entry, or null
+       * if invalid (unknown holding, amount <= 0, negative withholding).
        * @param {string} holdingId
        * @param {{ amount:number, wht?:number, at?:string }} d  amounts in native currency
        */
@@ -257,39 +340,34 @@ export const usePortfolioStore = create(
       },
 
       /**
-       * Undo a ledger entry — only allowed for the LAST-RECORDED entry of its
-       * symbol (LIFO by INSERTION ORDER, not by `at`: dividends are stamped at
-       * local-noon and trades at the real instant, so `at` order ≠ record order).
-       * A buy/sell restores the position snapshot; a dividend never moved the
-       * position, so its undo only removes the ledger row. Returns true if undone.
-       */
-      undoTransaction(txId) {
-        const { transactions } = get();
-        const idx = transactions.findIndex((x) => x.id === txId);
-        if (idx === -1) return false;
-        const tx = transactions[idx];
-        // Reversible only if nothing for this symbol was recorded after it.
-        const laterSameSymbol = transactions.slice(idx + 1).some((x) => x.symbol === tx.symbol);
-        if (laterSameSymbol) return false;
-        set((state) => ({
-          holdings:
-            tx.side === 'dividend'
-              ? state.holdings // income never changed the position — don't touch it
-              : state.holdings.map((x) =>
-                  x.symbol === tx.symbol
-                    ? { ...x, shares: tx.prevShares, avgCost: tx.prevAvgCost }
-                    : x
-                ),
-          transactions: state.transactions.filter((x) => x.id !== tx.id),
-        }));
-        return true;
-      },
-
-      /**
        * Get the list of distinct symbols in the portfolio.
        */
       getSymbols() {
         return Array.from(new Set(get().holdings.map((h) => h.symbol)));
+      },
+
+      /**
+       * Record today's total portfolio value (USD) for the performance history.
+       * One entry per calendar day (later values overwrite the same day); capped
+       * to ~2 years. This is the cheap fallback that gives EVERY user a value
+       * history — including holdings added without a trade ledger — but it only
+       * accrues on days the app is open. See lib/performance.js for the (more
+       * precise) ledger-replay path.
+       * @param {number} usdValue total portfolio market value in USD
+       */
+      recordSnapshot(usdValue) {
+        const v = Number(usdValue);
+        if (!Number.isFinite(v) || v <= 0) return;
+        const d = new Date().toISOString().slice(0, 10);
+        const snaps = get().snapshots || [];
+        const last = snaps.length ? snaps[snaps.length - 1] : null;
+        if (last && last.d === d) {
+          if (last.usd === v) return; // unchanged — skip the write
+          set({ snapshots: [...snaps.slice(0, -1), { d, usd: v }] });
+          return;
+        }
+        const next = [...snaps, { d, usd: v }];
+        set({ snapshots: next.length > 730 ? next.slice(next.length - 730) : next });
       },
 
       // ── watchlist ───────────────────────────────────────────────────────────
@@ -347,7 +425,7 @@ export const usePortfolioStore = create(
     }),
     {
       name: 'pt-portfolio',
-      version: 3,
+      version: 4,
       // Corruption-safe storage: quarantines unparseable JSON to pt-portfolio.corrupt
       // and keeps a one-deep pt-portfolio.bak, so a bad write can't silently wipe
       // the only copy of the user's holdings/ledger.
@@ -357,13 +435,15 @@ export const usePortfolioStore = create(
         holdings: state.holdings,
         transactions: state.transactions,
         watchlist: state.watchlist,
+        snapshots: state.snapshots,
       }),
-      // v1 -> v2: the trade ledger arrived. v2 -> v3: the watchlist arrived.
-      // Both defaults are just empty arrays, so this stays version-agnostic.
+      // v1 -> v2: trade ledger. v2 -> v3: watchlist. v3 -> v4: value snapshots.
+      // All defaults are empty arrays, so this stays version-agnostic.
       migrate(persisted) {
         const state = persisted || {};
         if (!Array.isArray(state.transactions)) state.transactions = [];
         if (!Array.isArray(state.watchlist)) state.watchlist = [];
+        if (!Array.isArray(state.snapshots)) state.snapshots = [];
         return state;
       },
     }

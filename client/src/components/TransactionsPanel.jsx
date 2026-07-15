@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { History, Undo2, ChevronDown, ChevronUp, Upload, Download } from 'lucide-react';
+import { History, Pencil, Trash2, ChevronDown, ChevronUp, Upload, Download } from 'lucide-react';
 import { theme } from '../lib/theme.js';
 import { fmtMoney, fmtNumber, classForChange } from '../lib/format.js';
 import { usePortfolioStore } from '../store/portfolioStore.js';
@@ -9,6 +9,7 @@ import { realizedByCurrency, dividendsByCurrency } from '../lib/trades.js';
 import { tradesToCsv } from '../lib/csvImport.js';
 import { downloadTextFile } from '../lib/backup.js';
 import CsvImportDialog from './CsvImportDialog.jsx';
+import TradeDialog from './TradeDialog.jsx';
 
 const SHOW_COLLAPSED = 8;
 
@@ -27,25 +28,33 @@ function colorForChange(v) {
  */
 export default function TransactionsPanel() {
   const transactions = usePortfolioStore((s) => s.transactions);
-  const undoTransaction = usePortfolioStore((s) => s.undoTransaction);
+  const deleteTransaction = usePortfolioStore((s) => s.deleteTransaction);
+  const holdings = usePortfolioStore((s) => s.holdings);
   const displayCurrency = useSettingsStore((s) => s.displayCurrency);
   const { convert } = useFx();
   const [showAll, setShowAll] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [editing, setEditing] = useState(null); // { tx, holding } being edited
 
   const rows = useMemo(
     () => [...(transactions || [])].sort((a, b) => (a.at < b.at ? 1 : -1)),
     [transactions]
   );
 
-  // Last-RECORDED entry per symbol -> the only ones that may be undone. Keyed on
-  // insertion order (not the `at`-sorted display rows), matching the store's LIFO
-  // — dividends are stamped at local-noon so `at` order ≠ record order.
-  const undoable = useMemo(() => {
-    const lastIdBySymbol = new Map();
-    for (const t of transactions || []) if (t && t.symbol) lastIdBySymbol.set(t.symbol, t.id);
-    return new Set(lastIdBySymbol.values());
-  }, [transactions]);
+  // Open the editor for a trade, pairing it with its holding (or a minimal
+  // holding-like built from the entry, for a symbol no longer held).
+  const openEdit = (t) => {
+    const holding =
+      holdings.find((h) => h.symbol === t.symbol) || {
+        id: null,
+        symbol: t.symbol,
+        type: t.type || 'other',
+        currency: t.currency || 'USD',
+        shares: 0,
+        avgCost: 0,
+      };
+    setEditing({ tx: t, holding });
+  };
 
   const totalRealized = useMemo(() => {
     const byCur = realizedByCurrency(transactions);
@@ -125,6 +134,14 @@ export default function TransactionsPanel() {
       </div>
 
       {importing && <CsvImportDialog onClose={() => setImporting(false)} />}
+      {editing && (
+        <TradeDialog
+          holding={editing.holding}
+          side={editing.tx.side}
+          editTx={editing.tx}
+          onClose={() => setEditing(null)}
+        />
+      )}
 
       {rows.length === 0 ? (
         <div style={{ fontSize: 12.5, color: theme.colors.textDim }}>
@@ -208,18 +225,29 @@ export default function TransactionsPanel() {
                       </td>
                     </>
                   )}
-                  <td style={{ ...td, textAlign: 'right' }}>
-                    {undoable.has(t.id) && (
+                  <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {!isDividend && (
                       <button
                         type="button"
                         className="btn-ghost"
-                        onClick={() => undoTransaction(t.id)}
-                        title={isDividend ? 'Remove this dividend entry' : 'Undo this trade (restores the position as it was before)'}
+                        onClick={() => openEdit(t)}
+                        title="Edit this trade (qty / price / fee / date) — recomputes your position"
+                        aria-label={`Edit ${t.side} ${t.symbol}`}
                         style={{ padding: 4, lineHeight: 0, color: theme.colors.textDim }}
                       >
-                        <Undo2 size={14} />
+                        <Pencil size={14} />
                       </button>
                     )}
+                    <button
+                      type="button"
+                      className="btn-ghost"
+                      onClick={() => deleteTransaction(t.id)}
+                      title={isDividend ? 'Delete this dividend entry' : 'Delete this trade — recomputes your position'}
+                      aria-label={`Delete ${t.side} ${t.symbol}`}
+                      style={{ padding: 4, lineHeight: 0, color: theme.colors.down }}
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </td>
                 </tr>
               );
@@ -244,7 +272,8 @@ export default function TransactionsPanel() {
       {rows.length > 0 && (
         <div style={{ fontSize: 10.5, color: theme.colors.textFaint }}>
           Records of what you did at your broker — realized P/L uses the average-cost method; dividends are
-          shown net of withholding. Only the latest entry per symbol can be undone. CSV export covers trades only.
+          shown net of withholding. Edit or delete any entry — your position and every later sell's realized P/L
+          recompute in date order. CSV export covers trades only.
         </div>
       )}
     </div>

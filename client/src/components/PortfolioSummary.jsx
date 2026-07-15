@@ -12,10 +12,12 @@ import { computeDividendIncome } from '../lib/dividends.js';
 import { DIVIDEND_ERROR, isDividendError } from '../lib/dividendState.js';
 import marketSocket from '../api/socket.js';
 import { realizedByCurrency, dividendsByCurrency } from '../lib/trades.js';
+import { useT } from '../lib/i18n.js';
 import CountUp from './fx/CountUp.jsx';
 import SpotlightCard from './fx/SpotlightCard.jsx';
 import Reveal from './fx/Reveal.jsx';
 import Odometer from './fx/Odometer.jsx';
+import styles from './PortfolioSummary.module.css';
 import CelebrationBurst from './fx/CelebrationBurst.jsx';
 import useAllTimeHigh from '../hooks/useAllTimeHigh.js';
 
@@ -35,6 +37,7 @@ export default function PortfolioSummary() {
   const holdings = usePortfolioStore((s) => s.holdings);
   const transactions = usePortfolioStore((s) => s.transactions);
   const displayCurrency = useSettingsStore((s) => s.displayCurrency);
+  const t = useT();
   const symbols = useMemo(() => holdings.map((h) => h.symbol), [holdings]);
   const { quotes, loading, error } = useQuotes(symbols);
   const { convert, rate, fx } = useFx();
@@ -190,6 +193,18 @@ export default function PortfolioSummary() {
     ready: quotesReady && fx != null && fx.source !== 'default',
   });
 
+  // Record today's value once per session (same real-quote + real-fx guard as the
+  // ATH ledger) for the performance history — the cheap fallback for holdings that
+  // have no trade ledger. Ref-guarded so it fires once, not on every price tick.
+  const snapshotDoneRef = useRef(false);
+  useEffect(() => {
+    if (snapshotDoneRef.current) return;
+    if (quotesReady && fx != null && fx.source !== 'default' && usdTotal > 0) {
+      usePortfolioStore.getState().recordSnapshot(usdTotal);
+      snapshotDoneRef.current = true;
+    }
+  }, [quotesReady, fx, usdTotal]);
+
   // Honest number states: skeleton while the first batch is in flight; once
   // settled (or the fetch gave up), flag any holdings still valued at cost.
   const showSkeleton = loading && !error && !quotesReady; // first load in flight
@@ -208,13 +223,13 @@ export default function PortfolioSummary() {
   const cards = [
     {
       key: 'mv',
-      label: 'Market Value',
+      label: t('summary.marketValue'),
       icon: <Wallet size={16} />,
       value: totals.marketValue,
       format: fmtCur,
       sub: partial
-        ? `Cost ${fmtMoney(totals.cost, cur)} · ${quotedCount}/${holdings.length} priced live`
-        : `Cost ${fmtMoney(totals.cost, cur)}`,
+        ? `${t('summary.cost')} ${fmtMoney(totals.cost, cur)} · ${quotedCount}/${holdings.length} priced live`
+        : `${t('summary.cost')} ${fmtMoney(totals.cost, cur)}`,
       subTitle: partial
         ? 'Holdings without a live quote are valued at your average cost'
         : undefined,
@@ -223,7 +238,7 @@ export default function PortfolioSummary() {
     },
     {
       key: 'pl',
-      label: 'Total P/L',
+      label: t('summary.totalPL'),
       icon: totals.pl >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />,
       value: totals.pl,
       format: fmtCur,
@@ -233,7 +248,7 @@ export default function PortfolioSummary() {
     },
     {
       key: 'today',
-      label: "Today's Change",
+      label: t('summary.todaysChange'),
       icon: <Activity size={16} />,
       value: totals.todayChange,
       format: fmtCur,
@@ -243,11 +258,11 @@ export default function PortfolioSummary() {
     },
     {
       key: 'div',
-      label: 'Annual Dividends',
+      label: t('summary.annualDividends'),
       icon: <Coins size={16} />,
       value: totals.annualDividend,
       format: fmtCur,
-      sub: `${totals.yieldPct.toFixed(2)}% yield`,
+      sub: t('summary.yield', { pct: totals.yieldPct.toFixed(2) }),
       color: totals.annualDividend > 0 ? theme.colors.gold : theme.colors.textDim,
       accent: theme.colors.gold,
     },
@@ -256,11 +271,11 @@ export default function PortfolioSummary() {
       ? [
           {
             key: 'realized',
-            label: 'Realized P/L',
+            label: t('summary.realizedPL'),
             icon: <BadgeDollarSign size={16} />,
             value: realized,
             format: fmtCur,
-            sub: 'from recorded sells',
+            sub: t('summary.fromSells'),
             color: colorForChange(realized),
             accent: colorForChange(realized),
           },
@@ -271,11 +286,11 @@ export default function PortfolioSummary() {
       ? [
           {
             key: 'dividends-received',
-            label: 'Dividends Received',
+            label: t('summary.dividendsReceived'),
             icon: <Coins size={16} />,
             value: dividendsReceived,
             format: fmtCur,
-            sub: 'logged, net of withholding',
+            sub: t('summary.loggedNetWht'),
             color: theme.colors.gold,
             accent: theme.colors.gold,
           },
@@ -288,43 +303,19 @@ export default function PortfolioSummary() {
       {celebrating && (
         <CelebrationBurst value={totals.marketValue} currency={displayCurrency} onDone={dismiss} />
       )}
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-        gap: theme.space(3),
-      }}
-    >
+    <div className={styles.grid}>
       {cards.map((c, i) => {
         // Realized P/L and dividends derive from recorded transactions, not quotes — no skeleton.
         const skel = showSkeleton && c.key !== 'realized' && c.key !== 'dividends-received';
         return (
         <Reveal key={c.key} delay={Math.min(i * 70, 350)} style={{ minWidth: 0 }}>
           <SpotlightCard
-            className="panel"
+            className={`panel ${styles.card}`}
             glowColor={c.accent + '26'}
-            style={{
-              height: '100%',
-              padding: theme.space(3),
-              display: 'flex',
-              flexDirection: 'column',
-              gap: theme.space(1),
-              borderLeft: `3px solid ${c.accent}`,
-            }}
+            style={{ '--card-accent': c.accent }}
           >
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: theme.space(1),
-                color: theme.colors.textDim,
-                fontSize: 12,
-                fontWeight: 600,
-                textTransform: 'uppercase',
-                letterSpacing: 0.4,
-              }}
-            >
-              <span style={{ color: c.accent, display: 'flex' }}>{c.icon}</span>
+            <div className={styles.label}>
+              <span className={styles.labelIcon}>{c.icon}</span>
               {c.label}
             </div>
             {skel ? (
@@ -332,31 +323,9 @@ export default function PortfolioSummary() {
               <div className="skeleton" style={{ height: 26, width: '70%' }} />
             ) : c.key === 'mv' ? (
               /* Market Value gets the mechanical rolling-digit odometer */
-              <Odometer
-                value={c.value}
-                format={c.format}
-                style={{
-                  fontSize: 24,
-                  fontWeight: 800,
-                  color: c.color,
-                  fontFamily: theme.mono,
-                  lineHeight: 1.1,
-                  display: 'block',
-                }}
-              />
+              <Odometer value={c.value} format={c.format} className={styles.value} style={{ color: c.color }} />
             ) : (
-              <CountUp
-                value={c.value}
-                format={c.format}
-                style={{
-                  fontSize: 24,
-                  fontWeight: 800,
-                  color: c.color,
-                  fontFamily: theme.mono,
-                  lineHeight: 1.1,
-                  display: 'block',
-                }}
-              />
+              <CountUp value={c.value} format={c.format} className={styles.value} style={{ color: c.color }} />
             )}
             <div style={{ fontSize: 13, color: c.color, fontWeight: 600 }} title={c.subTitle}>
               {skel ? ' ' : c.sub}

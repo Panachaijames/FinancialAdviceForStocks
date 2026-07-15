@@ -3,6 +3,7 @@ import { TrendingUp, Sparkles, Layers } from 'lucide-react';
 import marketSocket from '../api/socket.js';
 import { getHealth } from '../api/client.js';
 import { useSettingsStore } from '../store/settingsStore.js';
+import { useT } from '../lib/i18n.js';
 import CurrencyToggle from './CurrencyToggle.jsx';
 import GradientText from './fx/GradientText.jsx';
 
@@ -27,6 +28,9 @@ export default function Header() {
   const setFxMode = useSettingsStore((s) => s.setFxMode);
   const glassMode = useSettingsStore((s) => s.glassMode);
   const toggleGlassMode = useSettingsStore((s) => s.toggleGlassMode);
+  const language = useSettingsStore((s) => s.language);
+  const toggleLanguage = useSettingsStore((s) => s.toggleLanguage);
+  const t = useT();
 
   useEffect(() => {
     marketSocket.ensureConnected();
@@ -94,7 +98,7 @@ export default function Header() {
           }}
         >
           <span className="conn-dot-off" aria-hidden="true" />
-          Free server is waking up — live data in ~30s…
+          {t('header.waking')}
         </div>
       ) : null}
       <header className="app-header">
@@ -104,7 +108,7 @@ export default function Header() {
         </div>
         <div className="app-brand-text">
           <GradientText className="app-brand-title">PT Financial Advisor</GradientText>
-          <span className="app-brand-sub">Multi-asset portfolio dashboard</span>
+          <span className="app-brand-sub">{t('header.tagline')}</span>
         </div>
       </div>
 
@@ -155,9 +159,19 @@ export default function Header() {
             <span className="conn-dot-off" aria-hidden="true" />
           )}
           <span className="app-conn-label" data-on={connected ? '1' : '0'} aria-live="polite">
-            {connected ? 'Live' : everConnected ? 'Reconnecting…' : 'Offline'}
+            {connected ? t('header.live') : everConnected ? t('header.reconnecting') : t('header.offline')}
           </span>
         </div>
+        <button
+          type="button"
+          className="chip"
+          onClick={toggleLanguage}
+          title={t('header.language')}
+          aria-label={`${t('header.language')}: ${language === 'th' ? 'ไทย' : 'English'}`}
+          style={{ fontWeight: 700 }}
+        >
+          🌐 {language === 'th' ? 'ไทย' : 'EN'}
+        </button>
         <CurrencyToggle />
       </div>
       </header>

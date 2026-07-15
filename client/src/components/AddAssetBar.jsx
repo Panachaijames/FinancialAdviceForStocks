@@ -6,6 +6,7 @@ import { classify, assetMeta, normalizeInput } from '../lib/assetType.js';
 import { usePortfolioStore } from '../store/portfolioStore.js';
 import { snackbar } from '../store/snackbarStore.js';
 import { scrollToCard } from '../lib/scrollToCard.js';
+import { useT } from '../lib/i18n.js';
 import HoldingEditor from './HoldingEditor.jsx';
 
 const QUICK_ADD = [
@@ -61,6 +62,7 @@ export default function AddAssetBar() {
   const holdings = usePortfolioStore((s) => s.holdings);
   const watchlist = usePortfolioStore((s) => s.watchlist);
   const addToWatchlist = usePortfolioStore((s) => s.addToWatchlist);
+  const t = useT();
 
   const boxRef = useRef(null);
   const debounceRef = useRef(null);
@@ -202,7 +204,7 @@ export default function AddAssetBar() {
           <input
             className="input"
             type="text"
-            placeholder="Search stocks, crypto, gold...  (e.g. AAPL, bitcoin, PTT.BK)"
+            placeholder={t('add.searchPlaceholder')}
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
@@ -348,7 +350,7 @@ export default function AddAssetBar() {
                     </button>
                   )}
                   {already ? (
-                    <span style={{ fontSize: 11, color: theme.colors.textFaint }}>added</span>
+                    <span style={{ fontSize: 11, color: theme.colors.textFaint }}>{t('add.added')}</span>
                   ) : (
                     <Plus size={16} style={{ color: theme.colors.accent, flexShrink: 0 }} />
                   )}
@@ -370,7 +372,7 @@ export default function AddAssetBar() {
         }}
       >
         <span style={{ fontSize: 11, color: theme.colors.textFaint, marginRight: theme.space(1) }}>
-          Quick add:
+          {t('add.quickAdd')}
         </span>
         {QUICK_ADD.map((q) => {
           const meta = assetMeta(classify(q.symbol));
@@ -382,7 +384,7 @@ export default function AddAssetBar() {
               className="chip"
               onClick={() => selectResult(resultFromSymbol(q.symbol))}
               disabled={already}
-              title={already ? 'Already in portfolio' : `Add ${q.symbol}`}
+              title={already ? t('add.already') : `Add ${q.symbol}`}
               style={{
                 cursor: already ? 'default' : 'pointer',
                 opacity: already ? 0.45 : 1,

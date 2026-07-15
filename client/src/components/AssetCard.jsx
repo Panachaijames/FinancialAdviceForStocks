@@ -15,6 +15,7 @@ import { DIVIDEND_ERROR, isDividendError } from '../lib/dividendState.js';
 import marketSocket from '../api/socket.js';
 import MiniChart from './MiniChart.jsx';
 import SpotlightCard from './fx/SpotlightCard.jsx';
+import cardStyles from './AssetCard.module.css';
 import CountUp from './fx/CountUp.jsx';
 import HoldingEditor from './HoldingEditor.jsx';
 import TradeDialog from './TradeDialog.jsx';
@@ -167,7 +168,7 @@ export default function AssetCard({ holding, onOpen }) {
     <>
       <SpotlightCard
         id={`card-${symbol}`}
-        className="panel"
+        className={`panel ${cardStyles.card}`}
         role="button"
         tabIndex={0}
         aria-label={`Open ${symbol} chart`}
@@ -178,14 +179,6 @@ export default function AssetCard({ holding, onOpen }) {
             e.preventDefault();
             onOpen && onOpen();
           }
-        }}
-        style={{
-          padding: theme.space(3),
-          display: 'flex',
-          flexDirection: 'column',
-          gap: theme.space(2),
-          cursor: 'pointer',
-          minWidth: 0,
         }}
       >
         {/* Header row */}

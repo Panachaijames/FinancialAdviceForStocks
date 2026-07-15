@@ -4,6 +4,7 @@ import { theme } from '../lib/theme.js';
 import { useAlertsStore } from '../store/alertsStore.js';
 import useQuotes from '../hooks/useQuotes.js';
 import { evaluateAlert, describeAlert } from '../lib/alerts.js';
+import { putAlerts } from '../api/client.js';
 
 /**
  * Price-alert watcher + list. Watches the live quotes the app already polls;
@@ -17,9 +18,26 @@ export default function AlertsPanel() {
   const markTriggered = useAlertsStore((s) => s.markTriggered);
   const rearmAlert = useAlertsStore((s) => s.rearmAlert);
   const removeAlert = useAlertsStore((s) => s.removeAlert);
+  const deviceId = useAlertsStore((s) => s.deviceId);
+  const pushTopic = useAlertsStore((s) => s.pushTopic);
+  const pushEnabled = useAlertsStore((s) => s.pushEnabled);
+  const setPushEnabled = useAlertsStore((s) => s.setPushEnabled);
 
   const symbols = useMemo(() => Array.from(new Set(alerts.map((a) => a.symbol))), [alerts]);
   const { quotes } = useQuotes(symbols);
+
+  // Mirror alerts to the server watcher so they fire when the app is closed.
+  // When push is off we send an empty list to stop server-side watching.
+  useEffect(() => {
+    if (!deviceId) return;
+    putAlerts({
+      deviceId,
+      topic: pushEnabled ? pushTopic : null,
+      alerts: pushEnabled ? alerts : [],
+    }).catch(() => {
+      /* best-effort; the in-app watcher still runs */
+    });
+  }, [deviceId, pushTopic, pushEnabled, alerts]);
 
   // The watcher — evaluate every active alert whenever fresh quotes arrive.
   useEffect(() => {
@@ -103,6 +121,48 @@ export default function AlertsPanel() {
           ))}
         </div>
       )}
+
+      {/* Closed-app delivery via a server-side watcher + ntfy.sh */}
+      <div
+        style={{
+          borderTop: `1px solid ${theme.colors.border}`,
+          paddingTop: theme.space(2),
+          display: 'flex',
+          flexDirection: 'column',
+          gap: theme.space(1),
+        }}
+      >
+        <label style={{ display: 'flex', alignItems: 'center', gap: theme.space(2), cursor: 'pointer', fontSize: 12.5, color: theme.colors.text }}>
+          <input type="checkbox" checked={pushEnabled} onChange={(e) => setPushEnabled(e.target.checked)} />
+          <span style={{ fontWeight: 600 }}>Notify me when the app is closed</span>
+        </label>
+        {pushEnabled && (
+          <div style={{ fontSize: 11.5, color: theme.colors.textDim, lineHeight: 1.6 }}>
+            Subscribe to this free topic in the{' '}
+            <a href="https://ntfy.sh/" target="_blank" rel="noopener noreferrer" style={{ color: theme.colors.accent }}>
+              ntfy
+            </a>{' '}
+            app (or open the link) to get pushes on your phone/desktop:
+            <div style={{ display: 'flex', alignItems: 'center', gap: theme.space(2), marginTop: 4 }}>
+              <code style={{ fontFamily: theme.mono, color: theme.colors.text, background: theme.colors.bgElev, padding: '2px 6px', borderRadius: theme.radius.sm }}>
+                {pushTopic}
+              </code>
+              <a
+                href={`https://ntfy.sh/${pushTopic}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ fontSize: 11, fontWeight: 600, color: theme.colors.accent }}
+              >
+                open ntfy.sh/{pushTopic} ↗
+              </a>
+            </div>
+            <div style={{ color: theme.colors.warn, marginTop: 4 }}>
+              ⚠ Best-effort on the free tier: the server only checks while it's awake, so delivery can lag or be
+              missed. Keep the in-app alerts as your primary signal.
+            </div>
+          </div>
+        )}
+      </div>
 
       <div style={{ fontSize: 10.5, color: theme.colors.textFaint }}>
         Watched against live prices while the app is open · fires once — re-arm to watch again · add alerts

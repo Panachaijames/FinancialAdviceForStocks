@@ -17,13 +17,24 @@ import { snackbar } from '../store/snackbarStore.js';
  *   holding:   the holding object ({ id, symbol, name, type, currency, shares, avgCost })
  *   side:      'buy' | 'sell'
  *   livePrice: current native-currency price (prefill), or null
+ *   editTx:    optional existing ledger entry to EDIT (prefills fields; saving
+ *              replays the symbol instead of appending)
  *   onClose:   () => void
  */
-export default function TradeDialog({ holding, side, livePrice, onClose }) {
+const todayStr = () => new Date().toISOString().slice(0, 10);
+
+export default function TradeDialog({ holding, side, livePrice, editTx, onClose }) {
   const recordTrade = usePortfolioStore((s) => s.recordTrade);
-  const [qty, setQty] = useState('');
-  const [price, setPrice] = useState(livePrice != null ? String(livePrice) : '');
-  const [fee, setFee] = useState('');
+  const editTransaction = usePortfolioStore((s) => s.editTransaction);
+  const isEdit = !!editTx;
+  const [qty, setQty] = useState(isEdit ? String(editTx.qty ?? '') : '');
+  const [price, setPrice] = useState(
+    isEdit ? String(editTx.price ?? '') : livePrice != null ? String(livePrice) : ''
+  );
+  const [fee, setFee] = useState(isEdit && editTx.fee ? String(editTx.fee) : '');
+  const [date, setDate] = useState(
+    isEdit && editTx.at ? String(editTx.at).slice(0, 10) : todayStr()
+  );
   const [touched, setTouched] = useState(false);
   const firstFieldRef = useRef(null);
 
@@ -48,7 +59,12 @@ export default function TradeDialog({ holding, side, livePrice, onClose }) {
   const qtyNum = Number(qty);
   const priceNum = Number(price);
   const feeNum = Number(fee) || 0;
-  const qtyValid = qty !== '' && Number.isFinite(qtyNum) && qtyNum > 0 && (!isSell || qtyNum <= held);
+  // Backdated / edited trades are replayed chronologically (clamped to shares
+  // held AT THAT TIME), so the "<= currently held" cap only applies to a plain
+  // same-day sell.
+  const backdated = isEdit || date !== todayStr();
+  const qtyValid =
+    qty !== '' && Number.isFinite(qtyNum) && qtyNum > 0 && (!isSell || backdated || qtyNum <= held);
   const priceValid = price !== '' && Number.isFinite(priceNum) && priceNum > 0;
   const feeValid = fee === '' || (Number.isFinite(feeNum) && feeNum >= 0);
   const valid = qtyValid && priceValid && feeValid;
@@ -78,10 +94,25 @@ export default function TradeDialog({ holding, side, livePrice, onClose }) {
     e.preventDefault();
     setTouched(true);
     if (!valid) return;
-    const tx = recordTrade(holding.id, { side: isSell ? 'sell' : 'buy', qty: qtyNum, price: priceNum, fee: feeNum });
-    if (tx) {
-      const shownQty = fmtNumber(tx.qty, Number.isInteger(tx.qty) ? 0 : 4);
-      snackbar.push({ message: `Recorded ${tx.side} ${shownQty} ${holding.symbol}` });
+    // Same-day trades keep the real instant (preserves intraday order); a
+    // backdated date is anchored at noon UTC so the calendar day is stable.
+    const at = date === todayStr() ? new Date().toISOString() : `${date}T12:00:00.000Z`;
+    const verb = isEdit ? 'Updated' : 'Recorded';
+    const saved = isEdit
+      ? editTransaction(editTx.id, { qty: qtyNum, price: priceNum, fee: feeNum, at })
+      : recordTrade(holding.id, { side: isSell ? 'sell' : 'buy', qty: qtyNum, price: priceNum, fee: feeNum, at });
+    if (saved) {
+      const shownQty = fmtNumber(saved.qty, Number.isInteger(saved.qty) ? 0 : 4);
+      // Replay may clamp a sell to the shares actually held at that date — tell the user.
+      const clamped = saved.side === 'sell' && saved.qty < qtyNum;
+      snackbar.push({
+        message: clamped
+          ? `${verb} sell ${shownQty} ${holding.symbol} — clamped (only ${shownQty} held on that date)`
+          : `${verb} ${saved.side} ${shownQty} ${holding.symbol}`,
+        tone: clamped ? 'error' : 'default',
+      });
+    } else if (isSell) {
+      snackbar.push({ message: `Nothing was held to sell for ${holding.symbol} on that date`, tone: 'error' });
     }
     onClose && onClose();
   }
@@ -114,6 +145,7 @@ export default function TradeDialog({ holding, side, livePrice, onClose }) {
             <span style={{ fontSize: 24 }} aria-hidden="true">{meta.emoji}</span>
             <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
               <span style={{ fontSize: 16, fontWeight: 700, color: theme.colors.text }}>
+                {isEdit ? 'Edit ' : ''}
                 <span style={{ color: accent }}>{isSell ? 'Sell' : 'Buy'}</span> {holding.symbol}
               </span>
               <span style={{ fontSize: 12, color: theme.colors.textDim }}>
@@ -182,7 +214,23 @@ export default function TradeDialog({ holding, side, livePrice, onClose }) {
             />
           </label>
 
-          {preview && (
+          <label style={{ display: 'block', marginBottom: theme.space(3) }}>
+            {label('Trade date')}
+            <input
+              className="input"
+              type="date"
+              value={date}
+              max={todayStr()}
+              onChange={(e) => setDate(e.target.value)}
+            />
+            {backdated && (
+              <span style={{ fontSize: 11, color: theme.colors.textFaint, marginTop: 4, display: 'block' }}>
+                Backdated — your position &amp; realized P/L are recomputed in date order.
+              </span>
+            )}
+          </label>
+
+          {preview && !backdated && (
             <div
               style={{
                 padding: theme.space(2),
@@ -198,6 +246,11 @@ export default function TradeDialog({ holding, side, livePrice, onClose }) {
               <div style={{ fontSize: 11.5, color: theme.colors.textDim, marginTop: 2 }}>{preview.detail}</div>
             </div>
           )}
+          {valid && backdated && (
+            <div style={{ fontSize: 11.5, color: theme.colors.textDim, marginBottom: theme.space(3) }}>
+              Your position and every later sell's realized P/L are recomputed in date order when you save.
+            </div>
+          )}
 
           <div style={{ display: 'flex', gap: theme.space(2), justifyContent: 'flex-end' }}>
             <button type="button" className="btn btn-ghost" onClick={() => onClose && onClose()}>
@@ -209,7 +262,7 @@ export default function TradeDialog({ holding, side, livePrice, onClose }) {
               disabled={!valid}
               style={{ background: accent, borderColor: accent, opacity: valid ? 1 : 0.55, cursor: valid ? 'pointer' : 'not-allowed' }}
             >
-              Record {isSell ? 'sell' : 'buy'}
+              {isEdit ? 'Save changes' : `Record ${isSell ? 'sell' : 'buy'}`}
             </button>
           </div>
         </form>

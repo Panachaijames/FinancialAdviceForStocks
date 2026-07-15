@@ -1,0 +1,61 @@
+/* Summary-card styles migrated off inline objects (Quarter task 4, incremental
+   CSS-Modules adoption). Wins over the old inline styles: a real :hover lift,
+   a media query, and no per-render rebuild of N card style objects. Colors come
+   from the design tokens on :root (theme.js -> applyThemeVars). Per-card dynamic
+   values (accent, value color) are passed in via the --card-accent custom
+   property / inline color, so the static rules stay here. */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+/* Compound with the global .panel so these beat .panel's padding/border (equal
+   single-class specificity would otherwise let .panel win by cascade order — the
+   old inline styles always won). NOTE: no transform/box-shadow here — SpotlightCard
+   owns the hover (it drives a cursor-following tilt/lift/scale via --fx-* custom
+   properties + an inline box-shadow); a transform here would override and kill it. */
+:global(.panel).card {
+  height: 100%;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-left: 3px solid var(--card-accent, var(--accent));
+}
+
+.label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.labelIcon {
+  display: flex;
+  color: var(--card-accent, var(--accent));
+}
+
+.value {
+  font-size: 24px;
+  font-weight: 800;
+  font-family: var(--mono);
+  line-height: 1.1;
+  display: block;
+}
+
+/* Tighter columns + gap on phones — a media query, also impossible inline. */
+@media (max-width: 480px) {
+  .grid {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 8px;
+  }
+  .value {
+    font-size: 20px;
+  }
+}

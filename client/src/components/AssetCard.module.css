@@ -1,0 +1,19 @@
+/* AssetCard container styles migrated off inline objects (Quarter task 4,
+   incremental CSS-Modules adoption). The root card style object was rebuilt on
+   every render (and on every price tick); as a class it's static, and gains a
+   :hover lift that inline styles can't express. Inner elements stay inline for
+   now — this is the deliberate first incremental slice. */
+
+/* Compound with the global .panel so `padding` beats .panel's (equal single-class
+   specificity would otherwise let .panel win by cascade order, as the old inline
+   padding always did). NOTE: no transform/box-shadow here — SpotlightCard owns the
+   hover tilt/lift/scale (via --fx-* + inline box-shadow); a transform here would
+   override and kill it. */
+:global(.panel).card {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: pointer;
+  min-width: 0;
+}

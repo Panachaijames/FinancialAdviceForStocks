@@ -3,6 +3,7 @@ import { theme } from './lib/theme.js';
 import { assetMeta } from './lib/assetType.js';
 import { motionEnabled } from './lib/motion.js';
 import { usePortfolioStore } from './store/portfolioStore.js';
+import { useT } from './lib/i18n.js';
 import marketSocket from './api/socket.js';
 
 import Header from './components/Header.jsx';
@@ -11,6 +12,7 @@ import PortfolioSummary from './components/PortfolioSummary.jsx';
 import AllocationDonut from './components/AllocationDonut.jsx';
 import HoldingsSection from './components/HoldingsSection.jsx';
 import WatchlistStrip from './components/WatchlistStrip.jsx';
+import PerformancePanel from './components/PerformancePanel.jsx';
 import DividendPanel from './components/DividendPanel.jsx';
 import NewsPanel from './components/NewsPanel.jsx';
 import ChartModal from './components/ChartModal.jsx';
@@ -47,6 +49,7 @@ const QUICK_ADD = [
 export default function App() {
   const holdings = usePortfolioStore((s) => s.holdings);
   const addHolding = usePortfolioStore((s) => s.addHolding);
+  const t = useT();
   const [selected, setSelected] = useState(null);
   const [pending, setPending] = useState(null); // quick-add asset awaiting shares/cost in the editor
   const [view, setView] = useState('portfolio'); // 'portfolio' | 'plan' | 'forecast'
@@ -95,9 +98,9 @@ export default function App() {
           value={view}
           onChange={setView}
           items={[
-            { key: 'portfolio', label: 'Portfolio' },
-            { key: 'plan', label: 'Plan' },
-            { key: 'forecast', label: 'Forecast' },
+            { key: 'portfolio', label: t('nav.portfolio') },
+            { key: 'plan', label: t('nav.plan') },
+            { key: 'forecast', label: t('nav.forecast') },
           ]}
         />
 
@@ -140,6 +143,10 @@ export default function App() {
 
               <Reveal blur={0} distance={16}>
                 <RebalancePanel />
+              </Reveal>
+
+              <Reveal blur={0} distance={16}>
+                <PerformancePanel />
               </Reveal>
 
               <Reveal blur={0} distance={16}>
