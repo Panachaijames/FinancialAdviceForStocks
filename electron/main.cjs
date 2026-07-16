@@ -1,16 +1,18 @@
 /**
  * Electron main process for PT Financial Advisor.
  *
- * Thin shell: opens a desktop window that loads the app straight from the cloud
- * (Render). So it always has the latest features (no re-shipping builds), ships
- * with NO API keys (they live server-side), and is safe to distribute. The
- * legacy in-process local-server code (startServer/pickPort/…) is kept below but
- * unused — flip createWindow back to the local port to revert to a local build.
+ * Thin cloud shell: opens a desktop window that loads the app straight from the
+ * cloud (Render), so it always has the latest features (no re-shipping builds)
+ * and ships with NO API keys (they live server-side) — safe to distribute.
+ * There is no local server here; to build a local-server variant, restore the
+ * startServer path from git history and point createWindow at 127.0.0.1.
+ *
+ * Hardening: contextIsolation on, nodeIntegration off, sandbox on, no preload,
+ * and every renderer permission request (camera/mic/geo/notifications/…) is
+ * denied — remote web content is shown but granted no native capabilities.
  */
-const { app, BrowserWindow, shell, dialog, Menu } = require('electron');
-const net = require('node:net');
+const { app, BrowserWindow, shell, Menu, session } = require('electron');
 const path = require('node:path');
-const { pathToFileURL } = require('node:url');
 
 // Only allow one running instance; focus the existing window otherwise.
 const gotLock = app.requestSingleInstanceLock();
@@ -20,81 +22,16 @@ if (!gotLock) {
   let mainWindow = null;
   let splashWindow = null;
   let splashShownAt = 0;
-  let port = 8787;
+  let retryTimer = null;
 
   // The desktop loads the app from the cloud (like the mobile app), so features
   // stay current and no keys are bundled.
   const CLOUD_URL = 'https://pt-financial-advisor-u9fr.onrender.com';
 
-  /** Resolve a free port, preferring 8787, falling back to an ephemeral one. */
-  function pickPort(preferred) {
-    return new Promise((resolve) => {
-      const probe = net.createServer();
-      probe.once('error', () => {
-        const eph = net.createServer();
-        eph.listen(0, '127.0.0.1', () => {
-          const p = eph.address().port;
-          eph.close(() => resolve(p));
-        });
-      });
-      probe.listen(preferred, '127.0.0.1', () => {
-        probe.close(() => resolve(preferred));
-      });
-    });
-  }
+  // Shared, hardened renderer settings (no preload → sandbox is safe).
+  const SECURE_WEB_PREFS = { contextIsolation: true, nodeIntegration: false, sandbox: true };
 
-  /** Wait until the server is accepting connections. */
-  function waitForServer(p, timeoutMs = 25000) {
-    const startedAt = Date.now();
-    return new Promise((resolve, reject) => {
-      const attempt = () => {
-        const sock = net.connect(p, '127.0.0.1');
-        sock.once('connect', () => {
-          sock.destroy();
-          resolve();
-        });
-        sock.once('error', () => {
-          sock.destroy();
-          if (Date.now() - startedAt > timeoutMs) reject(new Error('Server did not start in time'));
-          else setTimeout(attempt, 250);
-        });
-      };
-      attempt();
-    });
-  }
-
-  /**
-   * Load environment vars (e.g. TWELVEDATA_KEY / FINNHUB_KEY) for the packaged
-   * app. dotenv never overrides already-set vars, so a real OS env var always
-   * wins; otherwise we read a .env next to the executable first (lets a machine
-   * supply its own key without rebuilding), then the bundled .env at the app
-   * root. Harmless no-op when no file exists.
-   */
-  function loadEnv() {
-    try {
-      const dotenv = require('dotenv');
-      const candidates = [
-        path.join(path.dirname(process.execPath), '.env'), // next to the .exe
-        path.join(__dirname, '..', '.env'), // bundled at the app root
-      ];
-      for (const file of candidates) dotenv.config({ path: file });
-    } catch {
-      // dotenv missing or unreadable path — server config.js will still try.
-    }
-  }
-
-  async function startServer(p) {
-    loadEnv();
-    process.env.PORT = String(p);
-    process.env.NODE_ENV = 'production';
-    // Point the server at the bundled client build (sibling of this folder).
-    process.env.CLIENT_DIST = path.join(__dirname, '..', 'client', 'dist');
-    // The server is ESM and calls server.listen() on import.
-    const entry = pathToFileURL(path.join(__dirname, '..', 'server', 'index.js')).href;
-    await import(entry);
-  }
-
-  /** Show a small branded splash window instantly while the server boots. */
+  /** Show a small branded splash window instantly while the app loads. */
   function createSplash() {
     splashWindow = new BrowserWindow({
       width: 460,
@@ -110,7 +47,7 @@ if (!gotLock) {
       alwaysOnTop: true,
       backgroundColor: '#0b0e14',
       title: 'PT Financial Advisor',
-      webPreferences: { contextIsolation: true, nodeIntegration: false },
+      webPreferences: SECURE_WEB_PREFS,
     });
     splashWindow.loadFile(path.join(__dirname, 'splash.html'));
     splashWindow.once('ready-to-show', () => {
@@ -124,8 +61,6 @@ if (!gotLock) {
     if (!splashWindow) return;
     const win = splashWindow;
     splashWindow = null;
-    // Short — the boot splash just covers server start; the in-app cinematic
-    // intro (IntroOverlay) takes over once the window content loads.
     const MIN_MS = 300;
     const wait = Math.max(0, MIN_MS - (Date.now() - splashShownAt));
     setTimeout(() => {
@@ -147,7 +82,7 @@ if (!gotLock) {
       title: 'PT Financial Advisor',
       autoHideMenuBar: true,
       show: false,
-      webPreferences: { contextIsolation: true, nodeIntegration: false },
+      webPreferences: SECURE_WEB_PREFS,
     });
     Menu.setApplicationMenu(null);
     mainWindow.loadURL(CLOUD_URL);
@@ -179,7 +114,24 @@ if (!gotLock) {
       }
     });
 
+    // Offline resilience: if the cloud URL can't load (dyno asleep, no network,
+    // or the service was recreated), show a local retry page instead of raw
+    // Chromium error content, and keep retrying the cloud in the background.
+    mainWindow.webContents.on('did-fail-load', (e, errorCode, errorDesc, validatedURL, isMainFrame) => {
+      // -3 == ERR_ABORTED: a navigation was superseded by another — not a failure.
+      if (!isMainFrame || errorCode === -3) return;
+      swap(); // never leave the user stuck on the splash
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      mainWindow.loadFile(path.join(__dirname, 'offline.html')).catch(() => {});
+      if (retryTimer) clearTimeout(retryTimer);
+      retryTimer = setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.loadURL(CLOUD_URL);
+      }, 6000);
+    });
+
     mainWindow.on('closed', () => {
+      if (retryTimer) clearTimeout(retryTimer);
+      retryTimer = null;
       mainWindow = null;
     });
   }
@@ -191,7 +143,11 @@ if (!gotLock) {
     }
   });
 
-  app.whenReady().then(async () => {
+  app.whenReady().then(() => {
+    // Remote web content needs no native capabilities — deny every permission
+    // request (camera/mic/geolocation/notifications/USB/…) outright.
+    session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
+
     createSplash();
     createWindow(); // loads CLOUD_URL — no local server to start
 
