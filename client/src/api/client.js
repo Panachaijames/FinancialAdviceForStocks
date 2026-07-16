@@ -176,7 +176,19 @@ export async function getQuotes(symbols) {
     ? symbols.filter(Boolean)
     : [];
   if (list.length === 0) return [];
-  return request(`/api/quote?symbols=${encodeURIComponent(list.join(','))}`);
+  // The server caps a single request at 50 symbols; chunk so a >50-holding
+  // portfolio (sent as one coalesced batch) still gets a quote for every symbol
+  // instead of silently dropping those sorted past #50.
+  const CHUNK = 50;
+  if (list.length <= CHUNK) {
+    return request(`/api/quote?symbols=${encodeURIComponent(list.join(','))}`);
+  }
+  const chunks = [];
+  for (let i = 0; i < list.length; i += CHUNK) chunks.push(list.slice(i, i + CHUNK));
+  const results = await Promise.all(
+    chunks.map((c) => request(`/api/quote?symbols=${encodeURIComponent(c.join(','))}`).catch(() => []))
+  );
+  return results.flat();
 }
 
 /**

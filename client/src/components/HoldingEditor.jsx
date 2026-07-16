@@ -40,7 +40,8 @@ function unitNoun(type) {
  */
 export default function HoldingEditor({ asset, initial, mode = 'add', onSave, onCancel }) {
   const t = useT();
-  const { rate } = useFx(); // live USD->THB, for baht-weight cost conversion
+  const { fx, rate } = useFx(); // live USD->THB, for baht-weight cost conversion
+  const fxReady = !!(fx && Number(fx.rate) > 0); // real rate loaded (not the fallback 36)
   const isGold = asset?.type === 'gold';
   const [goldUnit, setGoldUnit] = useState(isGold ? (initial?.goldUnit || 'oz') : 'oz');
   const bahtMode = isGold && goldUnit === 'baht';
@@ -61,6 +62,7 @@ export default function HoldingEditor({ asset, initial, mode = 'add', onSave, on
   });
   const [touched, setTouched] = useState(false);
   const firstFieldRef = useRef(null);
+  const dirtyRef = useRef(false); // set once the user edits/switches, to stop auto-resync
 
   useEffect(() => {
     if (firstFieldRef.current) firstFieldRef.current.focus();
@@ -74,11 +76,24 @@ export default function HoldingEditor({ asset, initial, mode = 'add', onSave, on
     return () => window.removeEventListener('keydown', onKey);
   }, [onCancel]);
 
+  // Keep the baht-mode fields synced to the LIVE rate until the user edits them,
+  // so prefill (and the convert-back-to-USD/oz on save) use the SAME rate. Without
+  // this, the field prefills at the first-render fallback (36) while save converts
+  // at the live rate, silently shifting the cost basis on a no-op Save.
+  useEffect(() => {
+    if (!bahtMode || dirtyRef.current || !fxReady) return;
+    if (initial?.shares == null || initial?.avgCost == null) return;
+    if ((initial.goldUnit || 'oz') !== 'baht') return;
+    setShares(String(round(ozToBaht(initial.shares), 3)));
+    setAvgCost(String(round(bahtPriceThb(initial.avgCost, rate), 0)));
+  }, [rate, fxReady, bahtMode]);
+
   const sharesNum = Number(shares);
   const avgCostNum = Number(avgCost);
   const sharesValid = shares !== '' && Number.isFinite(sharesNum) && sharesNum > 0;
   const avgCostValid = avgCost !== '' && Number.isFinite(avgCostNum) && avgCostNum > 0;
-  const valid = sharesValid && avgCostValid;
+  // Never persist a THB baht-cost converted at the display-only fallback rate.
+  const valid = sharesValid && avgCostValid && (!bahtMode || fxReady);
 
   const meta = assetMeta(asset?.type);
   const u = unitNoun(asset?.type);
@@ -90,6 +105,7 @@ export default function HoldingEditor({ asset, initial, mode = 'add', onSave, on
   // toggle feels live (e.g. 1 oz -> 2.114 บาท) rather than silently changing meaning.
   function switchUnit(next) {
     if (!isGold || next === goldUnit) return;
+    dirtyRef.current = true; // user chose a unit — stop auto-resyncing from `initial`
     const s = Number(shares);
     const c = Number(avgCost);
     if (next === 'baht') {
@@ -220,7 +236,10 @@ export default function HoldingEditor({ asset, initial, mode = 'add', onSave, on
               min="0"
               placeholder={t('editor.placeholder.qty', { eg: u.eg })}
               value={shares}
-              onChange={(e) => setShares(e.target.value)}
+              onChange={(e) => {
+                dirtyRef.current = true;
+                setShares(e.target.value);
+              }}
               style={fieldStyle(sharesValid)}
             />
             {touched && !sharesValid && (
@@ -266,7 +285,10 @@ export default function HoldingEditor({ asset, initial, mode = 'add', onSave, on
               min="0"
               placeholder={t('editor.placeholder.cost', { currency })}
               value={avgCost}
-              onChange={(e) => setAvgCost(e.target.value)}
+              onChange={(e) => {
+                dirtyRef.current = true;
+                setAvgCost(e.target.value);
+              }}
               style={fieldStyle(avgCostValid)}
             />
             {touched && !avgCostValid && (
@@ -275,6 +297,12 @@ export default function HoldingEditor({ asset, initial, mode = 'add', onSave, on
               </span>
             )}
           </label>
+
+          {bahtMode && !fxReady && (
+            <div style={{ fontSize: 11, color: theme.colors.warn, marginBottom: theme.space(2) }}>
+              {t('editor.gold.fxWait')}
+            </div>
+          )}
 
           <div style={{ display: 'flex', gap: theme.space(2), justifyContent: 'flex-end' }}>
             <button type="button" className="btn btn-ghost" onClick={() => onCancel && onCancel()}>

@@ -612,39 +612,39 @@ async function getDividendHistory(symbol) {
  * @returns {Promise<Array<{date:string, numerator:number, denominator:number, ratio:number, text:string}>>}
  */
 export async function getSplits(symbol) {
-  try {
-    const period1 = new Date(Date.now() - 6 * 366 * DAY_MS); // ~6y of split history
-    const period2 = new Date();
-    const result = await fetchChartJSON(symbol, {
-      period1,
-      period2,
-      interval: '1mo',
-      events: 'split',
+  // NOTE: intentionally does NOT swallow fetch errors to []. A genuine "no
+  // splits" resolves to [] (cacheable), but a transient upstream error must
+  // throw so the route returns 500 and the negative-cache doesn't pin an empty
+  // list for hours, hiding a symbol's real splits.
+  const period1 = new Date(Date.now() - 6 * 366 * DAY_MS); // ~6y of split history
+  const period2 = new Date();
+  const result = await fetchChartJSON(symbol, {
+    period1,
+    period2,
+    interval: '1mo',
+    events: 'split',
+  });
+  const splits = (result && result.events && result.events.splits) || {};
+  const list = [];
+  for (const s of Object.values(splits)) {
+    if (!s) continue;
+    const numerator = num(s.numerator);
+    const denominator = num(s.denominator);
+    const t = Number(s.date);
+    if (numerator == null || denominator == null || !(numerator > 0) || !(denominator > 0)) continue;
+    if (!Number.isFinite(t)) continue;
+    const date = new Date(t < 1e12 ? t * 1000 : t);
+    if (Number.isNaN(date.getTime())) continue;
+    list.push({
+      date: date.toISOString(),
+      numerator,
+      denominator,
+      ratio: numerator / denominator,
+      text: s.splitRatio || `${numerator}:${denominator}`,
     });
-    const splits = (result && result.events && result.events.splits) || {};
-    const list = [];
-    for (const s of Object.values(splits)) {
-      if (!s) continue;
-      const numerator = num(s.numerator);
-      const denominator = num(s.denominator);
-      const t = Number(s.date);
-      if (numerator == null || denominator == null || !(numerator > 0) || !(denominator > 0)) continue;
-      if (!Number.isFinite(t)) continue;
-      const date = new Date(t < 1e12 ? t * 1000 : t);
-      if (Number.isNaN(date.getTime())) continue;
-      list.push({
-        date: date.toISOString(),
-        numerator,
-        denominator,
-        ratio: numerator / denominator,
-        text: s.splitRatio || `${numerator}:${denominator}`,
-      });
-    }
-    list.sort((a, b) => new Date(a.date) - new Date(b.date));
-    return list;
-  } catch {
-    return [];
   }
+  list.sort((a, b) => new Date(a.date) - new Date(b.date));
+  return list;
 }
 
 /**

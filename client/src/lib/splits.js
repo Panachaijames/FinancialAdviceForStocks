@@ -27,7 +27,16 @@ export function appliedSplitDays(transactions = [], symbol) {
  */
 export function pendingSplits(splits, transactions, holding) {
   if (!holding || !Array.isArray(splits)) return [];
-  const sinceMs = Date.parse(holding.addedAt) || 0;
+  // Boundary = when this position started. For a ledgered symbol that's the
+  // EARLIEST (possibly backdated) buy/sell, not addedAt (always stamped "now"),
+  // so a split between a backdated buy and today is still detected.
+  let sinceMs = Date.parse(holding.addedAt) || 0;
+  for (const tx of transactions || []) {
+    if (tx && tx.symbol === holding.symbol && (tx.side === 'buy' || tx.side === 'sell')) {
+      const ms = Date.parse(tx.at);
+      if (Number.isFinite(ms) && ms < sinceMs) sinceMs = ms;
+    }
+  }
   const applied = appliedSplitDays(transactions, holding.symbol);
   return splits
     .filter((s) => {

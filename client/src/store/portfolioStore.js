@@ -391,6 +391,12 @@ export const usePortfolioStore = create(
             skipped.push(`${t.symbol}: could not create holding`);
             continue;
           }
+          if (t.side === 'split') {
+            const s = get().applySplit(holding.id, { date: t.date, ratio: t.ratio });
+            if (s) applied += 1;
+            else skipped.push(`${t.symbol} split ${t.ratio}: invalid or already applied`);
+            continue;
+          }
           const tx = get().recordTrade(holding.id, {
             side: t.side,
             qty: t.qty,

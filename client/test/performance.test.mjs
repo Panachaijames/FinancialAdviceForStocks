@@ -85,6 +85,26 @@ test('applies fx conversion to both cash flows and market value', () => {
   assert.equal(r.invested[0], 100 * 40 * 0.03);
 });
 
+test('split: market value stays continuous (candles are split-adjusted; shares scale)', () => {
+  // Yahoo closes are back-adjusted, so they barely move across a split. The
+  // replay must scale the pre-split share count up to adjusted units so the
+  // market-value line does NOT jump ~ratio× on the split date.
+  const closesBySymbol = {
+    NVDA: [
+      { time: D0 * DAY, close: 120 },
+      { time: D1 * DAY, close: 120 },
+      { time: D2 * DAY, close: 120 },
+    ],
+  };
+  const transactions = [
+    { symbol: 'NVDA', side: 'buy', qty: 10, price: 1200, fee: 0, currency: 'USD', at: at(D0) },
+    { symbol: 'NVDA', side: 'split', ratio: 10, currency: 'USD', at: at(D1) },
+  ];
+  const r = buildPerformanceSeries({ transactions, closesBySymbol, currencyBySymbol: { NVDA: 'USD' } });
+  assert.deepEqual(r.marketValue, [12000, 12000, 12000]); // flat: 100 adjusted sh × $120, no jump
+  assert.deepEqual(r.invested, [12000, 12000, 12000]);
+});
+
 test('empty inputs are safe', () => {
   assert.deepEqual(buildPerformanceSeries({}), { times: [], marketValue: [], invested: [], realized: [] });
   assert.deepEqual(summarize({}), { currentValue: 0, netInvested: 0, realized: 0, totalPL: 0, plPct: null });

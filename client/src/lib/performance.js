@@ -79,6 +79,17 @@ export function buildPerformanceSeries({
   const invested = [];
   const realized = [];
   const shares = {};
+  // Yahoo candles are back-adjusted for splits, so the share count multiplied
+  // against them must be in split-adjusted units EVERY day. Track, per symbol,
+  // the product of splits not yet reached; days before a split scale up by it so
+  // market value stays continuous across the split instead of jumping ~ratio×.
+  const futureSplit = {};
+  for (const { t } of txs) {
+    if (t.side === 'split') {
+      const r = Number(t.ratio) > 0 ? Number(t.ratio) : 1;
+      futureSplit[t.symbol] = (futureSplit[t.symbol] || 1) * r;
+    }
+  }
   let investedCum = 0;
   let realizedCum = 0;
   let p = 0;
@@ -99,16 +110,18 @@ export function buildPerformanceSeries({
       } else if (t.side === 'dividend') {
         realizedCum += convert(dividendNet(t), cur);
       } else if (t.side === 'split') {
-        // A split rescales the share count; invested capital is unchanged.
+        // A split rescales the share count; invested capital is unchanged. It's
+        // now applied, so drop it from the future-adjustment factor.
         const ratio = Number(t.ratio) > 0 ? Number(t.ratio) : 1;
         shares[sym] = (shares[sym] || 0) * ratio;
+        futureSplit[sym] = (futureSplit[sym] || 1) / ratio;
       }
       p += 1;
     }
 
     let mv = 0;
     for (const sym of Object.keys(shares)) {
-      const sh = shares[sym];
+      const sh = (shares[sym] || 0) * (futureSplit[sym] || 1); // adjusted to match back-adjusted prices
       if (sh <= 0) continue;
       const idx = dayIndex.get(days[i]);
       const px = filled[sym] ? filled[sym][idx] : null;

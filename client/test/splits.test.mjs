@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { replayPosition } from '../src/lib/trades.js';
 import { pendingSplits, applySplitToPosition, appliedSplitDays, splitLabel } from '../src/lib/splits.js';
+import { tradesToCsv, parseTradesCsv } from '../src/lib/csvImport.js';
 
 test('replayPosition: a split multiplies shares and divides avg cost, cost basis unchanged', () => {
   const txs = [
@@ -54,4 +55,30 @@ test('pendingSplits: only real, post-tracking, not-yet-applied splits', () => {
 test('splitLabel: N-for-M', () => {
   assert.equal(splitLabel({ numerator: 10, denominator: 1 }), '10-for-1');
   assert.equal(splitLabel({ text: '3:2' }), '3:2');
+});
+
+test('pendingSplits: uses earliest BACKDATED trade, not addedAt, as the boundary', () => {
+  // Holding created today, but with a backdated buy in 2020 — a 2020 split must
+  // still be detected even though it predates addedAt.
+  const holding = { symbol: 'AAPL', addedAt: '2026-07-16T00:00:00Z' };
+  const txs = [{ symbol: 'AAPL', side: 'buy', qty: 10, price: 500, at: '2020-01-01T00:00:00Z' }];
+  const splits = [{ date: '2020-08-31T00:00:00Z', ratio: 4 }];
+  const pend = pendingSplits(splits, txs, holding);
+  assert.equal(pend.length, 1);
+  assert.equal(pend[0].ratio, 4);
+});
+
+test('CSV round-trips a split row (export -> parse) so re-import rebuilds the position', () => {
+  const txs = [
+    { at: '2024-01-01T00:00:00Z', side: 'buy', symbol: 'AAPL', qty: 10, price: 500, fee: 0 },
+    { at: '2024-06-10T00:00:00Z', side: 'split', symbol: 'AAPL', ratio: 4 },
+  ];
+  const csv = tradesToCsv(txs);
+  const { trades, errors } = parseTradesCsv(csv);
+  assert.deepEqual(errors, []);
+  assert.equal(trades.length, 2);
+  const split = trades.find((t) => t.side === 'split');
+  assert.ok(split, 'split row survived the round-trip');
+  assert.equal(split.symbol, 'AAPL');
+  assert.equal(split.ratio, 4);
 });
