@@ -3,9 +3,12 @@
  *
  * - set(key, val, ttlMs): store a value with an expiry.
  * - get(key): return the cached value or undefined if missing/expired.
- * - wrap(key, ttlMs, asyncFn): return cached value if fresh; otherwise call
- *   asyncFn, cache the resolved value for ttlMs, and de-dupe concurrent calls
- *   so asyncFn only runs once for simultaneous requests with the same key.
+ * - wrap(key, ttlMs, asyncFn, opts?): return cached value if fresh; otherwise
+ *   call asyncFn, cache the resolved value for ttlMs, and de-dupe concurrent
+ *   calls so asyncFn only runs once for simultaneous requests with the same key.
+ *   Empty/failed results are NOT cached at ttlMs (so they retry) unless
+ *   opts.emptyTtlMs is given — a short negative-cache window that stops a
+ *   delisted/unknown symbol from hammering the upstream (+ fallback) forever.
  */
 
 /** @type {Map<string, { value:any, expires:number }>} */
@@ -47,6 +50,37 @@ export function size() {
   return store.size;
 }
 
+// The Map only evicts an entry when it's next read, so a warm dyno accumulates
+// dead entries forever (every distinct search string is a permanent key). A
+// periodic sweep drops expired entries and hard-caps total size.
+const MAX_ENTRIES = 1000;
+
+/**
+ * Drop expired entries; if still over MAX_ENTRIES, evict oldest-inserted
+ * (Map preserves insertion order). Returns how many entries were removed.
+ */
+export function sweep() {
+  const t = now();
+  let removed = 0;
+  for (const [key, entry] of store) {
+    if (entry.expires <= t) {
+      store.delete(key);
+      removed += 1;
+    }
+  }
+  if (store.size > MAX_ENTRIES) {
+    const over = store.size - MAX_ENTRIES;
+    let i = 0;
+    for (const key of store.keys()) {
+      if (i >= over) break;
+      store.delete(key);
+      i += 1;
+      removed += 1;
+    }
+  }
+  return removed;
+}
+
 /**
  * Memoize an async function result for ttlMs, de-duplicating concurrent calls.
  * @template T
@@ -55,7 +89,8 @@ export function size() {
  * @param {() => Promise<T>} asyncFn
  * @returns {Promise<T>}
  */
-export async function wrap(key, ttlMs, asyncFn) {
+export async function wrap(key, ttlMs, asyncFn, opts) {
+  const emptyTtlMs = opts && Number.isFinite(opts.emptyTtlMs) && opts.emptyTtlMs > 0 ? opts.emptyTtlMs : 0;
   const cached = get(key);
   if (cached !== undefined) return cached;
 
@@ -65,11 +100,14 @@ export async function wrap(key, ttlMs, asyncFn) {
   const promise = (async () => {
     try {
       const value = await asyncFn();
-      // Don't cache empty/failed results (e.g. an upstream 429 returning []),
-      // so the next request retries instead of being pinned for the whole TTL.
+      // An upstream 429/miss often surfaces as null or []. Don't pin that for
+      // the full ttlMs (so the next request retries) — but if the caller opted
+      // into a short emptyTtlMs, cache it briefly so one delisted/unknown symbol
+      // in a portfolio doesn't hammer the upstream (+ its fallback) every refresh.
       const isEmpty =
         value == null || (Array.isArray(value) && value.length === 0);
       if (!isEmpty) set(key, value, ttlMs);
+      else if (emptyTtlMs) set(key, value, emptyTtlMs);
       return value;
     } finally {
       inflight.delete(key);
@@ -80,4 +118,4 @@ export async function wrap(key, ttlMs, asyncFn) {
   return promise;
 }
 
-export default { get, set, del, clear, wrap, size };
+export default { get, set, del, clear, wrap, size, sweep };

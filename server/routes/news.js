@@ -28,7 +28,7 @@ router.get('/', async (req, res) => {
         if (fh && fh.length) return fh;
       }
       return getNews(uniqueSorted);
-    });
+    }, { emptyTtlMs: 45 * 1000 });
     return res.json(Array.isArray(news) ? news : []);
   } catch (err) {
     return res.status(500).json({ error: err?.message || 'News fetch failed' });

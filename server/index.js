@@ -12,7 +12,7 @@ import yahooFinance from 'yahoo-finance2';
 import { config } from './config.js';
 import { attach, hubStats } from './realtime/hub.js';
 import { getStats as tdStats } from './providers/twelvedata.js';
-import { size as cacheSize } from './cache.js';
+import { size as cacheSize, sweep as cacheSweep } from './cache.js';
 
 import searchRouter from './routes/search.js';
 import quoteRouter from './routes/quote.js';
@@ -195,5 +195,25 @@ server.listen(config.PORT, () => {
   // eslint-disable-next-line no-console
   console.log(`  WS:    ws://localhost:${config.PORT}/ws`);
 });
+
+// Periodic cache sweep — the TTL Map only evicts on re-read, so without this a
+// long-lived dyno leaks memory for every distinct key (search strings, etc.).
+// unref() so the timer never keeps the process alive on its own.
+setInterval(cacheSweep, 60 * 1000).unref();
+
+// Graceful shutdown: Render sends SIGTERM on every deploy/scale-down. Stop
+// accepting new connections and let in-flight requests drain instead of being
+// killed mid-response; force-exit if close hangs.
+let shuttingDown = false;
+function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  // eslint-disable-next-line no-console
+  console.log(`${signal} received — closing server`);
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 8000).unref();
+}
+process.once('SIGTERM', () => shutdown('SIGTERM'));
+process.once('SIGINT', () => shutdown('SIGINT'));
 
 export default app;

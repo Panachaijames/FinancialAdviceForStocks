@@ -18,6 +18,8 @@ function parseSymbols(raw) {
     .filter(Boolean);
 }
 
+const MAX_SYMBOLS = 50;
+
 // GET /api/quote?symbols=A,B,C  -> Quote[]
 router.get('/', async (req, res) => {
   const symbols = parseSymbols(req.query.symbols);
@@ -25,9 +27,12 @@ router.get('/', async (req, res) => {
     return res.status(400).json({ error: 'Missing required query param "symbols"' });
   }
   try {
-    // Stable cache key irrespective of order/dupes.
-    const uniqueSorted = Array.from(new Set(symbols)).sort();
+    // Stable cache key irrespective of order/dupes; cap the count so one caller
+    // can't fan a single request into an unbounded upstream batch.
+    const uniqueSorted = Array.from(new Set(symbols)).sort().slice(0, MAX_SYMBOLS);
     const key = `quote:${uniqueSorted.join(',')}`;
+    // emptyTtlMs: briefly cache an empty result so a delisted/unknown symbol
+    // doesn't hammer Yahoo AND the Twelve Data fallback on every 4s refresh.
     const quotes = await wrap(key, QUOTE_TTL_MS, async () => {
       const crypto = uniqueSorted.filter(isCrypto);
       const rest = uniqueSorted.filter((s) => !isCrypto(s));
@@ -52,7 +57,7 @@ router.get('/', async (req, res) => {
       // Overnight (≈8pm–4am ET) US-equity prices from Pyth — no-op otherwise.
       await attachOvernight(all);
       return all;
-    });
+    }, { emptyTtlMs: 30 * 1000 });
     return res.json(Array.isArray(quotes) ? quotes : []);
   } catch (err) {
     return res.status(500).json({ error: err?.message || 'Quote fetch failed' });
