@@ -47,6 +47,8 @@ const en = {
   'holdings.sort.day': 'Day %',
   'holdings.sort.pl': 'P&L',
   'holdings.sort.symbol': 'Symbol',
+  'holdings.sort.account': 'Account',
+  'holdings.unassigned': 'Unassigned',
 };
 
 const th = {
@@ -86,6 +88,8 @@ const th = {
   'holdings.sort.day': '% วัน',
   'holdings.sort.pl': 'กำไร/ขาดทุน',
   'holdings.sort.symbol': 'สัญลักษณ์',
+  'holdings.sort.account': 'บัญชี',
+  'holdings.unassigned': 'ไม่ระบุบัญชี',
 };
 
 // Merge the hand-authored high-traffic strings (above) with the generated

@@ -576,7 +576,7 @@ export default function AssetCard({ holding, onOpen }) {
       {editing && (
         <HoldingEditor
           asset={holding}
-          initial={{ shares, avgCost, goldUnit: holding.goldUnit }}
+          initial={{ shares, avgCost, goldUnit: holding.goldUnit, account: holding.account }}
           mode="edit"
           onSave={handleSave}
           onCancel={() => setEditing(false)}

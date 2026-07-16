@@ -61,6 +61,7 @@ export default function HoldingEditor({ asset, initial, mode = 'add', onSave, on
     );
   });
   const [touched, setTouched] = useState(false);
+  const [account, setAccount] = useState(initial?.account || ''); // optional broker/account tag
   const firstFieldRef = useRef(null);
   const dirtyRef = useRef(false); // set once the user edits/switches, to stop auto-resync
 
@@ -122,15 +123,16 @@ export default function HoldingEditor({ asset, initial, mode = 'add', onSave, on
     e.preventDefault();
     setTouched(true);
     if (!valid) return;
+    const acct = account.trim(); // '' clears any prior account on edit
     if (isGold) {
       // Store canonically in troy oz + USD/oz so the valuation pipeline is unit-agnostic.
       const payload = bahtMode
         ? { shares: bahtToOz(sharesNum), avgCost: thbPerBahtToUsdPerOz(avgCostNum, rate), goldUnit: 'baht' }
         : { shares: sharesNum, avgCost: avgCostNum, goldUnit: 'oz' };
-      onSave && onSave(payload);
+      onSave && onSave({ ...payload, account: acct });
       return;
     }
-    onSave && onSave({ shares: sharesNum, avgCost: avgCostNum });
+    onSave && onSave({ shares: sharesNum, avgCost: avgCostNum, account: acct });
   }
 
   function fieldStyle(isValid) {
@@ -296,6 +298,20 @@ export default function HoldingEditor({ asset, initial, mode = 'add', onSave, on
                 {t('editor.error.positivePer', { unit: perLabel })}
               </span>
             )}
+          </label>
+
+          <label style={{ display: 'block', marginBottom: theme.space(3) }}>
+            <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: theme.colors.textDim, marginBottom: theme.space(1) }}>
+              {t('editor.account')}
+            </span>
+            <input
+              className="input"
+              type="text"
+              placeholder={t('editor.accountPlaceholder')}
+              value={account}
+              onChange={(e) => setAccount(e.target.value)}
+              maxLength={40}
+            />
           </label>
 
           {bahtMode && !fxReady && (

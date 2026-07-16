@@ -94,7 +94,7 @@ export const useSettingsStore = create(
 
       /** Set holdings sort; validates key/dir and merges partial patches. */
       setHoldingsSort(patch) {
-        const VALID = ['added', 'value', 'day', 'pl', 'symbol'];
+        const VALID = ['added', 'value', 'day', 'pl', 'symbol', 'account'];
         const cur = get().holdingsSort || { key: 'added', dir: 'asc' };
         const next = { ...cur, ...(patch || {}) };
         if (!VALID.includes(next.key)) next.key = 'added';

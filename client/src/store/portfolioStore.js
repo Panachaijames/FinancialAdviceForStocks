@@ -81,6 +81,7 @@ export const usePortfolioStore = create(
                     avgCost: avgCost || h.avgCost,
                     name: sr.name || h.name,
                     ...(position.goldUnit ? { goldUnit: position.goldUnit } : {}),
+                    ...(position.account ? { account: position.account } : {}),
                   }
                 : h
             ),
@@ -99,6 +100,7 @@ export const usePortfolioStore = create(
           shares,
           avgCost,
           ...(position.goldUnit ? { goldUnit: position.goldUnit } : {}),
+          ...(position.account ? { account: position.account } : {}),
           addedAt: new Date().toISOString(),
         };
         set((state) => ({
