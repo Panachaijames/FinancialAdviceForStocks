@@ -861,6 +861,18 @@ ul {
 }
 
 /* ============================================================================
+   PRIVACY MODE — blur money values for shared-screen use. main.jsx stamps
+   <html data-private="0|1"> from the header eye toggle; components add the
+   .pm-mask class to the numbers to hide. Layout is preserved (blur only).
+   ============================================================================ */
+:root[data-private='1'] .pm-mask {
+  filter: blur(8px);
+  -webkit-user-select: none;
+  user-select: none;
+  transition: filter 0.15s ease;
+}
+
+/* ============================================================================
    MOTION FREEZE — disables every effect above in one place.
    Driven by JS (lib/motion.js + the header FX toggle): main.jsx stamps
    <html data-motion="ok|reduce"> from the user's Auto/On/Off choice combined

@@ -351,7 +351,7 @@ export default function AssetCard({ holding, onOpen }) {
           ) : (
             <span
               key={priceFlashKey}
-              className={priceFlashClass}
+              className={`${priceFlashClass} pm-mask`}
               style={{
                 fontSize: 20,
                 fontWeight: 800,
@@ -441,7 +441,7 @@ export default function AssetCard({ holding, onOpen }) {
             <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.4 }}>
               {t('card.holdings')}
             </div>
-            <div style={{ color: theme.colors.text, fontFamily: theme.mono, fontWeight: 600 }}>
+            <div className="pm-mask" style={{ color: theme.colors.text, fontFamily: theme.mono, fontWeight: 600 }}>
               {isBahtGold ? (
                 <>
                   {fmtNumber(ozToBaht(shares), 2)} {t('card.bahtUnit')} @{' '}
@@ -474,10 +474,10 @@ export default function AssetCard({ holding, onOpen }) {
                   style={{ color: theme.colors.textDim }}
                   title={t('card.noLivePriceTitle')}
                 >
-                  <CountUp value={mvDisplay} format={(n) => fmtMoney(n, displayCurrency)} />
+                  <CountUp value={mvDisplay} format={(n) => fmtMoney(n, displayCurrency)} className="pm-mask" />
                 </div>
               ) : (
-                <CountUp value={mvDisplay} format={(n) => fmtMoney(n, displayCurrency)} />
+                <CountUp value={mvDisplay} format={(n) => fmtMoney(n, displayCurrency)} className="pm-mask" />
               )}
             </div>
           </div>
@@ -506,6 +506,7 @@ export default function AssetCard({ holding, onOpen }) {
             <span className="skeleton" style={{ display: 'inline-block', width: 70, height: 13 }} />
           ) : (
             <span
+              className="pm-mask"
               style={{
                 fontSize: 13,
                 fontWeight: 700,

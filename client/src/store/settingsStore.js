@@ -18,6 +18,9 @@ export const useSettingsStore = create(
       // Glassmorphism: frosted translucent panels over the aurora. Stamped by
       // main.jsx onto <html data-glass>.
       glassMode: false,
+      // Privacy mode: blur money values (shared-screen use). Stamped by main.jsx
+      // onto <html data-private>; CSS blurs elements with the .pm-mask class.
+      privacy: false,
       // Holdings grid ordering. key: 'added'|'value'|'day'|'pl'|'symbol'; dir: 'asc'|'desc'.
       // Default 'added'/'asc' reproduces the historical insertion order exactly.
       holdingsSort: { key: 'added', dir: 'asc' },
@@ -69,6 +72,14 @@ export const useSettingsStore = create(
       },
       toggleGlassMode() {
         set({ glassMode: !get().glassMode });
+      },
+
+      /** Toggle / set privacy mode (blur money values). */
+      setPrivacy(v) {
+        set({ privacy: !!v });
+      },
+      togglePrivacy() {
+        set({ privacy: !get().privacy });
       },
 
       /**

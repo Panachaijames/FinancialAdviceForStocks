@@ -323,11 +323,11 @@ export default function PortfolioSummary() {
               <div className="skeleton" style={{ height: 26, width: '70%' }} />
             ) : c.key === 'mv' ? (
               /* Market Value gets the mechanical rolling-digit odometer */
-              <Odometer value={c.value} format={c.format} className={styles.value} style={{ color: c.color }} />
+              <Odometer value={c.value} format={c.format} className={`${styles.value} pm-mask`} style={{ color: c.color }} />
             ) : (
-              <CountUp value={c.value} format={c.format} className={styles.value} style={{ color: c.color }} />
+              <CountUp value={c.value} format={c.format} className={`${styles.value} pm-mask`} style={{ color: c.color }} />
             )}
-            <div style={{ fontSize: 13, color: c.color, fontWeight: 600 }} title={c.subTitle}>
+            <div className="pm-mask" style={{ fontSize: 13, color: c.color, fontWeight: 600 }} title={c.subTitle}>
               {skel ? ' ' : c.sub}
             </div>
           </SpotlightCard>

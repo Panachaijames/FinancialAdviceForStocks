@@ -19,11 +19,16 @@ applyThemeVars();
 const applyGlassAttr = (on) => {
   document.documentElement.dataset.glass = on ? '1' : '0';
 };
+const applyPrivacyAttr = (on) => {
+  document.documentElement.dataset.private = on ? '1' : '0';
+};
 applyMotionAttr(useSettingsStore.getState().fxMode);
 applyGlassAttr(useSettingsStore.getState().glassMode);
+applyPrivacyAttr(useSettingsStore.getState().privacy);
 useSettingsStore.subscribe((s) => {
   applyMotionAttr(s.fxMode);
   applyGlassAttr(s.glassMode);
+  applyPrivacyAttr(s.privacy);
 });
 if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
   const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
