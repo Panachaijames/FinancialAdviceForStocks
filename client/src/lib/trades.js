@@ -183,6 +183,16 @@ export function replayPosition(txs = []) {
         prevShares,
         prevAvgCost,
       });
+    } else if (t.side === 'split') {
+      // Stock split: N-for-M multiplies shares held at that point by the ratio and
+      // divides the average cost by it (total cost basis unchanged). Applied
+      // chronologically so it composes correctly with backdated buys/sells.
+      const prevShares = shares;
+      const prevAvgCost = avgCost;
+      const ratio = Number(t.ratio) > 0 ? Number(t.ratio) : 1;
+      shares *= ratio;
+      avgCost = ratio > 0 ? avgCost / ratio : avgCost;
+      out.push({ ...t, prevShares, prevAvgCost });
     } else {
       out.push({ ...t }); // dividend — position unchanged
     }

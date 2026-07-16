@@ -9,7 +9,7 @@ import usePriceFlash from '../hooks/usePriceFlash.js';
 import { usePortfolioStore } from '../store/portfolioStore.js';
 import { useSettingsStore } from '../store/settingsStore.js';
 import { snackbar } from '../store/snackbarStore.js';
-import { getDividend } from '../api/client.js';
+import { getDividend, getSplits } from '../api/client.js';
 import { computeDividendIncome } from '../lib/dividends.js';
 import { DIVIDEND_ERROR, isDividendError } from '../lib/dividendState.js';
 import marketSocket from '../api/socket.js';
@@ -21,10 +21,12 @@ import HoldingEditor from './HoldingEditor.jsx';
 import TradeDialog from './TradeDialog.jsx';
 import AlertDialog from './AlertDialog.jsx';
 import { realizedBySymbol } from '../lib/trades.js';
+import { pendingSplits, splitLabel } from '../lib/splits.js';
 import { ozToBaht, bahtPriceThb } from '../lib/gold.js';
 import { useT } from '../lib/i18n.js';
 
 const DIV_TYPES = new Set(['us_stock', 'etf', 'th_stock']);
+const SPLIT_TYPES = new Set(['us_stock', 'etf', 'th_stock']);
 
 function colorForChange(v) {
   const c = classForChange(v);
@@ -75,6 +77,7 @@ export default function AssetCard({ holding, onOpen }) {
   const updateHolding = usePortfolioStore((s) => s.updateHolding);
   const removeHolding = usePortfolioStore((s) => s.removeHolding);
   const restoreRemoved = usePortfolioStore((s) => s.restoreRemoved);
+  const applySplit = usePortfolioStore((s) => s.applySplit);
   const transactions = usePortfolioStore((s) => s.transactions);
 
   const [editing, setEditing] = useState(false);
@@ -82,6 +85,7 @@ export default function AssetCard({ holding, onOpen }) {
   const [alerting, setAlerting] = useState(false);
   const [dividend, setDividend] = useState(undefined); // undefined = not fetched, null = none, DIVIDEND_ERROR = failed
   const [divRetry, setDivRetry] = useState(0);
+  const [splits, setSplits] = useState([]);
   const dividendRef = useRef(dividend);
   dividendRef.current = dividend;
   // Retry the dividend fetch on reconnect ONLY when the current value is the
@@ -133,6 +137,28 @@ export default function AssetCard({ holding, onOpen }) {
       cancelled = true;
     };
   }, [symbol, type, divRetry]);
+
+  // Fetch split history for splittable assets so we can flag any split that
+  // happened after this holding was added but hasn't been accounted for.
+  useEffect(() => {
+    if (!SPLIT_TYPES.has(type)) {
+      setSplits([]);
+      return undefined;
+    }
+    let cancelled = false;
+    getSplits(symbol)
+      .then((list) => {
+        if (!cancelled) setSplits(Array.isArray(list) ? list : []);
+      })
+      .catch(() => {
+        if (!cancelled) setSplits([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [symbol, type]);
+
+  const pendingSplit = (SPLIT_TYPES.has(type) ? pendingSplits(splits, transactions, holding) : [])[0] || null;
 
   let divLine = null;
   if (dividend && !isDividendError(dividend) && DIV_TYPES.has(type)) {
@@ -272,6 +298,47 @@ export default function AssetCard({ holding, onOpen }) {
             </button>
           </div>
         </div>
+
+        {/* Stock-split detected after this holding was added — offer to adjust */}
+        {pendingSplit && (
+          <div
+            onClick={stop}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: theme.space(1),
+              flexWrap: 'wrap',
+              padding: `${theme.space(1)}px ${theme.space(2)}px`,
+              borderRadius: theme.radius.sm,
+              background: theme.colors.warn + '22',
+              fontSize: 11.5,
+              color: theme.colors.text,
+            }}
+          >
+            <span aria-hidden="true">🔀</span>
+            <span style={{ flex: 1, minWidth: 120 }}>
+              {t('card.splitDetected', {
+                label: splitLabel(pendingSplit),
+                date: new Date(pendingSplit.date).toLocaleDateString(),
+              })}
+            </span>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                const applied = applySplit(holding.id, pendingSplit);
+                if (applied) {
+                  snackbar.push({
+                    message: t('card.splitApplied', { symbol, label: splitLabel(pendingSplit) }),
+                  });
+                }
+              }}
+              style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', color: theme.colors.accent }}
+            >
+              {t('card.splitApply')}
+            </button>
+          </div>
+        )}
 
         {/* Price + day change */}
         <div style={{ display: 'flex', alignItems: 'baseline', gap: theme.space(2) }}>

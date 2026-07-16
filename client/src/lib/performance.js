@@ -98,6 +98,10 @@ export function buildPerformanceSeries({
         realizedCum += convert(num(t.realized), cur);
       } else if (t.side === 'dividend') {
         realizedCum += convert(dividendNet(t), cur);
+      } else if (t.side === 'split') {
+        // A split rescales the share count; invested capital is unchanged.
+        const ratio = Number(t.ratio) > 0 ? Number(t.ratio) : 1;
+        shares[sym] = (shares[sym] || 0) * ratio;
       }
       p += 1;
     }

@@ -209,6 +209,21 @@ export async function getDividend(symbol) {
 }
 
 /**
+ * Fetch historical stock splits for a symbol.
+ * @param {string} symbol
+ * @returns {Promise<Array<{date:string, numerator:number, denominator:number, ratio:number, text:string}>>}
+ */
+export async function getSplits(symbol) {
+  const sym = (symbol || '').trim();
+  if (!sym) return [];
+  try {
+    return await request(`/api/splits?symbol=${encodeURIComponent(sym)}`);
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Fetch news for a set of symbols.
  * @param {string[]} symbols
  * @returns {Promise<Array>}

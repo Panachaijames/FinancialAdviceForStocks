@@ -229,6 +229,69 @@ export const usePortfolioStore = create(
       },
 
       /**
+       * Apply a detected stock split to a holding: ×ratio shares, ÷ratio average
+       * cost, recorded as a side:'split' ledger entry (which also marks the split
+       * handled so it isn't re-prompted). Seeds an opening lot for a manually-
+       * entered base position — exactly like recordTrade — so the chronological
+       * replay can't discard it. Returns the split entry, or null if invalid /
+       * already applied.
+       * @param {string} holdingId
+       * @param {{ date?:string, ratio:number, numerator?:number, denominator?:number }} split
+       */
+      applySplit(holdingId, split = {}) {
+        const h = get().holdings.find((x) => x.id === holdingId);
+        if (!h) return null;
+        const ratio = Number(split.ratio);
+        if (!(ratio > 0) || ratio === 1) return null;
+
+        const currency = h.currency || nativeCurrencyForType(h.type);
+        const at = split.date || new Date().toISOString();
+        const dayKey = String(at).slice(0, 10);
+        const txs = get().transactions;
+        const symTxs = txs.filter((x) => x.symbol === h.symbol);
+        // Idempotent: never record the same split (symbol+day) twice.
+        if (symTxs.some((x) => x.side === 'split' && String(x.at).slice(0, 10) === dayKey)) return null;
+        const hasTrades = symTxs.some((x) => x.side === 'buy' || x.side === 'sell');
+
+        const additions = [];
+        const heldShares = Number(h.shares) || 0;
+        if (!hasTrades && heldShares > 0) {
+          const splitMs = Date.parse(at) || Date.now();
+          const addedMs = Date.parse(h.addedAt);
+          const openMs = Math.min(Number.isFinite(addedMs) ? addedMs : splitMs - 1000, splitMs - 1000);
+          additions.push({
+            id: `tx-open-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            symbol: h.symbol,
+            type: h.type,
+            side: 'buy',
+            qty: heldShares,
+            price: Number(h.avgCost) || 0,
+            fee: 0,
+            currency,
+            at: new Date(openMs).toISOString(),
+            opening: true,
+          });
+        }
+
+        const tx = {
+          id: `tx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          symbol: h.symbol,
+          type: h.type,
+          side: 'split',
+          ratio,
+          ...(Number(split.numerator) > 0 ? { numerator: Number(split.numerator) } : {}),
+          ...(Number(split.denominator) > 0 ? { denominator: Number(split.denominator) } : {}),
+          currency,
+          at,
+        };
+        additions.push(tx);
+
+        const replayed = replayInto([...txs, ...additions], get().holdings, h.symbol);
+        set(replayed);
+        return tx;
+      },
+
+      /**
        * Edit a recorded buy/sell (qty / price / fee / date / side), then replay
        * the symbol so avg cost and every downstream sell's realized P/L are
        * recomputed — fixing an old typo without undoing everything after it.
