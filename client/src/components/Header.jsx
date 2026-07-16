@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { TrendingUp, Sparkles, Layers } from 'lucide-react';
+import { TrendingUp, Sparkles, Layers, Eye, EyeOff } from 'lucide-react';
 import marketSocket from '../api/socket.js';
 import { getHealth } from '../api/client.js';
 import { useSettingsStore } from '../store/settingsStore.js';
@@ -28,6 +28,8 @@ export default function Header() {
   const setFxMode = useSettingsStore((s) => s.setFxMode);
   const glassMode = useSettingsStore((s) => s.glassMode);
   const toggleGlassMode = useSettingsStore((s) => s.toggleGlassMode);
+  const privacy = useSettingsStore((s) => s.privacy);
+  const togglePrivacy = useSettingsStore((s) => s.togglePrivacy);
   const language = useSettingsStore((s) => s.language);
   const toggleLanguage = useSettingsStore((s) => s.toggleLanguage);
   const t = useT();
@@ -142,6 +144,22 @@ export default function Header() {
         >
           <Layers size={13} aria-hidden="true" />
           Glass
+        </button>
+        <button
+          type="button"
+          className="chip"
+          onClick={togglePrivacy}
+          aria-pressed={privacy}
+          title={privacy ? t('header.privacyOn') : t('header.privacyOff')}
+          aria-label={privacy ? t('header.privacyOn') : t('header.privacyOff')}
+          style={{
+            color: privacy ? '#fff' : undefined,
+            background: privacy ? 'var(--accent)' : undefined,
+            borderColor: privacy ? 'var(--accent)' : undefined,
+          }}
+        >
+          {privacy ? <EyeOff size={13} aria-hidden="true" /> : <Eye size={13} aria-hidden="true" />}
+          {t('header.privacy')}
         </button>
         <div
           className="app-conn"

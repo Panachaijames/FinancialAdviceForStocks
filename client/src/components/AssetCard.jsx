@@ -9,7 +9,7 @@ import usePriceFlash from '../hooks/usePriceFlash.js';
 import { usePortfolioStore } from '../store/portfolioStore.js';
 import { useSettingsStore } from '../store/settingsStore.js';
 import { snackbar } from '../store/snackbarStore.js';
-import { getDividend } from '../api/client.js';
+import { getDividend, getSplits } from '../api/client.js';
 import { computeDividendIncome } from '../lib/dividends.js';
 import { DIVIDEND_ERROR, isDividendError } from '../lib/dividendState.js';
 import marketSocket from '../api/socket.js';
@@ -21,9 +21,12 @@ import HoldingEditor from './HoldingEditor.jsx';
 import TradeDialog from './TradeDialog.jsx';
 import AlertDialog from './AlertDialog.jsx';
 import { realizedBySymbol } from '../lib/trades.js';
+import { pendingSplits, splitLabel } from '../lib/splits.js';
+import { ozToBaht, bahtPriceThb } from '../lib/gold.js';
 import { useT } from '../lib/i18n.js';
 
 const DIV_TYPES = new Set(['us_stock', 'etf', 'th_stock']);
+const SPLIT_TYPES = new Set(['us_stock', 'etf', 'th_stock']);
 
 function colorForChange(v) {
   const c = classForChange(v);
@@ -65,13 +68,16 @@ export default function AssetCard({ holding, onOpen }) {
   const { symbol, type, name, shares, avgCost } = holding;
   const native = holding.currency || (type === 'th_stock' ? 'THB' : 'USD');
   const meta = assetMeta(type);
+  // Gold tracked in Thai baht-weight: stored canonically in troy oz, shown in บาท.
+  const isBahtGold = type === 'gold' && holding.goldUnit === 'baht';
 
   const { quotes, loading, error } = useQuotes([symbol]);
-  const { convert } = useFx();
+  const { convert, rate } = useFx();
   const displayCurrency = useSettingsStore((s) => s.displayCurrency);
   const updateHolding = usePortfolioStore((s) => s.updateHolding);
   const removeHolding = usePortfolioStore((s) => s.removeHolding);
   const restoreRemoved = usePortfolioStore((s) => s.restoreRemoved);
+  const applySplit = usePortfolioStore((s) => s.applySplit);
   const transactions = usePortfolioStore((s) => s.transactions);
 
   const [editing, setEditing] = useState(false);
@@ -79,6 +85,7 @@ export default function AssetCard({ holding, onOpen }) {
   const [alerting, setAlerting] = useState(false);
   const [dividend, setDividend] = useState(undefined); // undefined = not fetched, null = none, DIVIDEND_ERROR = failed
   const [divRetry, setDivRetry] = useState(0);
+  const [splits, setSplits] = useState([]);
   const dividendRef = useRef(dividend);
   dividendRef.current = dividend;
   // Retry the dividend fetch on reconnect ONLY when the current value is the
@@ -131,6 +138,28 @@ export default function AssetCard({ holding, onOpen }) {
     };
   }, [symbol, type, divRetry]);
 
+  // Fetch split history for splittable assets so we can flag any split that
+  // happened after this holding was added but hasn't been accounted for.
+  useEffect(() => {
+    if (!SPLIT_TYPES.has(type)) {
+      setSplits([]);
+      return undefined;
+    }
+    let cancelled = false;
+    getSplits(symbol)
+      .then((list) => {
+        if (!cancelled) setSplits(Array.isArray(list) ? list : []);
+      })
+      .catch(() => {
+        if (!cancelled) setSplits([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [symbol, type]);
+
+  const pendingSplit = (SPLIT_TYPES.has(type) ? pendingSplits(splits, transactions, holding) : [])[0] || null;
+
   let divLine = null;
   if (dividend && !isDividendError(dividend) && DIV_TYPES.has(type)) {
     const income = computeDividendIncome({
@@ -148,8 +177,8 @@ export default function AssetCard({ holding, onOpen }) {
     }
   }
 
-  function handleSave({ shares: s, avgCost: a }) {
-    updateHolding(holding.id, { shares: s, avgCost: a });
+  function handleSave(patch) {
+    updateHolding(holding.id, patch);
     setEditing(false);
   }
 
@@ -270,6 +299,47 @@ export default function AssetCard({ holding, onOpen }) {
           </div>
         </div>
 
+        {/* Stock-split detected after this holding was added — offer to adjust */}
+        {pendingSplit && (
+          <div
+            onClick={stop}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: theme.space(1),
+              flexWrap: 'wrap',
+              padding: `${theme.space(1)}px ${theme.space(2)}px`,
+              borderRadius: theme.radius.sm,
+              background: theme.colors.warn + '22',
+              fontSize: 11.5,
+              color: theme.colors.text,
+            }}
+          >
+            <span aria-hidden="true">🔀</span>
+            <span style={{ flex: 1, minWidth: 120 }}>
+              {t('card.splitDetected', {
+                label: splitLabel(pendingSplit),
+                date: new Date(pendingSplit.date).toLocaleDateString(),
+              })}
+            </span>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                const applied = applySplit(holding.id, pendingSplit);
+                if (applied) {
+                  snackbar.push({
+                    message: t('card.splitApplied', { symbol, label: splitLabel(pendingSplit) }),
+                  });
+                }
+              }}
+              style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', color: theme.colors.accent }}
+            >
+              {t('card.splitApply')}
+            </button>
+          </div>
+        )}
+
         {/* Price + day change */}
         <div style={{ display: 'flex', alignItems: 'baseline', gap: theme.space(2) }}>
           {priceLoading ? (
@@ -281,7 +351,7 @@ export default function AssetCard({ holding, onOpen }) {
           ) : (
             <span
               key={priceFlashKey}
-              className={priceFlashClass}
+              className={`${priceFlashClass} pm-mask`}
               style={{
                 fontSize: 20,
                 fontWeight: 800,
@@ -299,6 +369,14 @@ export default function AssetCard({ holding, onOpen }) {
             </span>
           )}
         </div>
+
+        {/* Thai gold shop price (THB per baht-weight), derived from spot × FX */}
+        {isBahtGold && price != null && (
+          <div style={{ fontSize: 11, color: theme.colors.gold, fontWeight: 600, marginTop: -theme.space(1) }}>
+            {t('card.shop')} <span className="pm-mask">{fmtMoney(bahtPriceThb(price, rate), 'THB')}</span>
+            {t('card.perBaht')}
+          </div>
+        )}
 
         {/* Pre-market / after-hours (when the asset is in an extended session) */}
         {ext && (
@@ -321,7 +399,7 @@ export default function AssetCard({ holding, onOpen }) {
                   ? t('card.extAfterHrs')
                   : t('card.extOvernight')}
             </span>
-            <span style={{ fontSize: 13, fontWeight: 700, fontFamily: theme.mono, color: theme.colors.text }}>
+            <span className="pm-mask" style={{ fontSize: 13, fontWeight: 700, fontFamily: theme.mono, color: theme.colors.text }}>
               {fmtMoney(convert(ext.price, native), displayCurrency)}
             </span>
             <span style={{ fontSize: 12, fontWeight: 700, color: colorForChange(ext.pct) }}>
@@ -363,9 +441,18 @@ export default function AssetCard({ holding, onOpen }) {
             <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.4 }}>
               {t('card.holdings')}
             </div>
-            <div style={{ color: theme.colors.text, fontFamily: theme.mono, fontWeight: 600 }}>
-              {fmtNumber(Number(shares) || 0, Number.isInteger(Number(shares)) ? 0 : 4)} @{' '}
-              {fmtMoney(Number(avgCost) || 0, native)}
+            <div className="pm-mask" style={{ color: theme.colors.text, fontFamily: theme.mono, fontWeight: 600 }}>
+              {isBahtGold ? (
+                <>
+                  {fmtNumber(ozToBaht(shares), 2)} {t('card.bahtUnit')} @{' '}
+                  {fmtMoney(bahtPriceThb(Number(avgCost) || 0, rate), 'THB')}
+                </>
+              ) : (
+                <>
+                  {fmtNumber(Number(shares) || 0, Number.isInteger(Number(shares)) ? 0 : 4)} @{' '}
+                  {fmtMoney(Number(avgCost) || 0, native)}
+                </>
+              )}
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
@@ -387,10 +474,10 @@ export default function AssetCard({ holding, onOpen }) {
                   style={{ color: theme.colors.textDim }}
                   title={t('card.noLivePriceTitle')}
                 >
-                  <CountUp value={mvDisplay} format={(n) => fmtMoney(n, displayCurrency)} />
+                  <CountUp value={mvDisplay} format={(n) => fmtMoney(n, displayCurrency)} className="pm-mask" />
                 </div>
               ) : (
-                <CountUp value={mvDisplay} format={(n) => fmtMoney(n, displayCurrency)} />
+                <CountUp value={mvDisplay} format={(n) => fmtMoney(n, displayCurrency)} className="pm-mask" />
               )}
             </div>
           </div>
@@ -419,6 +506,7 @@ export default function AssetCard({ holding, onOpen }) {
             <span className="skeleton" style={{ display: 'inline-block', width: 70, height: 13 }} />
           ) : (
             <span
+              className="pm-mask"
               style={{
                 fontSize: 13,
                 fontWeight: 700,
@@ -437,7 +525,7 @@ export default function AssetCard({ holding, onOpen }) {
             <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.4, color: theme.colors.textDim }}>
               {t('card.realized')}
             </span>
-            <span style={{ fontSize: 12, fontWeight: 700, fontFamily: theme.mono, color: colorForChange(realized.realized) }}>
+            <span className="pm-mask" style={{ fontSize: 12, fontWeight: 700, fontFamily: theme.mono, color: colorForChange(realized.realized) }}>
               {fmtMoney(convert(realized.realized, realized.currency), displayCurrency)}
             </span>
           </div>
@@ -480,7 +568,7 @@ export default function AssetCard({ holding, onOpen }) {
           >
             <span aria-hidden="true">💰</span>
             {t('card.divLabel')} {divLine.yieldPct != null ? `${Number(divLine.yieldPct).toFixed(2)}%` : '—'} ·{' '}
-            {fmtMoney(divLine.annual, displayCurrency)}{t('card.perYear')}
+            <span className="pm-mask">{fmtMoney(divLine.annual, displayCurrency)}</span>{t('card.perYear')}
           </div>
         )}
       </SpotlightCard>
@@ -488,7 +576,7 @@ export default function AssetCard({ holding, onOpen }) {
       {editing && (
         <HoldingEditor
           asset={holding}
-          initial={{ shares, avgCost }}
+          initial={{ shares, avgCost, goldUnit: holding.goldUnit, account: holding.account }}
           mode="edit"
           onSave={handleSave}
           onCancel={() => setEditing(false)}

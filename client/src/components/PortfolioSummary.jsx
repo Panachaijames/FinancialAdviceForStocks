@@ -199,11 +199,14 @@ export default function PortfolioSummary() {
   const snapshotDoneRef = useRef(false);
   useEffect(() => {
     if (snapshotDoneRef.current) return;
+    // Never bake a demo-inflated total into the persistent value history — it
+    // would survive clearDemo() as a permanent bogus data point.
+    if (holdings.some((h) => h.demo)) return;
     if (quotesReady && fx != null && fx.source !== 'default' && usdTotal > 0) {
       usePortfolioStore.getState().recordSnapshot(usdTotal);
       snapshotDoneRef.current = true;
     }
-  }, [quotesReady, fx, usdTotal]);
+  }, [quotesReady, fx, usdTotal, holdings]);
 
   // Honest number states: skeleton while the first batch is in flight; once
   // settled (or the fetch gave up), flag any holdings still valued at cost.
@@ -323,11 +326,11 @@ export default function PortfolioSummary() {
               <div className="skeleton" style={{ height: 26, width: '70%' }} />
             ) : c.key === 'mv' ? (
               /* Market Value gets the mechanical rolling-digit odometer */
-              <Odometer value={c.value} format={c.format} className={styles.value} style={{ color: c.color }} />
+              <Odometer value={c.value} format={c.format} className={`${styles.value} pm-mask`} style={{ color: c.color }} />
             ) : (
-              <CountUp value={c.value} format={c.format} className={styles.value} style={{ color: c.color }} />
+              <CountUp value={c.value} format={c.format} className={`${styles.value} pm-mask`} style={{ color: c.color }} />
             )}
-            <div style={{ fontSize: 13, color: c.color, fontWeight: 600 }} title={c.subTitle}>
+            <div className="pm-mask" style={{ fontSize: 13, color: c.color, fontWeight: 600 }} title={c.subTitle}>
               {skel ? ' ' : c.sub}
             </div>
           </SpotlightCard>

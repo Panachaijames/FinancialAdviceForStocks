@@ -194,7 +194,7 @@ function Stat({ label, value, color, swatch }) {
     <div style={{ display: 'flex', alignItems: 'baseline', gap: theme.space(1) }}>
       {swatch && <span style={{ color: swatch }}>▬</span>}
       <span style={{ fontSize: 12, color: theme.colors.textDim, fontWeight: 600 }}>{label}</span>
-      <span style={{ fontSize: 14, fontWeight: 800, fontFamily: theme.mono, color }}>{value}</span>
+      <span className="pm-mask" style={{ fontSize: 14, fontWeight: 800, fontFamily: theme.mono, color }}>{value}</span>
     </div>
   );
 }

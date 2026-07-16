@@ -10,6 +10,9 @@ const router = express.Router();
 const CANDLES_TTL_MS = 60 * 1000; // 60 seconds
 
 const VALID_RANGES = new Set(['1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', 'max']);
+// Whitelist intervals — an invalid value was forwarded verbatim to Yahoo, which
+// guarantees an uncached upstream miss (and a bad cache key) on every hit.
+const VALID_INTERVALS = new Set(['auto', '1m', '2m', '5m', '15m', '30m', '60m', '90m', '1h', '1d', '5d', '1wk', '1mo', '3mo']);
 
 // GET /api/candles?symbol=X&range=R&interval=I  -> Candle[]
 router.get('/', async (req, res) => {
@@ -23,10 +26,13 @@ router.get('/', async (req, res) => {
     range = '1mo';
   }
 
-  const interval =
+  let interval =
     typeof req.query.interval === 'string' && req.query.interval.trim()
       ? req.query.interval.trim()
       : 'auto';
+  if (!VALID_INTERVALS.has(interval)) {
+    interval = 'auto';
+  }
 
   try {
     const key = `candles:${symbol}:${range}:${interval}`;
@@ -45,7 +51,7 @@ router.get('/', async (req, res) => {
         if (td && td.length) return td;
       }
       return [];
-    });
+    }, { emptyTtlMs: 45 * 1000 });
     return res.json(Array.isArray(candles) ? candles : []);
   } catch (err) {
     return res.status(500).json({ error: err?.message || 'Candles fetch failed' });

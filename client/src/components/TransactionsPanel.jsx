@@ -6,6 +6,7 @@ import { usePortfolioStore } from '../store/portfolioStore.js';
 import { useSettingsStore } from '../store/settingsStore.js';
 import useFx from '../hooks/useFx.js';
 import { realizedByCurrency, dividendsByCurrency } from '../lib/trades.js';
+import { splitLabel } from '../lib/splits.js';
 import { tradesToCsv } from '../lib/csvImport.js';
 import { downloadTextFile } from '../lib/backup.js';
 import { useT } from '../lib/i18n.js';
@@ -112,6 +113,7 @@ export default function TransactionsPanel() {
                 {t('activity.dividends')}
               </span>
               <span
+                className="pm-mask"
                 style={{ fontSize: 15, fontWeight: 800, fontFamily: theme.mono, color: theme.colors.gold }}
                 title={t('activity.dividendsChipTitle')}
               >
@@ -125,6 +127,7 @@ export default function TransactionsPanel() {
                 {t('activity.realizedPl')}
               </span>
               <span
+                className="pm-mask"
                 style={{ fontSize: 15, fontWeight: 800, fontFamily: theme.mono, color: colorForChange(totalRealized) }}
                 title={t('activity.realizedPlChipTitle')}
               >
@@ -176,10 +179,13 @@ export default function TransactionsPanel() {
             {visible.map((tx) => {
               const isSell = tx.side === 'sell';
               const isDividend = tx.side === 'dividend';
+              const isSplit = tx.side === 'split';
               const badge = isDividend
                 ? { bg: theme.colors.gold, fg: theme.colors.gold, text: 'DIV' }
                 : isSell
                 ? { bg: theme.colors.down, fg: theme.colors.down, text: 'SELL' }
+                : isSplit
+                ? { bg: theme.colors.accent, fg: theme.colors.accent, text: 'SPLIT' }
                 : { bg: theme.colors.up, fg: theme.colors.up, text: 'BUY' };
               const net = isDividend ? Number(tx.amount || 0) - Number(tx.wht || 0) : 0;
               return (
@@ -200,12 +206,14 @@ export default function TransactionsPanel() {
                       <td style={{ ...td, ...right, color: theme.colors.textFaint }}>—</td>
                       <td style={{ ...td, ...right, color: theme.colors.textFaint }}>—</td>
                       <td
+                        className="pm-mask"
                         style={{ ...td, ...right, color: theme.colors.textDim }}
                         title={t('activity.whtTitle')}
                       >
                         {Number(tx.wht) > 0 ? fmtMoney(tx.wht, tx.currency) : '—'}
                       </td>
                       <td
+                        className="pm-mask"
                         style={{ ...td, ...right, fontWeight: 700, color: theme.colors.gold }}
                         title={
                           Number(tx.wht) > 0
@@ -221,22 +229,26 @@ export default function TransactionsPanel() {
                         {fmtMoney(net, tx.currency)}
                       </td>
                     </>
+                  ) : isSplit ? (
+                    <td colSpan={4} style={{ ...td, color: theme.colors.textDim }}>
+                      {splitLabel(tx)}
+                    </td>
                   ) : (
                     <>
                       <td style={{ ...td, ...right, color: theme.colors.text }}>
                         {fmtNumber(tx.qty, Number.isInteger(tx.qty) ? 0 : 4)}
                       </td>
-                      <td style={{ ...td, ...right, color: theme.colors.text }}>{fmtMoney(tx.price, tx.currency)}</td>
-                      <td style={{ ...td, ...right, color: theme.colors.textDim }}>
+                      <td className="pm-mask" style={{ ...td, ...right, color: theme.colors.text }}>{fmtMoney(tx.price, tx.currency)}</td>
+                      <td className="pm-mask" style={{ ...td, ...right, color: theme.colors.textDim }}>
                         {tx.fee > 0 ? fmtMoney(tx.fee, tx.currency) : '—'}
                       </td>
-                      <td style={{ ...td, ...right, fontWeight: 700, color: isSell ? colorForChange(tx.realized) : theme.colors.textFaint }}>
+                      <td className="pm-mask" style={{ ...td, ...right, fontWeight: 700, color: isSell ? colorForChange(tx.realized) : theme.colors.textFaint }}>
                         {isSell ? fmtMoney(tx.realized, tx.currency) : '—'}
                       </td>
                     </>
                   )}
                   <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    {!isDividend && (
+                    {!isDividend && !isSplit && (
                       <button
                         type="button"
                         className="btn-ghost"

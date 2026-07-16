@@ -18,6 +18,9 @@ export const useSettingsStore = create(
       // Glassmorphism: frosted translucent panels over the aurora. Stamped by
       // main.jsx onto <html data-glass>.
       glassMode: false,
+      // Privacy mode: blur money values (shared-screen use). Stamped by main.jsx
+      // onto <html data-private>; CSS blurs elements with the .pm-mask class.
+      privacy: false,
       // Holdings grid ordering. key: 'added'|'value'|'day'|'pl'|'symbol'; dir: 'asc'|'desc'.
       // Default 'added'/'asc' reproduces the historical insertion order exactly.
       holdingsSort: { key: 'added', dir: 'asc' },
@@ -71,6 +74,14 @@ export const useSettingsStore = create(
         set({ glassMode: !get().glassMode });
       },
 
+      /** Toggle / set privacy mode (blur money values). */
+      setPrivacy(v) {
+        set({ privacy: !!v });
+      },
+      togglePrivacy() {
+        set({ privacy: !get().privacy });
+      },
+
       /**
        * Set the refresh interval in milliseconds (clamped to a sane range).
        */
@@ -83,7 +94,7 @@ export const useSettingsStore = create(
 
       /** Set holdings sort; validates key/dir and merges partial patches. */
       setHoldingsSort(patch) {
-        const VALID = ['added', 'value', 'day', 'pl', 'symbol'];
+        const VALID = ['added', 'value', 'day', 'pl', 'symbol', 'account'];
         const cur = get().holdingsSort || { key: 'added', dir: 'asc' };
         const next = { ...cur, ...(patch || {}) };
         if (!VALID.includes(next.key)) next.key = 'added';

@@ -21,6 +21,9 @@ const en = {
   'header.reconnecting': 'Reconnecting…',
   'header.waking': 'Free server is waking up — live data in ~30s…',
   'header.language': 'Language',
+  'header.privacy': 'Privacy',
+  'header.privacyOff': 'Hide money values (privacy mode)',
+  'header.privacyOn': 'Money hidden — click to show',
 
   'add.quickAdd': 'Quick add:',
   'add.searchPlaceholder': 'Search stocks, crypto, gold...  (e.g. AAPL, bitcoin, PTT.BK)',
@@ -44,6 +47,8 @@ const en = {
   'holdings.sort.day': 'Day %',
   'holdings.sort.pl': 'P&L',
   'holdings.sort.symbol': 'Symbol',
+  'holdings.sort.account': 'Account',
+  'holdings.unassigned': 'Unassigned',
 };
 
 const th = {
@@ -57,6 +62,9 @@ const th = {
   'header.reconnecting': 'กำลังเชื่อมต่อใหม่…',
   'header.waking': 'เซิร์ฟเวอร์ฟรีกำลังตื่น — ข้อมูลสดในอีก ~30 วินาที…',
   'header.language': 'ภาษา',
+  'header.privacy': 'ความเป็นส่วนตัว',
+  'header.privacyOff': 'ซ่อนตัวเลขเงิน (โหมดส่วนตัว)',
+  'header.privacyOn': 'ซ่อนเงินอยู่ — คลิกเพื่อแสดง',
 
   'add.quickAdd': 'เพิ่มด่วน:',
   'add.searchPlaceholder': 'ค้นหาหุ้น คริปโท ทองคำ...  (เช่น AAPL, bitcoin, PTT.BK)',
@@ -80,6 +88,8 @@ const th = {
   'holdings.sort.day': '% วัน',
   'holdings.sort.pl': 'กำไร/ขาดทุน',
   'holdings.sort.symbol': 'สัญลักษณ์',
+  'holdings.sort.account': 'บัญชี',
+  'holdings.unassigned': 'ไม่ระบุบัญชี',
 };
 
 // Merge the hand-authored high-traffic strings (above) with the generated

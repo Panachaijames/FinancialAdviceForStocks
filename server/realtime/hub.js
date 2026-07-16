@@ -270,9 +270,13 @@ export function attach(httpServer) {
       fxPollRunning = false;
     }
   }
-  const fxPoll = setInterval(pollFxOnce, fxPollMs);
-  // Prime FX shortly after startup so clients get a value quickly.
-  pollFxOnce();
+  // Only poll FX while at least one client is connected — otherwise this 15s
+  // loop burns ~5,760 crumb-protected Yahoo calls/day for nobody, feeding the
+  // per-IP throttle that degrades real quotes. A connecting client primes it.
+  const fxPoll = setInterval(() => {
+    if (clientSymbols.size === 0) return;
+    pollFxOnce();
+  }, fxPollMs);
 
   // Heartbeat sweep (5.1): ping every client each interval and terminate any
   // that didn't pong since the previous sweep. terminate() fires 'close', which
@@ -308,6 +312,9 @@ export function attach(httpServer) {
     log.info('ws connect', { clients: hubStats.clients });
     safeSend(ws, { type: 'hello' });
     if (lastFx) safeSend(ws, { type: 'fx', data: lastFx });
+    // The FX loop is gated on having clients, so prime a fresh read when one
+    // arrives after an idle stretch (or if we've never fetched FX yet).
+    if (clientSymbols.size === 1 || !lastFx) pollFxOnce();
 
     ws.on('message', (raw) => {
       let msg;

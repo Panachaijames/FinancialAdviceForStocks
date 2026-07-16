@@ -166,10 +166,10 @@ export default function AddAssetBar() {
     }
   }
 
-  function handleSaveHolding({ shares, avgCost }) {
+  function handleSaveHolding(position) {
     if (pending) {
       const sym = pending.symbol;
-      addHolding(pending, { shares, avgCost });
+      addHolding(pending, position);
       snackbar.push({
         message: `Added ${sym}`,
         actionLabel: 'View',

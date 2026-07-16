@@ -18,8 +18,7 @@
     "build": "npm run build --workspace client",
     "start": "npm run start --workspace server",
     "test": "node --test",
-    "electron:start": "npm run build && electron .",
-    "pack:win": "npm run build && electron-packager . --platform=win32 --arch=x64 --out=release --overwrite --no-asar --prune=true --name=\"PT Financial Advisor\" --executable-name=\"PT Financial Advisor\" --ignore=\"/release\" --ignore=\"/android\" --ignore=\"/capacitor\\.config\\.json\" --ignore=\"/\\.git\" --ignore=\"/\\.claude\" --ignore=\"/\\.env\\.example\" --ignore=\"/\\.env\\.local\" --ignore=\"/\\.env$\" --ignore=\"/client/src\" --ignore=\"/client/node_modules\" --ignore=\"/client/index.html\" --ignore=\"/client/vite.config.js\"",
+    "electron:start": "electron .",
     "dist": "electron-builder --win",
     "dist:dir": "electron-builder --win --dir"
   },
@@ -34,10 +33,9 @@
     "yahoo-finance2": "2.13.4"
   },
   "devDependencies": {
-    "@electron/packager": "^20.0.1",
     "concurrently": "^9.1.0",
-    "electron": "^31.7.7",
-    "electron-builder": "^24.13.3"
+    "electron": "^43.1.1",
+    "electron-builder": "^26.15.3"
   },
   "build": {
     "appId": "com.ptfinancial.advisor",

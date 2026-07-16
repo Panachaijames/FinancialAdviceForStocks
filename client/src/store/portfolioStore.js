@@ -35,7 +35,9 @@ function replayInto(transactions, holdings, symbol) {
   return {
     transactions: transactions.map((t) => (t && t.symbol === symbol ? byId.get(t.id) || t : t)),
     holdings: hasTrades
-      ? holdings.map((h) => (h.symbol === symbol ? { ...h, shares, avgCost } : h))
+      // Recording a trade adopts a demo holding as real (demo:undefined) so
+      // "Clear demo" can never delete a position the user has actually traded.
+      ? holdings.map((h) => (h.symbol === symbol ? { ...h, shares, avgCost, demo: undefined } : h))
       : holdings,
   };
 }
@@ -80,6 +82,9 @@ export const usePortfolioStore = create(
                     shares: shares || h.shares,
                     avgCost: avgCost || h.avgCost,
                     name: sr.name || h.name,
+                    demo: undefined, // re-adding a symbol adopts a demo holding as real
+                    ...(position.goldUnit ? { goldUnit: position.goldUnit } : {}),
+                    ...(position.account ? { account: position.account } : {}),
                   }
                 : h
             ),
@@ -97,6 +102,8 @@ export const usePortfolioStore = create(
           currency,
           shares,
           avgCost,
+          ...(position.goldUnit ? { goldUnit: position.goldUnit } : {}),
+          ...(position.account ? { account: position.account } : {}),
           addedAt: new Date().toISOString(),
         };
         set((state) => ({
@@ -104,6 +111,46 @@ export const usePortfolioStore = create(
           // A symbol is never both held and watched — drop any watch entry.
           watchlist: state.watchlist.filter((w) => w.symbol !== symbol),
         }));
+      },
+
+      /**
+       * Load a diversified sample portfolio (flagged demo:true) so a new user
+       * sees every panel populated instead of zeros. No-op for symbols already
+       * held. Cleared in one click via clearDemo().
+       */
+      loadDemo() {
+        const DEMO = [
+          { symbol: 'AAPL', name: 'Apple Inc.', type: 'us_stock', currency: 'USD', shares: 15, avgCost: 180 },
+          { symbol: 'VOO', name: 'Vanguard S&P 500 ETF', type: 'etf', currency: 'USD', shares: 10, avgCost: 400 },
+          { symbol: 'SCHD', name: 'Schwab US Dividend Equity ETF', type: 'etf', currency: 'USD', shares: 40, avgCost: 76 },
+          { symbol: 'BTC-USD', name: 'Bitcoin USD', type: 'crypto', currency: 'USD', shares: 0.25, avgCost: 58000 },
+          { symbol: 'GC=F', name: 'Gold Futures', type: 'gold', currency: 'USD', shares: 2, avgCost: 2250 },
+          { symbol: 'PTT.BK', name: 'PTT PCL', type: 'th_stock', currency: 'THB', shares: 500, avgCost: 34 },
+        ];
+        set((state) => {
+          const have = new Set(state.holdings.map((h) => h.symbol));
+          const additions = DEMO.filter((d) => !have.has(d.symbol)).map((d) => ({
+            id: makeId(d.symbol),
+            symbol: d.symbol,
+            type: d.type,
+            name: d.name,
+            currency: d.currency,
+            shares: d.shares,
+            avgCost: d.avgCost,
+            demo: true,
+            addedAt: new Date().toISOString(),
+          }));
+          if (additions.length === 0) return {};
+          return {
+            holdings: [...state.holdings, ...additions],
+            watchlist: state.watchlist.filter((w) => !additions.some((a) => a.symbol === w.symbol)),
+          };
+        });
+      },
+
+      /** Remove every demo holding (and its watchlist untouched). */
+      clearDemo() {
+        set((state) => ({ holdings: state.holdings.filter((h) => !h.demo) }));
       },
 
       /**
@@ -115,8 +162,9 @@ export const usePortfolioStore = create(
         if ('shares' in clean) clean.shares = Number(clean.shares) || 0;
         if ('avgCost' in clean) clean.avgCost = Number(clean.avgCost) || 0;
         set((state) => ({
+          // Editing a holding adopts a demo one as real (demo:undefined).
           holdings: state.holdings.map((h) =>
-            h.id === id ? { ...h, ...clean } : h
+            h.id === id ? { ...h, ...clean, demo: undefined } : h
           ),
         }));
       },
@@ -227,6 +275,69 @@ export const usePortfolioStore = create(
       },
 
       /**
+       * Apply a detected stock split to a holding: ×ratio shares, ÷ratio average
+       * cost, recorded as a side:'split' ledger entry (which also marks the split
+       * handled so it isn't re-prompted). Seeds an opening lot for a manually-
+       * entered base position — exactly like recordTrade — so the chronological
+       * replay can't discard it. Returns the split entry, or null if invalid /
+       * already applied.
+       * @param {string} holdingId
+       * @param {{ date?:string, ratio:number, numerator?:number, denominator?:number }} split
+       */
+      applySplit(holdingId, split = {}) {
+        const h = get().holdings.find((x) => x.id === holdingId);
+        if (!h) return null;
+        const ratio = Number(split.ratio);
+        if (!(ratio > 0) || ratio === 1) return null;
+
+        const currency = h.currency || nativeCurrencyForType(h.type);
+        const at = split.date || new Date().toISOString();
+        const dayKey = String(at).slice(0, 10);
+        const txs = get().transactions;
+        const symTxs = txs.filter((x) => x.symbol === h.symbol);
+        // Idempotent: never record the same split (symbol+day) twice.
+        if (symTxs.some((x) => x.side === 'split' && String(x.at).slice(0, 10) === dayKey)) return null;
+        const hasTrades = symTxs.some((x) => x.side === 'buy' || x.side === 'sell');
+
+        const additions = [];
+        const heldShares = Number(h.shares) || 0;
+        if (!hasTrades && heldShares > 0) {
+          const splitMs = Date.parse(at) || Date.now();
+          const addedMs = Date.parse(h.addedAt);
+          const openMs = Math.min(Number.isFinite(addedMs) ? addedMs : splitMs - 1000, splitMs - 1000);
+          additions.push({
+            id: `tx-open-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            symbol: h.symbol,
+            type: h.type,
+            side: 'buy',
+            qty: heldShares,
+            price: Number(h.avgCost) || 0,
+            fee: 0,
+            currency,
+            at: new Date(openMs).toISOString(),
+            opening: true,
+          });
+        }
+
+        const tx = {
+          id: `tx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          symbol: h.symbol,
+          type: h.type,
+          side: 'split',
+          ratio,
+          ...(Number(split.numerator) > 0 ? { numerator: Number(split.numerator) } : {}),
+          ...(Number(split.denominator) > 0 ? { denominator: Number(split.denominator) } : {}),
+          currency,
+          at,
+        };
+        additions.push(tx);
+
+        const replayed = replayInto([...txs, ...additions], get().holdings, h.symbol);
+        set(replayed);
+        return tx;
+      },
+
+      /**
        * Edit a recorded buy/sell (qty / price / fee / date / side), then replay
        * the symbol so avg cost and every downstream sell's realized P/L are
        * recomputed — fixing an old typo without undoing everything after it.
@@ -324,6 +435,12 @@ export const usePortfolioStore = create(
           }
           if (!holding) {
             skipped.push(`${t.symbol}: could not create holding`);
+            continue;
+          }
+          if (t.side === 'split') {
+            const s = get().applySplit(holding.id, { date: t.date, ratio: t.ratio });
+            if (s) applied += 1;
+            else skipped.push(`${t.symbol} split ${t.ratio}: invalid or already applied`);
             continue;
           }
           const tx = get().recordTrade(holding.id, {

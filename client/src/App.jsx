@@ -49,6 +49,9 @@ const QUICK_ADD = [
 export default function App() {
   const holdings = usePortfolioStore((s) => s.holdings);
   const addHolding = usePortfolioStore((s) => s.addHolding);
+  const loadDemo = usePortfolioStore((s) => s.loadDemo);
+  const clearDemo = usePortfolioStore((s) => s.clearDemo);
+  const hasDemo = holdings.some((h) => h.demo);
   const t = useT();
   const [selected, setSelected] = useState(null);
   const [pending, setPending] = useState(null); // quick-add asset awaiting shares/cost in the editor
@@ -117,10 +120,36 @@ export default function App() {
           {holdings.length === 0 ? (
             <>
               <FundsPanel />
-              <EmptyState onQuickAdd={(sr) => setPending(sr)} />
+              <EmptyState onQuickAdd={(sr) => setPending(sr)} onLoadDemo={loadDemo} />
             </>
           ) : (
             <div style={sectionGap}>
+              {hasDemo && (
+                <div
+                  className="panel"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: theme.space(2),
+                    flexWrap: 'wrap',
+                    padding: `${theme.space(2)}px ${theme.space(3)}px`,
+                    borderLeft: `3px solid ${theme.colors.accent}`,
+                  }}
+                >
+                  <span style={{ fontSize: 13, color: theme.colors.textDim }}>
+                    🧪 {t('demo.banner')}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={clearDemo}
+                    style={{ fontSize: 12, fontWeight: 700, color: theme.colors.down }}
+                  >
+                    {t('demo.clear')}
+                  </button>
+                </div>
+              )}
               <PortfolioSummary />
 
               <Reveal blur={0} distance={16}>
@@ -303,7 +332,7 @@ function ViewPane({ active, children }) {
   );
 }
 
-function EmptyState({ onQuickAdd }) {
+function EmptyState({ onQuickAdd, onLoadDemo }) {
   const t = useT();
   const wrap = {
     display: 'flex',
@@ -358,6 +387,16 @@ function EmptyState({ onQuickAdd }) {
             );
           })}
         </div>
+        {onLoadDemo && (
+          <button
+            type="button"
+            className="btn"
+            onClick={onLoadDemo}
+            style={{ marginTop: theme.space(2), fontSize: 13, fontWeight: 700, color: theme.colors.accent }}
+          >
+            {t('empty.loadDemo')}
+          </button>
+        )}
       </div>
     </div>
   );

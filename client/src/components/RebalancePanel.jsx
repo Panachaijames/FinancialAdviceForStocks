@@ -90,7 +90,7 @@ export default function RebalancePanel() {
                       </td>
                       <td style={{ padding: `${theme.space(1)}px ${theme.space(2)}px`, borderTop: `1px solid ${theme.colors.border}`, fontSize: 12.5, textAlign: 'right', fontFamily: theme.mono, color: theme.colors.text, whiteSpace: 'nowrap' }}>
                         {r.currentPct.toFixed(1)}%
-                        <span style={{ color: theme.colors.textFaint, fontSize: 11 }}> · {fmtMoney(r.value, displayCurrency)}</span>
+                        <span className="pm-mask" style={{ color: theme.colors.textFaint, fontSize: 11 }}> · {fmtMoney(r.value, displayCurrency)}</span>
                       </td>
                       <td style={{ padding: `${theme.space(1)}px ${theme.space(2)}px`, borderTop: `1px solid ${theme.colors.border}`, textAlign: 'right' }}>
                         <input
@@ -109,7 +109,7 @@ export default function RebalancePanel() {
                       <td style={{ padding: `${theme.space(1)}px ${theme.space(2)}px`, borderTop: `1px solid ${theme.colors.border}`, fontSize: 12.5, textAlign: 'right', fontFamily: theme.mono, fontWeight: 600, color: !hasTarget ? theme.colors.textFaint : Math.abs(r.driftPct) <= 2 ? theme.colors.up : theme.colors.warn, whiteSpace: 'nowrap' }}>
                         {hasTarget ? fmtSignedPct(r.driftPct) : '—'}
                       </td>
-                      <td style={{ padding: `${theme.space(1)}px ${theme.space(2)}px`, borderTop: `1px solid ${theme.colors.border}`, fontSize: 12.5, textAlign: 'right', fontFamily: theme.mono, fontWeight: 700, whiteSpace: 'nowrap', color: !hasTarget || !sumOk ? theme.colors.textFaint : r.amount > 0.5 ? theme.colors.up : r.amount < -0.5 ? theme.colors.down : theme.colors.textDim }}>
+                      <td className="pm-mask" style={{ padding: `${theme.space(1)}px ${theme.space(2)}px`, borderTop: `1px solid ${theme.colors.border}`, fontSize: 12.5, textAlign: 'right', fontFamily: theme.mono, fontWeight: 700, whiteSpace: 'nowrap', color: !hasTarget || !sumOk ? theme.colors.textFaint : r.amount > 0.5 ? theme.colors.up : r.amount < -0.5 ? theme.colors.down : theme.colors.textDim }}>
                         {hasTarget && sumOk
                           ? r.amount > 0.5
                             ? t('rebalance.buyAmount', { amount: fmtMoney(r.amount, displayCurrency) })
@@ -124,7 +124,7 @@ export default function RebalancePanel() {
               </tbody>
             </table>
           </div>
-          <div style={{ fontSize: 10.5, color: theme.colors.textFaint }}>
+          <div className="pm-mask" style={{ fontSize: 10.5, color: theme.colors.textFaint }}>
             {t('rebalance.footnote', { total: fmtMoney(total, displayCurrency) })}
           </div>
         </>

@@ -57,6 +57,33 @@ export function applySell(pos = {}, t = {}) {
 }
 
 /**
+ * Inverse of applyBuy: how many shares to buy at `price` to move the position's
+ * average cost to `targetAvg`. Buying can only pull the average TOWARD the buy
+ * price, so a target is only reachable when it lies strictly between the current
+ * average and the buy price. Returns null when there's no position, bad inputs,
+ * or the target isn't reachable by buying at that price.
+ * @param {number} shares current shares held
+ * @param {number} avgCost current average cost
+ * @param {number} price the buy price
+ * @param {number} targetAvg desired average cost after the buy
+ * @param {number} [fee=0] the trade fee (folded into cost basis, like applyBuy)
+ * @returns {number|null} shares to buy (> 0), or null
+ */
+export function sharesToReachAvg(shares, avgCost, price, targetAvg, fee = 0) {
+  const s0 = num(shares);
+  const a0 = Number(avgCost);
+  const p = Number(price);
+  const aT = Number(targetAvg);
+  const f = Number.isFinite(Number(fee)) && Number(fee) > 0 ? Number(fee) : 0;
+  if (!(s0 > 0) || !(a0 > 0) || !(p > 0) || !(aT > 0)) return null;
+  if (p === aT) return null; // can't pin the average exactly at the buy price
+  // Solve (s0·a0 + q·p + f) / (s0+q) = aT for q (fee raises the basis, like applyBuy).
+  const q = (s0 * (aT - a0) - f) / (p - aT);
+  if (!Number.isFinite(q) || q <= 0) return null; // target not reachable at this price/fee
+  return q;
+}
+
+/**
  * Sum realized P/L from a transaction list, grouped by currency (sells only —
  * each sell stores its `realized` in the holding's native currency).
  * @param {Array<{side:string, realized?:number, currency?:string}>} transactions
@@ -183,6 +210,16 @@ export function replayPosition(txs = []) {
         prevShares,
         prevAvgCost,
       });
+    } else if (t.side === 'split') {
+      // Stock split: N-for-M multiplies shares held at that point by the ratio and
+      // divides the average cost by it (total cost basis unchanged). Applied
+      // chronologically so it composes correctly with backdated buys/sells.
+      const prevShares = shares;
+      const prevAvgCost = avgCost;
+      const ratio = Number(t.ratio) > 0 ? Number(t.ratio) : 1;
+      shares *= ratio;
+      avgCost = ratio > 0 ? avgCost / ratio : avgCost;
+      out.push({ ...t, prevShares, prevAvgCost });
     } else {
       out.push({ ...t }); // dividend — position unchanged
     }
@@ -193,6 +230,7 @@ export function replayPosition(txs = []) {
 export default {
   applyBuy,
   applySell,
+  sharesToReachAvg,
   realizedByCurrency,
   realizedBySymbol,
   dividendNet,

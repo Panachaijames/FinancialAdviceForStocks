@@ -68,6 +68,7 @@ function normalizeSide(raw) {
   const s = String(raw || '').trim().toLowerCase();
   if (['buy', 'b', 'bought', 'purchase', 'long', 'ซื้อ'].includes(s)) return 'buy';
   if (['sell', 's', 'sold', 'sale', 'ขาย'].includes(s)) return 'sell';
+  if (s === 'split') return 'split'; // app-emitted split row (ratio in the qty column)
   return null;
 }
 
@@ -117,6 +118,19 @@ export function parseTradesCsv(text) {
       errors.push(`Line ${line}: missing symbol`);
       continue;
     }
+    // Split rows carry the ratio in the qty column and no price/fee.
+    if (side === 'split') {
+      if (!Number.isFinite(dateMs)) {
+        errors.push(`Line ${line}: unparseable date "${cells[mapped.date]}"`);
+        continue;
+      }
+      if (!Number.isFinite(qty) || qty <= 0) {
+        errors.push(`Line ${line}: bad split ratio "${cells[mapped.qty]}"`);
+        continue;
+      }
+      trades.push({ date: new Date(dateMs).toISOString(), side: 'split', symbol, ratio: qty });
+      continue;
+    }
     if (!Number.isFinite(qty) || qty <= 0) {
       errors.push(`Line ${line}: bad quantity "${cells[mapped.qty]}"`);
       continue;
@@ -157,19 +171,21 @@ const EXPORT_HEADERS = ['date', 'side', 'symbol', 'qty', 'price', 'fee'];
  */
 export function tradesToCsv(transactions) {
   const rows = (Array.isArray(transactions) ? transactions : [])
-    .filter((t) => t && t.symbol && (t.side === 'buy' || t.side === 'sell'))
+    .filter((t) => t && t.symbol && (t.side === 'buy' || t.side === 'sell' || t.side === 'split'))
     .slice()
     .sort((a, b) => (String(a.at || a.date) < String(b.at || b.date) ? -1 : 1));
   const lines = [EXPORT_HEADERS.join(',')];
   for (const t of rows) {
+    const isSplit = t.side === 'split';
     lines.push(
       [
         csvField(t.at || t.date || ''),
         csvField(t.side),
         csvField(t.symbol),
-        csvField(Number(t.qty) || 0),
-        csvField(Number(t.price) || 0),
-        csvField(Number(t.fee) || 0),
+        // Split rows put the ratio in the qty column; price/fee are 0.
+        csvField(isSplit ? Number(t.ratio) || 0 : Number(t.qty) || 0),
+        csvField(isSplit ? 0 : Number(t.price) || 0),
+        csvField(isSplit ? 0 : Number(t.fee) || 0),
       ].join(',')
     );
   }
