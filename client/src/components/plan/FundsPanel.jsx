@@ -160,7 +160,7 @@ export default function FundsPanel() {
                 <div style={{ display: 'flex', gap: theme.space(3), flexWrap: 'wrap', alignItems: 'baseline' }}>
                   <span>
                     <span style={dim}>NAV</span>{' '}
-                    <span style={{ fontFamily: theme.mono, fontWeight: 700, color: theme.colors.text }}>
+                    <span className="pm-mask" style={{ fontFamily: theme.mono, fontWeight: 700, color: theme.colors.text }}>
                       {f.nav != null ? `฿${fmtNumber(f.nav, 4)}` : '—'}
                     </span>{' '}
                     {f.changePct != null && (
@@ -172,7 +172,7 @@ export default function FundsPanel() {
                   </span>
                   <span style={{ marginLeft: 'auto', textAlign: 'right' }}>
                     <span style={dim}>{t('funds.value')}</span>{' '}
-                    <span style={{ fontFamily: theme.mono, fontWeight: 800, color: theme.colors.text }}>{fmtMoney(valueDisplay, displayCurrency)}</span>
+                    <span className="pm-mask" style={{ fontFamily: theme.mono, fontWeight: 800, color: theme.colors.text }}>{fmtMoney(valueDisplay, displayCurrency)}</span>
                     {f.plPct != null && (
                       <span style={{ fontSize: 12, fontWeight: 700, marginLeft: 6, color: f.plPct >= 0 ? theme.colors.up : theme.colors.down }}>
                         ({fmtSignedPct(f.plPct)})

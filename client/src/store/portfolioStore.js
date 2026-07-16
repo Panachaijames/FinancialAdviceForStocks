@@ -35,7 +35,9 @@ function replayInto(transactions, holdings, symbol) {
   return {
     transactions: transactions.map((t) => (t && t.symbol === symbol ? byId.get(t.id) || t : t)),
     holdings: hasTrades
-      ? holdings.map((h) => (h.symbol === symbol ? { ...h, shares, avgCost } : h))
+      // Recording a trade adopts a demo holding as real (demo:undefined) so
+      // "Clear demo" can never delete a position the user has actually traded.
+      ? holdings.map((h) => (h.symbol === symbol ? { ...h, shares, avgCost, demo: undefined } : h))
       : holdings,
   };
 }
@@ -80,6 +82,7 @@ export const usePortfolioStore = create(
                     shares: shares || h.shares,
                     avgCost: avgCost || h.avgCost,
                     name: sr.name || h.name,
+                    demo: undefined, // re-adding a symbol adopts a demo holding as real
                     ...(position.goldUnit ? { goldUnit: position.goldUnit } : {}),
                     ...(position.account ? { account: position.account } : {}),
                   }
@@ -159,8 +162,9 @@ export const usePortfolioStore = create(
         if ('shares' in clean) clean.shares = Number(clean.shares) || 0;
         if ('avgCost' in clean) clean.avgCost = Number(clean.avgCost) || 0;
         set((state) => ({
+          // Editing a holding adopts a demo one as real (demo:undefined).
           holdings: state.holdings.map((h) =>
-            h.id === id ? { ...h, ...clean } : h
+            h.id === id ? { ...h, ...clean, demo: undefined } : h
           ),
         }));
       },

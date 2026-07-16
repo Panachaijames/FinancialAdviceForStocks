@@ -373,7 +373,7 @@ export default function AssetCard({ holding, onOpen }) {
         {/* Thai gold shop price (THB per baht-weight), derived from spot × FX */}
         {isBahtGold && price != null && (
           <div style={{ fontSize: 11, color: theme.colors.gold, fontWeight: 600, marginTop: -theme.space(1) }}>
-            {t('card.shop')} {fmtMoney(bahtPriceThb(price, rate), 'THB')}
+            {t('card.shop')} <span className="pm-mask">{fmtMoney(bahtPriceThb(price, rate), 'THB')}</span>
             {t('card.perBaht')}
           </div>
         )}
@@ -399,7 +399,7 @@ export default function AssetCard({ holding, onOpen }) {
                   ? t('card.extAfterHrs')
                   : t('card.extOvernight')}
             </span>
-            <span style={{ fontSize: 13, fontWeight: 700, fontFamily: theme.mono, color: theme.colors.text }}>
+            <span className="pm-mask" style={{ fontSize: 13, fontWeight: 700, fontFamily: theme.mono, color: theme.colors.text }}>
               {fmtMoney(convert(ext.price, native), displayCurrency)}
             </span>
             <span style={{ fontSize: 12, fontWeight: 700, color: colorForChange(ext.pct) }}>
@@ -525,7 +525,7 @@ export default function AssetCard({ holding, onOpen }) {
             <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.4, color: theme.colors.textDim }}>
               {t('card.realized')}
             </span>
-            <span style={{ fontSize: 12, fontWeight: 700, fontFamily: theme.mono, color: colorForChange(realized.realized) }}>
+            <span className="pm-mask" style={{ fontSize: 12, fontWeight: 700, fontFamily: theme.mono, color: colorForChange(realized.realized) }}>
               {fmtMoney(convert(realized.realized, realized.currency), displayCurrency)}
             </span>
           </div>
@@ -568,7 +568,7 @@ export default function AssetCard({ holding, onOpen }) {
           >
             <span aria-hidden="true">💰</span>
             {t('card.divLabel')} {divLine.yieldPct != null ? `${Number(divLine.yieldPct).toFixed(2)}%` : '—'} ·{' '}
-            {fmtMoney(divLine.annual, displayCurrency)}{t('card.perYear')}
+            <span className="pm-mask">{fmtMoney(divLine.annual, displayCurrency)}</span>{t('card.perYear')}
           </div>
         )}
       </SpotlightCard>

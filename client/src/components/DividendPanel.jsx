@@ -320,6 +320,7 @@ export default function DividendPanel() {
                   <td />
                   <td />
                   <td
+                    className="pm-mask"
                     style={{
                       padding: `${theme.space(2)}px ${theme.space(2)}px`,
                       textAlign: 'right',
@@ -331,6 +332,7 @@ export default function DividendPanel() {
                     {t('dividend.per_year_suffix', { value: fmtMoney(totalAnnual, displayCurrency) })}
                   </td>
                   <td
+                    className="pm-mask"
                     style={{
                       padding: `${theme.space(2)}px ${theme.space(2)}px`,
                       textAlign: 'right',
@@ -360,7 +362,7 @@ export default function DividendPanel() {
             {receivedTotal > 0 && (
               <>
                 {' '}{t('dividend.received_to_date')}{' '}
-                <b style={{ color: theme.colors.up }}>{fmtMoney(receivedTotal, displayCurrency)}</b>.
+                <b className="pm-mask" style={{ color: theme.colors.up }}>{fmtMoney(receivedTotal, displayCurrency)}</b>.
               </>
             )}
           </div>
@@ -470,14 +472,17 @@ function Row({ row, period, displayCurrency, received }) {
         {income.yieldOnCostPct != null ? fmtPct(income.yieldOnCostPct) : '—'}
       </Td>
       <Td style={{ color: theme.colors.textDim, fontFamily: theme.mono }}>
-        {income.perShareAnnual != null
-          ? fmtMoney(income.perShareAnnual, income.currency)
-          : '—'}
+        <span className="pm-mask">
+          {income.perShareAnnual != null
+            ? fmtMoney(income.perShareAnnual, income.currency)
+            : '—'}
+        </span>
       </Td>
       <Td style={{ color: theme.colors.up, fontFamily: theme.mono, fontWeight: 600 }}>
-        <div>{fmtMoney(income[period] || 0, displayCurrency)}</div>
+        <div className="pm-mask">{fmtMoney(income[period] || 0, displayCurrency)}</div>
         {received && received.net > 0 && (
           <div
+            className="pm-mask"
             style={{ fontSize: 10, fontWeight: 500, color: theme.colors.textFaint }}
             title={t('dividend.logged_cell_title')}
           >

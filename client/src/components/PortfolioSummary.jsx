@@ -199,11 +199,14 @@ export default function PortfolioSummary() {
   const snapshotDoneRef = useRef(false);
   useEffect(() => {
     if (snapshotDoneRef.current) return;
+    // Never bake a demo-inflated total into the persistent value history — it
+    // would survive clearDemo() as a permanent bogus data point.
+    if (holdings.some((h) => h.demo)) return;
     if (quotesReady && fx != null && fx.source !== 'default' && usdTotal > 0) {
       usePortfolioStore.getState().recordSnapshot(usdTotal);
       snapshotDoneRef.current = true;
     }
-  }, [quotesReady, fx, usdTotal]);
+  }, [quotesReady, fx, usdTotal, holdings]);
 
   // Honest number states: skeleton while the first batch is in flight; once
   // settled (or the fetch gave up), flag any holdings still valued at cost.

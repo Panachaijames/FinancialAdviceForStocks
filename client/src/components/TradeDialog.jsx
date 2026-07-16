@@ -100,12 +100,23 @@ export default function TradeDialog({ holding, side, livePrice, editTx, onClose 
     }
   }
 
-  // What-if: shares to buy at this price to bring the average to a target.
+  // What-if: shares to buy at this price (incl. fee) to bring the average to a target.
   const showWhatIf = !isSell && !isEdit && held > 0;
-  const whatIfQty =
+  const whatIfRaw =
     showWhatIf && priceValid && targetAvg !== ''
-      ? sharesToReachAvg(held, pos.avgCost, priceNum, Number(targetAvg))
+      ? sharesToReachAvg(held, pos.avgCost, priceNum, Number(targetAvg), feeNum)
       : null;
+  // Round to a tradable precision; a value that rounds to 0 is effectively
+  // unreachable (don't offer a qty the submit would then reject).
+  const whatIfQty = whatIfRaw != null && Math.round(whatIfRaw * 10000) / 10000 > 0 ? Math.round(whatIfRaw * 10000) / 10000 : null;
+  // Direction hint when there's no reachable qty: buying pulls the average TOWARD
+  // the price, so the user must buy on the correct side of their target.
+  const whatIfHint =
+    Number(targetAvg) === pos.avgCost
+      ? 'atTarget'
+      : Number(targetAvg) > pos.avgCost
+        ? 'up' // target above current avg -> must buy above target
+        : 'down'; // target below current avg -> must buy below target
 
   function handleSubmit(e) {
     e.preventDefault();
@@ -289,13 +300,13 @@ export default function TradeDialog({ holding, side, livePrice, editTx, onClose 
                     <span>
                       {t('trade.whatIfResult', {
                         qty: fmtNumber(whatIfQty, whatIfQty < 10 ? 4 : 2),
-                        cost: fmtMoney(whatIfQty * priceNum, native),
+                        cost: fmtMoney(whatIfQty * priceNum + feeNum, native),
                       })}
                     </span>
                     <button
                       type="button"
                       className="btn-ghost"
-                      onClick={() => setQty(String(Math.round(whatIfQty * 10000) / 10000))}
+                      onClick={() => setQty(String(whatIfQty))}
                       style={{ fontSize: 11, fontWeight: 700, color: theme.colors.accent, padding: '2px 6px' }}
                     >
                       {t('trade.whatIfUse')}
@@ -303,7 +314,11 @@ export default function TradeDialog({ holding, side, livePrice, editTx, onClose 
                   </div>
                 ) : (
                   <div style={{ fontSize: 11.5, color: theme.colors.textFaint, marginTop: theme.space(1) }}>
-                    {t('trade.whatIfUnreachable')}
+                    {whatIfHint === 'atTarget'
+                      ? t('trade.whatIfAtTarget')
+                      : whatIfHint === 'up'
+                        ? t('trade.whatIfUnreachableUp')
+                        : t('trade.whatIfUnreachable')}
                   </div>
                 )
               )}

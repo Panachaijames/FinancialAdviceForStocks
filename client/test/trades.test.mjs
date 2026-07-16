@@ -18,6 +18,14 @@ test('sharesToReachAvg: buying below the average pulls it down to a reachable ta
   assert.ok(Math.abs(sharesToReachAvg(10, 100, 130, 110) - 5) < 1e-9);
 });
 
+test('sharesToReachAvg: folds the fee into the basis (inverse of applyBuy with fee)', () => {
+  // hold 10 @ 100, buy @ 80 with a 50 fee, want avg 90 -> buy 15 (not 10)
+  const q = sharesToReachAvg(10, 100, 80, 90, 50);
+  assert.ok(Math.abs(q - 15) < 1e-9);
+  const after = applyBuy({ shares: 10, avgCost: 100 }, { qty: q, price: 80, fee: 50 });
+  assert.ok(Math.abs(after.avgCost - 90) < 1e-9); // round-trips through applyBuy with fee
+});
+
 test('sharesToReachAvg: null when unreachable or inputs invalid', () => {
   assert.equal(sharesToReachAvg(10, 100, 80, 70), null); // target below the buy price — impossible
   assert.equal(sharesToReachAvg(10, 100, 120, 90), null); // buying up can't lower the avg

@@ -239,6 +239,7 @@ export default function AllocationDonut() {
           >
             <div style={{ maxWidth: SIZE - STROKE_HOVER * 2 - 16 }}>
               <div
+                className="pm-mask"
                 style={{
                   fontFamily: theme.mono,
                   fontWeight: 800,
@@ -333,6 +334,7 @@ export default function AllocationDonut() {
                   {s.pct.toFixed(1)}%
                 </span>
                 <span
+                  className="pm-mask"
                   style={{
                     fontSize: 13,
                     fontWeight: 600,

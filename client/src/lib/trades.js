@@ -66,17 +66,20 @@ export function applySell(pos = {}, t = {}) {
  * @param {number} avgCost current average cost
  * @param {number} price the buy price
  * @param {number} targetAvg desired average cost after the buy
+ * @param {number} [fee=0] the trade fee (folded into cost basis, like applyBuy)
  * @returns {number|null} shares to buy (> 0), or null
  */
-export function sharesToReachAvg(shares, avgCost, price, targetAvg) {
+export function sharesToReachAvg(shares, avgCost, price, targetAvg, fee = 0) {
   const s0 = num(shares);
   const a0 = Number(avgCost);
   const p = Number(price);
   const aT = Number(targetAvg);
+  const f = Number.isFinite(Number(fee)) && Number(fee) > 0 ? Number(fee) : 0;
   if (!(s0 > 0) || !(a0 > 0) || !(p > 0) || !(aT > 0)) return null;
   if (p === aT) return null; // can't pin the average exactly at the buy price
-  const q = (s0 * (aT - a0)) / (p - aT);
-  if (!Number.isFinite(q) || q <= 0) return null; // target not reachable at this price
+  // Solve (s0·a0 + q·p + f) / (s0+q) = aT for q (fee raises the basis, like applyBuy).
+  const q = (s0 * (aT - a0) - f) / (p - aT);
+  if (!Number.isFinite(q) || q <= 0) return null; // target not reachable at this price/fee
   return q;
 }
 

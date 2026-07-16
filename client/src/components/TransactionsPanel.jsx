@@ -113,6 +113,7 @@ export default function TransactionsPanel() {
                 {t('activity.dividends')}
               </span>
               <span
+                className="pm-mask"
                 style={{ fontSize: 15, fontWeight: 800, fontFamily: theme.mono, color: theme.colors.gold }}
                 title={t('activity.dividendsChipTitle')}
               >
@@ -126,6 +127,7 @@ export default function TransactionsPanel() {
                 {t('activity.realizedPl')}
               </span>
               <span
+                className="pm-mask"
                 style={{ fontSize: 15, fontWeight: 800, fontFamily: theme.mono, color: colorForChange(totalRealized) }}
                 title={t('activity.realizedPlChipTitle')}
               >
@@ -204,12 +206,14 @@ export default function TransactionsPanel() {
                       <td style={{ ...td, ...right, color: theme.colors.textFaint }}>—</td>
                       <td style={{ ...td, ...right, color: theme.colors.textFaint }}>—</td>
                       <td
+                        className="pm-mask"
                         style={{ ...td, ...right, color: theme.colors.textDim }}
                         title={t('activity.whtTitle')}
                       >
                         {Number(tx.wht) > 0 ? fmtMoney(tx.wht, tx.currency) : '—'}
                       </td>
                       <td
+                        className="pm-mask"
                         style={{ ...td, ...right, fontWeight: 700, color: theme.colors.gold }}
                         title={
                           Number(tx.wht) > 0
@@ -234,11 +238,11 @@ export default function TransactionsPanel() {
                       <td style={{ ...td, ...right, color: theme.colors.text }}>
                         {fmtNumber(tx.qty, Number.isInteger(tx.qty) ? 0 : 4)}
                       </td>
-                      <td style={{ ...td, ...right, color: theme.colors.text }}>{fmtMoney(tx.price, tx.currency)}</td>
-                      <td style={{ ...td, ...right, color: theme.colors.textDim }}>
+                      <td className="pm-mask" style={{ ...td, ...right, color: theme.colors.text }}>{fmtMoney(tx.price, tx.currency)}</td>
+                      <td className="pm-mask" style={{ ...td, ...right, color: theme.colors.textDim }}>
                         {tx.fee > 0 ? fmtMoney(tx.fee, tx.currency) : '—'}
                       </td>
-                      <td style={{ ...td, ...right, fontWeight: 700, color: isSell ? colorForChange(tx.realized) : theme.colors.textFaint }}>
+                      <td className="pm-mask" style={{ ...td, ...right, fontWeight: 700, color: isSell ? colorForChange(tx.realized) : theme.colors.textFaint }}>
                         {isSell ? fmtMoney(tx.realized, tx.currency) : '—'}
                       </td>
                     </>
