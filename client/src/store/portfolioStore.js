@@ -109,6 +109,46 @@ export const usePortfolioStore = create(
       },
 
       /**
+       * Load a diversified sample portfolio (flagged demo:true) so a new user
+       * sees every panel populated instead of zeros. No-op for symbols already
+       * held. Cleared in one click via clearDemo().
+       */
+      loadDemo() {
+        const DEMO = [
+          { symbol: 'AAPL', name: 'Apple Inc.', type: 'us_stock', currency: 'USD', shares: 15, avgCost: 180 },
+          { symbol: 'VOO', name: 'Vanguard S&P 500 ETF', type: 'etf', currency: 'USD', shares: 10, avgCost: 400 },
+          { symbol: 'SCHD', name: 'Schwab US Dividend Equity ETF', type: 'etf', currency: 'USD', shares: 40, avgCost: 76 },
+          { symbol: 'BTC-USD', name: 'Bitcoin USD', type: 'crypto', currency: 'USD', shares: 0.25, avgCost: 58000 },
+          { symbol: 'GC=F', name: 'Gold Futures', type: 'gold', currency: 'USD', shares: 2, avgCost: 2250 },
+          { symbol: 'PTT.BK', name: 'PTT PCL', type: 'th_stock', currency: 'THB', shares: 500, avgCost: 34 },
+        ];
+        set((state) => {
+          const have = new Set(state.holdings.map((h) => h.symbol));
+          const additions = DEMO.filter((d) => !have.has(d.symbol)).map((d) => ({
+            id: makeId(d.symbol),
+            symbol: d.symbol,
+            type: d.type,
+            name: d.name,
+            currency: d.currency,
+            shares: d.shares,
+            avgCost: d.avgCost,
+            demo: true,
+            addedAt: new Date().toISOString(),
+          }));
+          if (additions.length === 0) return {};
+          return {
+            holdings: [...state.holdings, ...additions],
+            watchlist: state.watchlist.filter((w) => !additions.some((a) => a.symbol === w.symbol)),
+          };
+        });
+      },
+
+      /** Remove every demo holding (and its watchlist untouched). */
+      clearDemo() {
+        set((state) => ({ holdings: state.holdings.filter((h) => !h.demo) }));
+      },
+
+      /**
        * Patch an existing holding by id.
        */
       updateHolding(id, patch) {
