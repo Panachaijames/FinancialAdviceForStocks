@@ -21,6 +21,7 @@ import HoldingEditor from './HoldingEditor.jsx';
 import TradeDialog from './TradeDialog.jsx';
 import AlertDialog from './AlertDialog.jsx';
 import { realizedBySymbol } from '../lib/trades.js';
+import { ozToBaht, bahtPriceThb } from '../lib/gold.js';
 import { useT } from '../lib/i18n.js';
 
 const DIV_TYPES = new Set(['us_stock', 'etf', 'th_stock']);
@@ -65,9 +66,11 @@ export default function AssetCard({ holding, onOpen }) {
   const { symbol, type, name, shares, avgCost } = holding;
   const native = holding.currency || (type === 'th_stock' ? 'THB' : 'USD');
   const meta = assetMeta(type);
+  // Gold tracked in Thai baht-weight: stored canonically in troy oz, shown in บาท.
+  const isBahtGold = type === 'gold' && holding.goldUnit === 'baht';
 
   const { quotes, loading, error } = useQuotes([symbol]);
-  const { convert } = useFx();
+  const { convert, rate } = useFx();
   const displayCurrency = useSettingsStore((s) => s.displayCurrency);
   const updateHolding = usePortfolioStore((s) => s.updateHolding);
   const removeHolding = usePortfolioStore((s) => s.removeHolding);
@@ -148,8 +151,8 @@ export default function AssetCard({ holding, onOpen }) {
     }
   }
 
-  function handleSave({ shares: s, avgCost: a }) {
-    updateHolding(holding.id, { shares: s, avgCost: a });
+  function handleSave(patch) {
+    updateHolding(holding.id, patch);
     setEditing(false);
   }
 
@@ -300,6 +303,14 @@ export default function AssetCard({ holding, onOpen }) {
           )}
         </div>
 
+        {/* Thai gold shop price (THB per baht-weight), derived from spot × FX */}
+        {isBahtGold && price != null && (
+          <div style={{ fontSize: 11, color: theme.colors.gold, fontWeight: 600, marginTop: -theme.space(1) }}>
+            {t('card.shop')} {fmtMoney(bahtPriceThb(price, rate), 'THB')}
+            {t('card.perBaht')}
+          </div>
+        )}
+
         {/* Pre-market / after-hours (when the asset is in an extended session) */}
         {ext && (
           <div
@@ -364,8 +375,17 @@ export default function AssetCard({ holding, onOpen }) {
               {t('card.holdings')}
             </div>
             <div style={{ color: theme.colors.text, fontFamily: theme.mono, fontWeight: 600 }}>
-              {fmtNumber(Number(shares) || 0, Number.isInteger(Number(shares)) ? 0 : 4)} @{' '}
-              {fmtMoney(Number(avgCost) || 0, native)}
+              {isBahtGold ? (
+                <>
+                  {fmtNumber(ozToBaht(shares), 2)} {t('card.bahtUnit')} @{' '}
+                  {fmtMoney(bahtPriceThb(Number(avgCost) || 0, rate), 'THB')}
+                </>
+              ) : (
+                <>
+                  {fmtNumber(Number(shares) || 0, Number.isInteger(Number(shares)) ? 0 : 4)} @{' '}
+                  {fmtMoney(Number(avgCost) || 0, native)}
+                </>
+              )}
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
@@ -488,7 +508,7 @@ export default function AssetCard({ holding, onOpen }) {
       {editing && (
         <HoldingEditor
           asset={holding}
-          initial={{ shares, avgCost }}
+          initial={{ shares, avgCost, goldUnit: holding.goldUnit }}
           mode="edit"
           onSave={handleSave}
           onCancel={() => setEditing(false)}

@@ -3,6 +3,13 @@ import { X } from 'lucide-react';
 import { theme } from '../lib/theme.js';
 import { assetMeta } from '../lib/assetType.js';
 import { useT } from '../lib/i18n.js';
+import useFx from '../hooks/useFx.js';
+import { bahtToOz, ozToBaht, bahtPriceThb, thbPerBahtToUsdPerOz } from '../lib/gold.js';
+
+const round = (n, d = 2) => {
+  const f = 10 ** d;
+  return Math.round((Number(n) || 0) * f) / f;
+};
 
 /** Asset-appropriate wording for the quantity + per-unit cost fields. */
 function unitNoun(type) {
@@ -33,12 +40,25 @@ function unitNoun(type) {
  */
 export default function HoldingEditor({ asset, initial, mode = 'add', onSave, onCancel }) {
   const t = useT();
-  const [shares, setShares] = useState(
-    initial && initial.shares != null ? String(initial.shares) : ''
-  );
-  const [avgCost, setAvgCost] = useState(
-    initial && initial.avgCost != null ? String(initial.avgCost) : ''
-  );
+  const { rate } = useFx(); // live USD->THB, for baht-weight cost conversion
+  const isGold = asset?.type === 'gold';
+  const [goldUnit, setGoldUnit] = useState(isGold ? (initial?.goldUnit || 'oz') : 'oz');
+  const bahtMode = isGold && goldUnit === 'baht';
+
+  // A baht-gold holding is stored canonically (troy oz + USD/oz); when editing
+  // one, prefill the fields back in baht-weight + THB-per-baht.
+  const [shares, setShares] = useState(() => {
+    if (initial?.shares == null) return '';
+    return String(
+      isGold && (initial.goldUnit || 'oz') === 'baht' ? round(ozToBaht(initial.shares), 3) : initial.shares
+    );
+  });
+  const [avgCost, setAvgCost] = useState(() => {
+    if (initial?.avgCost == null) return '';
+    return String(
+      isGold && (initial.goldUnit || 'oz') === 'baht' ? round(bahtPriceThb(initial.avgCost, rate), 0) : initial.avgCost
+    );
+  });
   const [touched, setTouched] = useState(false);
   const firstFieldRef = useRef(null);
 
@@ -62,12 +82,38 @@ export default function HoldingEditor({ asset, initial, mode = 'add', onSave, on
 
   const meta = assetMeta(asset?.type);
   const u = unitNoun(asset?.type);
-  const currency = asset?.currency || (asset?.type === 'th_stock' ? 'THB' : 'USD');
+  const currency = bahtMode ? 'THB' : asset?.currency || (asset?.type === 'th_stock' ? 'THB' : 'USD');
+  const qtyLabel = bahtMode ? t('editor.gold.weightBaht') : t(u.qtyKey);
+  const perLabel = bahtMode ? t('editor.gold.perBaht') : t(u.perKey);
+
+  // Switching gold units reinterprets the values currently in the fields so the
+  // toggle feels live (e.g. 1 oz -> 2.114 บาท) rather than silently changing meaning.
+  function switchUnit(next) {
+    if (!isGold || next === goldUnit) return;
+    const s = Number(shares);
+    const c = Number(avgCost);
+    if (next === 'baht') {
+      if (s > 0) setShares(String(round(ozToBaht(s), 3)));
+      if (c > 0) setAvgCost(String(round(bahtPriceThb(c, rate), 0)));
+    } else {
+      if (s > 0) setShares(String(round(bahtToOz(s), 4)));
+      if (c > 0) setAvgCost(String(round(thbPerBahtToUsdPerOz(c, rate), 2)));
+    }
+    setGoldUnit(next);
+  }
 
   function handleSubmit(e) {
     e.preventDefault();
     setTouched(true);
     if (!valid) return;
+    if (isGold) {
+      // Store canonically in troy oz + USD/oz so the valuation pipeline is unit-agnostic.
+      const payload = bahtMode
+        ? { shares: bahtToOz(sharesNum), avgCost: thbPerBahtToUsdPerOz(avgCostNum, rate), goldUnit: 'baht' }
+        : { shares: sharesNum, avgCost: avgCostNum, goldUnit: 'oz' };
+      onSave && onSave(payload);
+      return;
+    }
     onSave && onSave({ shares: sharesNum, avgCost: avgCostNum });
   }
 
@@ -138,6 +184,21 @@ export default function HoldingEditor({ asset, initial, mode = 'add', onSave, on
         </span>
 
         <form onSubmit={handleSubmit} style={{ marginTop: theme.space(3) }}>
+          {isGold && (
+            <div style={{ marginBottom: theme.space(3) }}>
+              <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: theme.colors.textDim, marginBottom: theme.space(1) }}>
+                {t('editor.gold.unit')}
+              </span>
+              <div className="segmented" role="group">
+                <button type="button" className={`segmented-item${goldUnit === 'oz' ? ' active' : ''}`} onClick={() => switchUnit('oz')} style={goldUnit === 'oz' ? { color: theme.colors.text } : undefined}>
+                  {t('editor.gold.oz')}
+                </button>
+                <button type="button" className={`segmented-item${goldUnit === 'baht' ? ' active' : ''}`} onClick={() => switchUnit('baht')} style={goldUnit === 'baht' ? { color: theme.colors.text } : undefined}>
+                  {t('editor.gold.baht')}
+                </button>
+              </div>
+            </div>
+          )}
           <label style={{ display: 'block', marginBottom: theme.space(3) }}>
             <span
               style={{
@@ -148,7 +209,7 @@ export default function HoldingEditor({ asset, initial, mode = 'add', onSave, on
                 marginBottom: theme.space(1),
               }}
             >
-              {t(u.qtyKey)}
+              {qtyLabel}
             </span>
             <input
               ref={firstFieldRef}
@@ -164,7 +225,12 @@ export default function HoldingEditor({ asset, initial, mode = 'add', onSave, on
             />
             {touched && !sharesValid && (
               <span style={{ fontSize: 11, color: theme.colors.down, marginTop: 4, display: 'block' }}>
-                {t('editor.error.positiveQty', { unit: t(u.qtyKey).toLowerCase() })}
+                {t('editor.error.positiveQty', { unit: qtyLabel.toLowerCase() })}
+              </span>
+            )}
+            {bahtMode && sharesValid && (
+              <span style={{ fontSize: 11, color: theme.colors.textFaint, marginTop: 4, display: 'block' }}>
+                {t('editor.gold.approxOz', { oz: bahtToOz(sharesNum).toFixed(4) })}
               </span>
             )}
           </label>
@@ -181,7 +247,7 @@ export default function HoldingEditor({ asset, initial, mode = 'add', onSave, on
                 marginBottom: theme.space(1),
               }}
             >
-              <span>{t('editor.avgCostPer', { unit: t(u.perKey) })}</span>
+              <span>{t('editor.avgCostPer', { unit: perLabel })}</span>
               <span
                 style={{
                   fontFamily: theme.mono,
@@ -205,7 +271,7 @@ export default function HoldingEditor({ asset, initial, mode = 'add', onSave, on
             />
             {touched && !avgCostValid && (
               <span style={{ fontSize: 11, color: theme.colors.down, marginTop: 4, display: 'block' }}>
-                {t('editor.error.positivePer', { unit: t(u.perKey) })}
+                {t('editor.error.positivePer', { unit: perLabel })}
               </span>
             )}
           </label>
