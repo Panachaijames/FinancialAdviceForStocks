@@ -3,7 +3,7 @@ import { X } from 'lucide-react';
 import { theme } from '../lib/theme.js';
 import { fmtMoney, fmtNumber } from '../lib/format.js';
 import { assetMeta } from '../lib/assetType.js';
-import { applyBuy, applySell } from '../lib/trades.js';
+import { applyBuy, applySell, sharesToReachAvg } from '../lib/trades.js';
 import { usePortfolioStore } from '../store/portfolioStore.js';
 import { snackbar } from '../store/snackbarStore.js';
 import { useT } from '../lib/i18n.js';
@@ -37,6 +37,7 @@ export default function TradeDialog({ holding, side, livePrice, editTx, onClose 
   const [date, setDate] = useState(
     isEdit && editTx.at ? String(editTx.at).slice(0, 10) : todayStr()
   );
+  const [targetAvg, setTargetAvg] = useState(''); // what-if: solve qty to reach this avg
   const [touched, setTouched] = useState(false);
   const firstFieldRef = useRef(null);
 
@@ -98,6 +99,13 @@ export default function TradeDialog({ holding, side, livePrice, editTx, onClose 
       };
     }
   }
+
+  // What-if: shares to buy at this price to bring the average to a target.
+  const showWhatIf = !isSell && !isEdit && held > 0;
+  const whatIfQty =
+    showWhatIf && priceValid && targetAvg !== ''
+      ? sharesToReachAvg(held, pos.avgCost, priceNum, Number(targetAvg))
+      : null;
 
   function handleSubmit(e) {
     e.preventDefault();
@@ -259,6 +267,46 @@ export default function TradeDialog({ holding, side, livePrice, editTx, onClose 
           {valid && backdated && (
             <div style={{ fontSize: 11.5, color: theme.colors.textDim, marginBottom: theme.space(3) }}>
               {t('trade.recomputeNote')}
+            </div>
+          )}
+
+          {showWhatIf && (
+            <div style={{ padding: theme.space(2), borderRadius: theme.radius.sm, background: theme.colors.bgElev, marginBottom: theme.space(3) }}>
+              {label(t('trade.whatIfTitle'))}
+              <input
+                className="input"
+                type="number"
+                inputMode="decimal"
+                step="any"
+                min="0"
+                placeholder={t('trade.targetAvgPlaceholder', { currency: native })}
+                value={targetAvg}
+                onChange={(e) => setTargetAvg(e.target.value)}
+              />
+              {targetAvg !== '' && priceValid && (
+                whatIfQty != null ? (
+                  <div style={{ fontSize: 11.5, color: theme.colors.textDim, marginTop: theme.space(1), display: 'flex', alignItems: 'center', gap: theme.space(2), flexWrap: 'wrap' }}>
+                    <span>
+                      {t('trade.whatIfResult', {
+                        qty: fmtNumber(whatIfQty, whatIfQty < 10 ? 4 : 2),
+                        cost: fmtMoney(whatIfQty * priceNum, native),
+                      })}
+                    </span>
+                    <button
+                      type="button"
+                      className="btn-ghost"
+                      onClick={() => setQty(String(Math.round(whatIfQty * 10000) / 10000))}
+                      style={{ fontSize: 11, fontWeight: 700, color: theme.colors.accent, padding: '2px 6px' }}
+                    >
+                      {t('trade.whatIfUse')}
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 11.5, color: theme.colors.textFaint, marginTop: theme.space(1) }}>
+                    {t('trade.whatIfUnreachable')}
+                  </div>
+                )
+              )}
             </div>
           )}
 

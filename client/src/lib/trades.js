@@ -57,6 +57,30 @@ export function applySell(pos = {}, t = {}) {
 }
 
 /**
+ * Inverse of applyBuy: how many shares to buy at `price` to move the position's
+ * average cost to `targetAvg`. Buying can only pull the average TOWARD the buy
+ * price, so a target is only reachable when it lies strictly between the current
+ * average and the buy price. Returns null when there's no position, bad inputs,
+ * or the target isn't reachable by buying at that price.
+ * @param {number} shares current shares held
+ * @param {number} avgCost current average cost
+ * @param {number} price the buy price
+ * @param {number} targetAvg desired average cost after the buy
+ * @returns {number|null} shares to buy (> 0), or null
+ */
+export function sharesToReachAvg(shares, avgCost, price, targetAvg) {
+  const s0 = num(shares);
+  const a0 = Number(avgCost);
+  const p = Number(price);
+  const aT = Number(targetAvg);
+  if (!(s0 > 0) || !(a0 > 0) || !(p > 0) || !(aT > 0)) return null;
+  if (p === aT) return null; // can't pin the average exactly at the buy price
+  const q = (s0 * (aT - a0)) / (p - aT);
+  if (!Number.isFinite(q) || q <= 0) return null; // target not reachable at this price
+  return q;
+}
+
+/**
  * Sum realized P/L from a transaction list, grouped by currency (sells only —
  * each sell stores its `realized` in the holding's native currency).
  * @param {Array<{side:string, realized?:number, currency?:string}>} transactions
@@ -203,6 +227,7 @@ export function replayPosition(txs = []) {
 export default {
   applyBuy,
   applySell,
+  sharesToReachAvg,
   realizedByCurrency,
   realizedBySymbol,
   dividendNet,

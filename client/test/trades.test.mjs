@@ -3,7 +3,28 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyBuy, applySell, realizedByCurrency, realizedBySymbol } from '../src/lib/trades.js';
+import { applyBuy, applySell, realizedByCurrency, realizedBySymbol, sharesToReachAvg } from '../src/lib/trades.js';
+
+// ── sharesToReachAvg (what-if / average-down inverse solve) ──────────────────
+
+test('sharesToReachAvg: buying below the average pulls it down to a reachable target', () => {
+  // hold 10 @ 100, buy @ 80, want avg 90 -> buy 10 (verified: (10·100+10·80)/20 = 90)
+  const q = sharesToReachAvg(10, 100, 80, 90);
+  assert.ok(Math.abs(q - 10) < 1e-9);
+  const after = applyBuy({ shares: 10, avgCost: 100 }, { qty: q, price: 80, fee: 0 });
+  assert.ok(Math.abs(after.avgCost - 90) < 1e-9); // round-trips through applyBuy
+
+  // averaging UP works too: hold 10 @ 100, buy @ 130, want avg 110 -> buy 5
+  assert.ok(Math.abs(sharesToReachAvg(10, 100, 130, 110) - 5) < 1e-9);
+});
+
+test('sharesToReachAvg: null when unreachable or inputs invalid', () => {
+  assert.equal(sharesToReachAvg(10, 100, 80, 70), null); // target below the buy price — impossible
+  assert.equal(sharesToReachAvg(10, 100, 120, 90), null); // buying up can't lower the avg
+  assert.equal(sharesToReachAvg(10, 100, 90, 90), null); // target == price
+  assert.equal(sharesToReachAvg(0, 100, 80, 90), null); // no position
+  assert.equal(sharesToReachAvg(10, 100, 0, 90), null); // bad price
+});
 
 // ── applyBuy ────────────────────────────────────────────────────────────────
 
